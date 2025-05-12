@@ -20,7 +20,8 @@
                 <th>TÊN SP</th>
                 <th>SIZE</th>
                 <th>MÀU</th>
-                <th>SỐ LƯỢNG ĐƠN HÀNG</th>
+                <th>SL ĐƠN HÀNG</th>
+                <th>Tổng cần sản xuất</th>
                 <th>SLSX</th>
                 <th>ĐƠN VỊ TÍNH</th>
                 <th>NGÀY NHẬN ĐƠN</th>
@@ -40,6 +41,8 @@
             @foreach ($data as $row)
             
             <tr>
+                
+                
                 <td>{{ $loop->iteration }}</td>
                 <td>{{ $row->So_ct }}</td>
                 <td>{{ $row->So_dh }}</td>
@@ -50,6 +53,7 @@
                 <td>{{ $row->Msize }}</td>
                 <td>{{ $row->Ma_ch }}</td>
                 <td>{{ round($row->Soluong, 0) }}</td>
+                <td>{{ round($sumSoLuong[$row->So_ct] ?? 0, 0)}}</td>
                 
 
                 @php
@@ -95,7 +99,7 @@
                 
                 @endphp
                 
-                @if ($so_luong_sx >= $row->Soluong)
+                @if ($so_luong_sx >= $sumSoLuong[$row->So_ct])
                 <td style="color: green;">Đã hoàn thành ✅</td>
                 @elseif ($so_luong_sx > 0)
                 <td style="color: orange;">Sản xuất dở dang 🛠️</td>
