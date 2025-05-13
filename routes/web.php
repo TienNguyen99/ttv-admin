@@ -18,3 +18,4 @@ use App\Http\Controllers\DashboardController;
 });*/
 
 Route::get('/', [DashboardController::class, 'index']);
+Route::get('/lenh/{sttRecN}', [DashboardController::class, 'show']);

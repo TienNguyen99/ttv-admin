@@ -58,10 +58,12 @@ class DashboardController extends Controller
             ->where('Ma_ct', '=', 'XV')
             ->groupBy('So_dh')
             ->pluck('total_xv', 'So_dh');*/
+        // Kiễm tra đã phân tích chưa
         $nxSoDhs = DB::table('DataKetoanData')
             ->where('Ma_ct', '=', 'NX')
             ->pluck('So_dh')
             ->toArray();
+        // Kiểm tra đã chuẩn bị chưa
         $xvSoDhs = DB::table('DataKetoanData')
             ->where('Ma_ct', '=', 'XV')
             ->pluck('So_dh')
@@ -80,6 +82,7 @@ class DashboardController extends Controller
             ->where('So_ct', 'not like', '%VT%')
             ->pluck('So_dh')
             ->toArray();
+
         return view('dashboard', [
             'data' => $data,
             'sumSoLuong' => $sumSoLuong,
@@ -92,5 +95,19 @@ class DashboardController extends Controller
             'checkNhapKho' => $checkNhapKho,
             'checkXuatKho' => $checkXuatKho
         ]);
+    }
+    public function show($sttRecN)
+    {
+        $lenh = DB::table('DataKetoanData')
+            ->join('codekhachang', 'DataKetoanData.Ma_kh', '=', 'codekhachang.Ma_kh')
+            ->join('codehanghoa', 'DataKetoanData.Ma_hh', '=', 'codehanghoa.Ma_hh')
+            ->where('SttRecN', $sttRecN)
+            ->get();
+
+        if ($lenh->isEmpty()) {
+            abort(404, 'Không tìm thấy dữ liệu cho SttRecN này');
+        }
+
+        return view('detail', ['lenh' => $lenh]);
     }
 }
