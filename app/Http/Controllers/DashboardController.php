@@ -46,18 +46,6 @@ class DashboardController extends Controller
             ->where('Ma_ko', '=', '04')
             ->groupBy('So_dh')
             ->pluck('total_sx4', 'So_dh');
-        //Số lượng nhập kho
-        /*$sumNhapKho = DB::table('DataKetoan2025')
-            ->select('So_dh', DB::raw('SUM(Soluong) as total_nv'))
-            ->where('Ma_ct', '=', 'NV')
-            ->groupBy('So_dh')
-            ->pluck('total_nv', 'So_dh');
-        //So lượng xuất kho
-        $sumXuatKho = DB::table('DataKetoan2025')
-            ->select('So_dh', DB::raw('SUM(Soluong) as total_xv'))
-            ->where('Ma_ct', '=', 'XV')
-            ->groupBy('So_dh')
-            ->pluck('total_xv', 'So_dh');*/
         // Kiễm tra đã phân tích chưa
         $nxSoDhs = DB::table('DataKetoanData')
             ->where('Ma_ct', '=', 'NX')
@@ -96,18 +84,28 @@ class DashboardController extends Controller
             'checkXuatKho' => $checkXuatKho
         ]);
     }
-    public function show($sttRecN)
+    public function showDetail($so_ct)
     {
+        $so_ct = str_replace('-', '/', $so_ct);
+        //Lệnh chi tiết
         $lenh = DB::table('DataKetoanData')
-            ->join('codekhachang', 'DataKetoanData.Ma_kh', '=', 'codekhachang.Ma_kh')
             ->join('codehanghoa', 'DataKetoanData.Ma_hh', '=', 'codehanghoa.Ma_hh')
-            ->where('SttRecN', $sttRecN)
+            ->where('Ma_ct', '=', 'NX')
+            ->where('So_dh', '=', $so_ct)
+            ->orderBy('Ma_ko')
             ->get();
 
-        if ($lenh->isEmpty()) {
-            abort(404, 'Không tìm thấy dữ liệu cho SttRecN này');
-        }
+        //Tiến độ sản xuất
+        $tiendoSanXuat = DB::table('DataKetoanData')
+            ->join('codehanghoa', 'DataKetoanData.Ma_hh', '=', 'codehanghoa.Ma_hh')
+            ->where('Ma_ct', '=', 'SX')
+            ->where('So_dh', '=', $so_ct)
+            ->orderBy('Ma_ko')
+            ->get();
+        return view('detail', [
+            'lenh' => $lenh,
+            'tiendoSanXuat' => $tiendoSanXuat
 
-        return view('detail', ['lenh' => $lenh]);
+        ]);
     }
 }

@@ -41,7 +41,7 @@
             @foreach ($data as $row)
             <tr>
                 <td>{{ $loop->iteration }}</td>
-                <td><a href="{{ url('/lenh/' . $row->SttRecN) }}">{{ $row->So_ct }}</a></td>
+                <td><a href="{{ url('/lenh/' . str_replace('/', '-', $row->So_ct)) }}">{{ $row->So_ct }}</a></td>
                 <td>{{ $row->So_dh }}</td>
                 <td>{{ $row->Ten_kh }}</td>
                 <td>{{ $row->Ma_hh }}</td>
