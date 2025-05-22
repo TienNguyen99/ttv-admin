@@ -5,11 +5,11 @@ namespace App\Http\Controllers;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Calculation\Calculation;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use Illuminate\Support\Facades\Log;
+use PhpOffice\PhpSpreadsheet\Reader\Xlsx;
+
+
+
 
 class PhieuXuatKhoController extends Controller
 {
@@ -99,7 +99,7 @@ class PhieuXuatKhoController extends Controller
             ->header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             ->header('Content-Disposition', "attachment; filename={$filename}");
     }
-    public function unipaxexport($so_ct)
+    /*public function unipaxexport($so_ct)
     {
         $so_ct = str_replace('-', '/', $so_ct);
 
@@ -175,5 +175,5 @@ class PhieuXuatKhoController extends Controller
         return response($content)
             ->header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             ->header('Content-Disposition', "attachment; filename={$filename}");
-    }
+    }*/
 }
