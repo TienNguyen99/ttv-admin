@@ -6,12 +6,13 @@
 
     <!-- DataTables CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
-    <!-- Buttons extension CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/searchpanes/2.2.0/css/searchPanes.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/select/1.7.0/css/select.dataTables.min.css">
 </head>
 <body>
     <h1>BẢNG QUẢN LÝ LỆNH SẢN XUẤT TAGTIME VIỆT TIẾN</h1>
-    
+
     <table id="myTable" class="display nowrap" style="width:100%">
         <thead>
             <tr>
@@ -19,7 +20,6 @@
                 <th>MÃ LỆNH</th>
                 <th>TÊN PO</th>
                 <th>KHÁCH HÀNG</th>
-                <th>MÃ SP</th>
                 <th>TÊN SP</th>
                 <th>SIZE</th>
                 <th>MÀU</th>
@@ -44,7 +44,6 @@
                 <td><a href="{{ url('/lenh/' . str_replace('/', '-', $row->So_ct)) }}">{{ $row->So_ct }}</a></td>
                 <td>{{ $row->So_dh }}</td>
                 <td>{{ $row->Ten_kh }}</td>
-                <td>{{ $row->Ma_hh }}</td>
                 <td>{{ $row->Ten_hh }}</td>
                 <td>{{ $row->Msize }}</td>
                 <td>{{ $row->Ma_ch }}</td>
@@ -111,20 +110,39 @@
         </tbody>
     </table>
 
-    <!-- jQuery -->
+    <!-- JS Libraries -->
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-    <!-- DataTables JS -->
     <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-
-    <!-- Buttons Extension -->
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <!-- SearchPanes + Select -->
+    <script src="https://cdn.datatables.net/select/1.7.0/js/dataTables.select.min.js"></script>
+    <script src="https://cdn.datatables.net/searchpanes/2.2.0/js/dataTables.searchPanes.min.js"></script>
 
     <script>
         $(document).ready(function () {
             $('#myTable').DataTable({
-                dom: 'Bfrtip',
+                dom: 'PlBfrtip',
+                searchPanes: {
+                    cascadePanes: true,
+                    layout: 'columns-4'
+                },
+                columnDefs: [
+                    {
+                        targets: [3, 11, 18], // Chỉ hiện SearchPane cho KHÁCH HÀNG, NGÀY NHẬN ĐƠN, TÌNH TRẠNG
+                        searchPanes: {
+                            show: true
+                        }
+                    },
+                    {
+                        targets: '_all',
+                        searchPanes: {
+                            show: false
+                        }
+                    }
+                ],
                 buttons: [
                     {
                         extend: 'excelHtml5',
@@ -132,8 +150,8 @@
                         title: 'Bang_Quan_Ly_Lenh_SX'
                     }
                 ],
-                pageLength: 25,
-                scrollX: true
+                scrollX: true,
+                pageLength: 25
             });
         });
     </script>
