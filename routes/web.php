@@ -3,8 +3,11 @@
 use App\Http\Controllers\DanhMucController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DonHangController;
+use App\Http\Controllers\HangHoaController;
 use App\Http\Controllers\PhieuXuatKhoController;
 use App\Http\Controllers\SanXuatController;
+use App\Http\Controllers\UnipaxController;
 use App\Http\Controllers\Unipax;
 use App\Models\PhieuXuatKho;
 
@@ -32,3 +35,16 @@ Route::get('/pxkunipax/export/{so_ct}', [PhieuXuatKhoController::class, 'unipaxe
 route::get('/nhaplieu', [SanXuatController::class, 'index'])->name('nhaplieu');
 // Route for DanhMuc
 Route::get('/danhmuc', [DanhMucController::class, 'index'])->name('danhmuc');
+// Route for Hang Hoa
+//Route::get('/mahh/edit', [HangHoaController::class, 'editMaHH'])->name('mahh.edit');
+//Route::post('/mahh/update', [HangHoaController::class, 'updateMaHH'])->name('mahh.update');
+//Route::get('/suggest-mahh', [HangHoaController::class, 'suggestMaHH'])->name('mahh.suggest');
+// Route for Unipax
+Route::get('/unipax', [UnipaxController::class, 'index'])->name('unipax');
+//Route for DonHang
+Route::get('/ordertolsx', [DonHangController::class, 'ordertolsx'])->name('ordertolsx');
+Route::get('/donhang', [DonHangController::class, 'index'])->name('donhang');
+Route::post('/gui-po', [DonHangController::class, 'guiPO'])->name('gui.po');
+
+Route::post('/mahh/update', [DonHangController::class, 'updateMaHH'])->name('mahh.update');
+Route::get('/suggest-mahh', [DonHangController::class, 'suggestMaHH'])->name('mahh.suggest');

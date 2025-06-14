@@ -18,7 +18,7 @@ class PhieuXuatKhoController extends Controller
         $data = DB::table('DataKetoan2025')
             ->join('codehanghoa', 'DataKetoan2025.Ma_hh', '=', 'codehanghoa.Ma_hh')
 
-            ->where('Ma_ct', '=', 'XV')
+            // ->where('Ma_ct', '=', 'XV')
             ->where('Ma_ko', '=', 'KHODUY')
             ->get();
         return view('pxkunipax', ['data' => $data]);
