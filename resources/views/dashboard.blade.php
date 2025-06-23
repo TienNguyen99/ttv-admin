@@ -82,10 +82,11 @@
                         <td>{{ round($sumSoLuong[$row->So_ct] ?? 0, 0) }}</td>
 
                         @php
-                            $cd1 = round($sumCongDoan1[$row->So_ct] ?? 0, 0);
-                            $cd2 = round($sumCongDoan2[$row->So_ct] ?? 0, 0);
-                            $cd3 = round($sumCongDoan3[$row->So_ct] ?? 0, 0);
-                            $cd4 = round($sumCongDoan4[$row->So_ct] ?? 0, 0);
+                            $key = $row->So_ct . '|' . $row->Ma_hh;
+                            $cd1 = round($sumCongDoan1[$key]->total_sx1 ?? 0);
+                            $cd2 = round($sumCongDoan2[$key]->total_sx2 ?? 0);
+                            $cd3 = round($sumCongDoan3[$key]->total_sx3 ?? 0);
+                            $cd4 = round($sumCongDoan4[$key]->total_sx4 ?? 0);
                             $lastStep = 0;
                             $lastLabel = '';
                             if ($cd4 > 0) {
@@ -119,7 +120,7 @@
                         <td>{{ in_array($row->So_ct, $xvSoDhs) ? '✅' : '❌' }}</td>
                         <td>
                             @php $so_luong_sx = $lastStep; @endphp
-                            @if ($so_luong_sx >= $sumSoLuong[$row->So_ct])
+                            @if ($so_luong_sx >= $row->Soluong)
                                 <span class="text-success">Đã hoàn thành ✅</span>
                             @elseif ($so_luong_sx > 0)
                                 <span class="text-warning">Sản xuất dở dang 🛠️</span>
@@ -135,12 +136,13 @@
                         @endphp
                         <td>{{ $tong_nhap }}</td>
                         <td>{{ $tong_xuat }}</td>
-
                         <td>
-                            @if ($row->Date < now())
-                                <span class="text-danger">Quá hạn ❌</span>
-                            @else
-                                <span class="text-secondary">Chưa đến hạn</span>
+                            @if ($tong_nhap > 0 && $tong_xuat == 0)
+                                <span class="text-warning">📦 Chưa xuất kho</span>
+                            @elseif ($tong_xuat >= $tong_nhap && $tong_nhap > 0)
+                                <span class="text-success">✔️ Hoàn thành</span>
+                            @elseif ($tong_nhap == 0)
+                                <span class="text-danger">⛔ Chưa nhập kho</span>
                             @endif
                         </td>
                     </tr>

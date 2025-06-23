@@ -20,32 +20,45 @@ class DashboardController extends Controller
             ->where('Ma_ct', '=', 'GO')
             ->groupBy('So_ct')
             ->pluck('total', 'So_ct');
-
-
         $sumCongDoan1 = DB::table('DataKetoanData')
-            ->select('So_dh', DB::raw('SUM(Soluong) as total_sx1'))
+            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_sx1'))
             ->where('Ma_ct', '=', 'SX')
             ->where('Ma_ko', '=', '01')
-            ->groupBy('So_dh')
-            ->pluck('total_sx1', 'So_dh');
+            ->groupBy('So_dh', 'Ma_hh')
+            ->get()
+            ->keyBy(function ($item) {
+                return $item->So_dh . '|' . $item->Ma_hh;
+            });
+
         $sumCongDoan2 = DB::table('DataKetoanData')
-            ->select('So_dh', DB::raw('SUM(Soluong) as total_sx2'))
+            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_sx2'))
             ->where('Ma_ct', '=', 'SX')
             ->where('Ma_ko', '=', '02')
-            ->groupBy('So_dh')
-            ->pluck('total_sx2', 'So_dh');
+            ->groupBy('So_dh', 'Ma_hh')
+            ->get()
+            ->keyBy(function ($item) {
+                return $item->So_dh . '|' . $item->Ma_hh;
+            });
+
         $sumCongDoan3 = DB::table('DataKetoanData')
-            ->select('So_dh', DB::raw('SUM(Soluong) as total_sx3'))
+            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_sx3'))
             ->where('Ma_ct', '=', 'SX')
             ->where('Ma_ko', '=', '03')
-            ->groupBy('So_dh')
-            ->pluck('total_sx3', 'So_dh');
+            ->groupBy('So_dh', 'Ma_hh')
+            ->get()
+            ->keyBy(function ($item) {
+                return $item->So_dh . '|' . $item->Ma_hh;
+            });
+
         $sumCongDoan4 = DB::table('DataKetoanData')
-            ->select('So_dh', DB::raw('SUM(Soluong) as total_sx4'))
+            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_sx4'))
             ->where('Ma_ct', '=', 'SX')
             ->where('Ma_ko', '=', '04')
-            ->groupBy('So_dh')
-            ->pluck('total_sx4', 'So_dh');
+            ->groupBy('So_dh', 'Ma_hh')
+            ->get()
+            ->keyBy(function ($item) {
+                return $item->So_dh . '|' . $item->Ma_hh;
+            });
         // Kiễm tra đã phân tích chưa
         $nxSoDhs = DB::table('DataKetoanData')
             ->where('Ma_ct', '=', 'NX')
