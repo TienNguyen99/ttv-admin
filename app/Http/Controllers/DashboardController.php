@@ -52,24 +52,29 @@ class DashboardController extends Controller
             ->pluck('So_dh')
             ->toArray();
         // Kiểm tra đã chuẩn bị chưa
-        $xvSoDhs = DB::table('DataKetoanData')
+        $xvSoDhs = DB::table('DataKetoan2025')
             ->where('Ma_ct', '=', 'XV')
             ->pluck('So_dh')
             ->toArray();
         // Kiểm tra nhập kho
         $checkNhapKho = DB::table('DataKetoan2025')
+            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_nhap'))
             ->where('Ma_ct', '=', 'NV')
-            //Kiểm tra So_ct không chứa VT
-            ->where('So_ct', 'not like', '%VT%')
-            ->pluck('So_dh')
-            ->toArray();
+            ->groupBy('So_dh', 'Ma_hh')
+            ->get()
+            ->keyBy(function ($item) {
+                return $item->So_dh . '|' . $item->Ma_hh;
+            });
 
-        // Kiểm tra xuất kho
+        // Kiểm tra tổng số lượng xuất kho của mã Ma_hh theo So_dh
         $checkXuatKho = DB::table('DataKetoan2025')
-            ->where('Ma_ct', '=', 'XV')
-            ->where('So_ct', 'not like', '%VT%')
-            ->pluck('So_dh')
-            ->toArray();
+            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_xuat'))
+            ->where('Ma_ct', '=', 'XU')
+            ->groupBy('So_dh', 'Ma_hh')
+            ->get()
+            ->keyBy(function ($item) {
+                return $item->So_dh . '|' . $item->Ma_hh;
+            });
 
         return view('dashboard', [
             'data' => $data,

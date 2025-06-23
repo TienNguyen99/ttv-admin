@@ -127,8 +127,15 @@
                                 <span class="text-danger">Chưa sản xuất ❌</span>
                             @endif
                         </td>
-                        <td>{{ in_array($row->So_ct, $checkNhapKho) ? '✅' : '❌' }}</td>
-                        <td>{{ in_array($row->So_ct, $checkXuatKho) ? '✅' : '❌' }}</td>
+
+                        @php
+                            $key = $row->So_ct . '|' . $row->Ma_hh;
+                            $tong_xuat = isset($checkXuatKho[$key]) ? round($checkXuatKho[$key]->total_xuat, 0) : 0;
+                            $tong_nhap = isset($checkNhapKho[$key]) ? round($checkNhapKho[$key]->total_nhap, 0) : 0;
+                        @endphp
+                        <td>{{ $tong_nhap }}</td>
+                        <td>{{ $tong_xuat }}</td>
+
                         <td>
                             @if ($row->Date < now())
                                 <span class="text-danger">Quá hạn ❌</span>
