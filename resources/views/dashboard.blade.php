@@ -137,12 +137,14 @@
                         <td>{{ $tong_nhap }}</td>
                         <td>{{ $tong_xuat }}</td>
                         <td>
-                            @if ($tong_nhap > 0 && $tong_xuat == 0)
+                            @if ($tong_nhap >= $row->Soluong && $tong_xuat == 0)
                                 <span class="text-warning">📦 Chưa xuất kho</span>
                             @elseif ($tong_xuat >= $tong_nhap && $tong_nhap > 0)
                                 <span class="text-success">✔️ Hoàn thành</span>
                             @elseif ($tong_nhap == 0)
                                 <span class="text-danger">⛔ Chưa nhập kho</span>
+                            @elseif ($tong_nhap > 0 && $tong_nhap < $row->Soluong)
+                                <span class="text-warning">📦 Chưa đủ số lượng</span>
                             @endif
                         </td>
                     </tr>

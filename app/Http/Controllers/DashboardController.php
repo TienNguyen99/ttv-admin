@@ -14,6 +14,7 @@ class DashboardController extends Controller
             ->join('codehanghoa', 'DataKetoanData.Ma_hh', '=', 'codehanghoa.Ma_hh')
             ->where('Ma_ct', '=', 'GO')
             ->get();
+
         //sum số lượng tổng theo So_ct  
         $sumSoLuong = DB::table('DataKetoanData')
             ->select('So_ct', DB::raw('SUM(Soluong) as total'))
