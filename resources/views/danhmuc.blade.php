@@ -1,87 +1,126 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html>
+
 <head>
+    <title>Đổi Mã Hàng Hóa</title>
     <meta charset="UTF-8">
-    <title>Danh sách chứng từ</title>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-    <!-- Bootstrap 5 -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-
-    <!-- DataTables CSS + Responsive -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
-
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-
-    <style>
-        body {
-            padding: 2rem;
-        }
-        div.dataTables_wrapper {
-            width: 100%;
-            overflow-x: auto;
-        }
-        .dataTables_wrapper .dataTables_paginate .paginate_button {
-            padding: 0.2em 0.8em;
-            margin-left: 2px;
-        }
-    </style>
+    <!-- jQuery UI -->
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
 </head>
+
 <body>
+    <h2>Đổi Mã Hàng Hóa</h2>
 
-<div class="container-fluid">
-    <h3 class="mb-4">📄 Danh mục hàng hóa</h3>
+    <div class="container">
+        <h2>Cập nhật Mã Hàng Hóa</h2>
 
-    <div class="table-responsive">
-        <table id="myTable" class="table table-striped table-bordered nowrap w-100" style="width:100%">
-            <thead class="table-dark text-center">
-                <tr>
-                    <th>STT</th>
-                    <th>Mã hàng hóa</th>
-                    <th>Tên hàng hóa</th>
+        @if (session('error'))
+            <div style="color: red;">{{ session('error') }}</div>
+        @endif
 
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($data as $row)
-                <tr>
-                    <td class="text-center">{{ $loop->iteration }}</td>
-                 
-                    <td>{{ $row->Ma_hh }}</td>
-                    <td>{{ $row->Ten_hh }}</td>
+        <form id="mahh-form">
+            @csrf
+            <div>
+                <label for="old_code">Mã cũ:</label>
+                <input type="text" class="mahh-autocomplete" name="old_code" id="old_code" required>
+            </div>
+            <div>
+                <label for="new_code">Mã mới:</label>
+                <input type="text" class="mahh-autocomplete" name="new_code" id="new_code" required>
+            </div>
+            <button type="button" id="btn-preview">Xem trước cập nhật</button>
+        </form>
 
-
-                </tr>
-                @endforeach
-            </tbody>
-        </table>
+        <!-- Modal xác nhận -->
+        <div id="confirm-modal"
+            style="display: none; background-color: #fff; padding: 20px; border: 1px solid #ccc; margin-top: 20px;">
+            <h4>Bạn sắp cập nhật những mục sau:</h4>
+            <ul id="log-list"></ul>
+            <button id="confirm-update">Xác nhận cập nhật</button>
+            <button onclick="document.getElementById('confirm-modal').style.display='none'">Hủy</button>
+        </div>
     </div>
-</div>
 
-<!-- JQuery -->
-<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script>
+        document.getElementById('btn-preview').addEventListener('click', function() {
+            const formData = new FormData(document.getElementById('mahh-form'));
 
-<!-- DataTables + Bootstrap 5 JS + Responsive -->
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
-<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
+            fetch('{{ route('checkUpdateMaHH') }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'error') {
+                        alert(data.message);
+                        return;
+                    }
 
-<!-- DataTables Language - Vietnamese -->
-<script>
-    $(document).ready(function () {
-        $('#myTable').DataTable({
-            responsive: true,     // tắt tự ẩn cột
-            scrollX: true,         // cho phép cuộn ngang
-            language: {
-                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/vi.json'
-            },
-            pageLength: 10,
-            lengthMenu: [ [10, 25, 50, -1], [10, 25, 50, "Tất cả"] ]
+                    const logList = document.getElementById('log-list');
+                    logList.innerHTML = '';
+
+                    let hasChanges = false;
+
+                    for (const [table, count] of Object.entries(data.log)) {
+                        if (count > 0) {
+                            hasChanges = true;
+                            const li = document.createElement('li');
+                            li.textContent = `${table}: ${count} dòng`;
+                            logList.appendChild(li);
+                        }
+                    }
+
+                    if (!hasChanges) {
+                        alert("Không có bảng nào bị ảnh hưởng.");
+                        return;
+                    }
+
+                    document.getElementById('confirm-modal').style.display = 'block';
+                });
         });
+
+        document.getElementById('confirm-update').addEventListener('click', function() {
+            const form = document.getElementById('mahh-form');
+            form.setAttribute('action', '{{ route('updateMaHH') }}');
+            form.setAttribute('method', 'POST');
+            form.submit();
+        });
+    </script>
+</body>
+<script>
+    $(function() {
+        // Autocomplete
+        $(".mahh-autocomplete").autocomplete({
+            source: function(request, response) {
+                $.ajax({
+                    url: "{{ route('mahh.suggest') }}",
+                    dataType: "json",
+                    data: {
+                        term: request.term
+                    },
+                    success: function(data) {
+                        response($.map(data, function(item) {
+                            return {
+                                label: item.Ma_hh + " - " + item.Ten_hh +
+                                    " - " + item.Dvt,
+                                value: item.Ma_hh
+                            };
+                        }));
+                    }
+                });
+            },
+            minLength: 2
+        });
+
+
     });
 </script>
 
-</body>
 </html>

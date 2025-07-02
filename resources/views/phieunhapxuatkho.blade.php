@@ -28,19 +28,13 @@
             <thead>
                 <tr>
                     <th>STT</th>
-                    <th>Lệnh sản xuất</th>
-                    <th>Tên PO</th>
-                    <th>Khách hàng</th>
-                    <th>Tên hàng hóa ( Mã nhãn Kinh doanh đặt )</th>
-                    <th>Quy cách</th>
-                    <th>Mô tả</th>
-                    <th>Kích thước</th>
-                    <th>Màu sắc</th>
-                    <th>Đơn vị tính</th>
-                    <th>Số lượng đặt</th>
-                    <th>Ngày nhận</th>
-                    <th>Ngày giao</th>
-                    <th>Nơi giao</th>
+                    <th>Số CT</th>
+                    <th>Số hd</th>
+                    <th>Số PO</th>
+                    <th>Tên hàng hóa</th>
+                    <th>Mã HH (Hiện tại)</th>
+                    <th>Tên hàng hóa thật</th>
+                    <th>Mã HH (Cập nhật)</th>
                     <th>Cập nhật</th>
                 </tr>
             </thead>
@@ -48,33 +42,22 @@
                 @foreach ($data as $index => $row)
                     <tr>
                         <td>{{ $loop->iteration }}</td>
-                        <td>{{ optional($row->lenhSanxuat)->So_ct }}</td>
+                        <td>{{ $row->So_ct }}</td>
+                        <td>{{ $row->So_hd }}</td>
                         <td>{{ $row->So_dh }}</td>
-                        <td>{{ optional($row->khachHang)->Ten_kh ?? '' }}</td>
+                        <td>{{ $row->Ten_hh }}</td>
+                        <td>{{ $row->Ma_hh }}</td>
                         <td>{{ $row->Soseri }}</td>
-                        <td>{{ $row->Ma_so }}</td>
-
                         <td>
-                            <input type="text" class="mahh-autocomplete" name="mahh[{{ $row->Ma_hh }}]"
+                            <input type="text" class="mahh-autocomplete" name="mahh[{{ $row->So_ct }}]"
                                 value="{{ $row->Ma_hh }}" />
                         </td>
-                        <td>{{ $row->Msize }}</td>
-                        <td>{{ $row->Ma_ch }}</td>
-                        <td>{{ optional($row->hangHoa)->Dvt }}</td>
-                        <td class="text-end">{{ number_format($row->Soluong, 0, ',', '.') }}</td>
-                        <td>{{ \Carbon\Carbon::parse($row->Ngay_ct)->format('d/m/Y') }}</td>
-                        <td>{{ \Carbon\Carbon::parse($row->Ngay_dh)->format('d/m/Y') }}</td>
-                        <td>{{ $row->Ghichu }}</td>
                         <td><button type="submit">Cập nhật</button></td>
                     </tr>
                 @endforeach
-
             </tbody>
-
         </table>
-
     </form>
-    {{-- {{ $data->links() }} --}}
 
     <script>
         $(function() {
@@ -90,8 +73,7 @@
                         success: function(data) {
                             response($.map(data, function(item) {
                                 return {
-                                    label: item.Ma_hh + " - " + item.Ten_hh +
-                                        " - " + item.Dvt,
+                                    label: item.Ma_hh + " - " + item.Ten_hh,
                                     value: item.Ma_hh
                                 };
                             }));
@@ -101,12 +83,20 @@
                 minLength: 2
             });
 
-
-        });
-    </script>
-    <script>
-        $('#select-all').click(function() {
-            $('input[name="selected_po[]"]').prop('checked', this.checked);
+            // DataTables
+            $('#mahh-table').DataTable({
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/vi.json'
+                },
+                paging: true,
+                searching: true,
+                ordering: true,
+                columnDefs: [{
+                        orderable: false,
+                        targets: [4, 5]
+                    } // Không sắp xếp 2 cột cuối
+                ]
+            });
         });
     </script>
 </body>
