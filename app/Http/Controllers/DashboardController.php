@@ -70,8 +70,8 @@ class DashboardController extends Controller
             ->where('Ma_ct', '=', 'XV')
             ->pluck('So_dh')
             ->toArray();
-        // Kiểm tra nhập kho
-        $checkNhapKho = DB::table('TSoft_NhanTG_kt_test.dbo.DataKetoan2024')
+        // Kiểm tra nhập kho NV là phiếu nhập kho, NX là phiếu nhập kho tp
+        $checkNhapKho = DB::table('DataKetoan2025')
             ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_nhap'))
             ->where('Ma_ct', '=', 'NV')
             ->groupBy('So_dh', 'Ma_hh')
@@ -79,7 +79,15 @@ class DashboardController extends Controller
             ->keyBy(function ($item) {
                 return $item->So_dh . '|' . $item->Ma_hh;
             });
-
+        /* $checkNhapKho = DB::table('DataKetoan2025')
+            ->select('So_dh', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhap'))
+            ->where('Ma_ct', '=', 'NX')
+            ->groupBy('So_dh', 'Ma_sp')
+            ->get()
+            ->keyBy(function ($item) {
+                return $item->So_dh . '|' . $item->Ma_sp;
+            });
+*/
         // Kiểm tra tổng số lượng xuất kho của mã Ma_hh theo So_dh
         $checkXuatKho = DB::table('TSoft_NhanTG_kt_test.dbo.DataKetoan2024')
             ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_xuat'))

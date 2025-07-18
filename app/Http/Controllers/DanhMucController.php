@@ -9,6 +9,9 @@ use App\Models\DataKetoanOder;
 use App\Models\DataKetoanData;
 use App\Models\CodeDanhMuc;
 use App\Models\DataKetoan2025;
+use App\Models\EditHanghoa;
+use App\Models\EditketoanEdit;
+use App\Models\DataCdLO2025;
 
 class DanhMucController extends Controller
 {
@@ -62,9 +65,13 @@ class DanhMucController extends Controller
         DataKetoanData::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
         DataKetoanData::where('Ma_sp', $old)->update(['Ma_sp' => $new]);
         CodeDanhMuc::where('Codeid1', $old)->update(['Codeid1' => $new]);
-
+        EditketoanEdit::where('Ma_sp', $old)->update(['Ma_sp' => $new]);
+        DataKetoanData::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
+        EditHanghoa::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
+        EditHanghoa::where('Ma_sp', $old)->update(['Ma_sp' => $new]);
         CodeHangHoa::where('Ma_so', $old)->update(['Ma_so' => $new]);
-        DataKetoan2025::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
+        DataCdLO2025::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
+        //DataKetoan2025::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
 
 
         return redirect()->route('danhmuc')->with('success', 'Cập nhật Mã HH thành công!');

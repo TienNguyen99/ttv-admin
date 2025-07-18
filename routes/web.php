@@ -43,9 +43,9 @@ Route::get('/unipax', [UnipaxController::class, 'index'])->name('unipax');
 Route::get('/ordertolsx', [DonHangController::class, 'ordertolsx'])->name('ordertolsx');
 Route::get('/donhang', [DonHangController::class, 'index'])->name('donhang');
 Route::post('/gui-po', [DonHangController::class, 'guiPO'])->name('gui.po');
-
-// Tắt Route::post('/mahh/update', [DonHangController::class, 'updateMaHH'])->name('mahh.update');
-// Tắt Route::get('/suggest-mahh', [DonHangController::class, 'suggestMaHH'])->name('mahh.suggest');
+//Tắt mở
+Route::post('/mahh/update', [DonHangController::class, 'updateMaHH'])->name('mahh.update');
+Route::get('/suggest-mahh', [DonHangController::class, 'suggestMaHH'])->name('mahh.suggest');
 //Route for NhapXuatKho
 
 Route::get('/kho', [PhieuNhapXuatKhoController::class, 'index'])->name('kho');

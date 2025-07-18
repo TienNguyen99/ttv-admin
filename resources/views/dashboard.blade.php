@@ -70,7 +70,11 @@
                     <tr>
                         <td>{{ $loop->iteration }}</td>
                         <td>{{ $row->So_hd }}</td>
-                        <td><a href="{{ url('/lenh/' . str_replace('/', '-', $row->So_ct)) }}">{{ $row->So_ct }}</a>
+                        {{-- <a href="{{ url('/lenh/' . str_replace('/', '-', $row->So_ct)) }}"> {{ $row->So_ct }}   </a> --}}
+                        <td>
+                            <span class="copy-text" data-text="{{ $row->So_ct }}" style="cursor:pointer; color:blue;">
+                                {{ $row->So_ct }}
+                            </span>
                         </td>
                         <td>{{ $row->So_dh }}</td>
                         <td>{{ $row->Ten_kh }}</td>
@@ -78,7 +82,7 @@
                         <td>{{ $row->Ten_hh }}</td>
                         <td>{{ $row->Msize }}</td>
                         <td>{{ $row->Ma_ch }}</td>
-                        <td>{{ round($row->Soluong, 0) }}</td>
+                        <td>{{ round($row->Dgbannte, 0) }}</td>
                         <td>{{ round($sumSoLuong[$row->So_ct] ?? 0, 0) }}</td>
 
                         @php
@@ -180,7 +184,7 @@
                     layout: 'columns-4'
                 },
                 columnDefs: [{
-                        targets: [3, 13, 20], // KHÁCH HÀNG, NGÀY NHẬN ĐƠN, TÌNH TRẠNG
+                        targets: [3, 13, 14, 20], // KHÁCH HÀNG, NGÀY NHẬN ĐƠN, TÌNH TRẠNG
                         searchPanes: {
                             show: true
                         }
@@ -205,6 +209,20 @@
                     url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/vi.json'
                 }
             });
+        });
+    </script>
+    {{-- Script copy --}}
+    <script>
+        $(document).on('click', '.copy-text', function() {
+            const text = $(this).data('text');
+            const tempInput = document.createElement("input");
+            document.body.appendChild(tempInput);
+            tempInput.value = text;
+            tempInput.select();
+            tempInput.setSelectionRange(0, 99999); // For mobile
+            document.execCommand("copy");
+            document.body.removeChild(tempInput);
+
         });
     </script>
 </body>
