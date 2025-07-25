@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ClientHomeController;
 use App\Http\Controllers\DanhMucController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DashboardController;
@@ -9,8 +10,7 @@ use App\Http\Controllers\PhieuNhapXuatKhoController;
 use App\Http\Controllers\PhieuXuatKhoController;
 use App\Http\Controllers\SanXuatController;
 use App\Http\Controllers\UnipaxController;
-use App\Http\Controllers\Unipax;
-use App\Models\PhieuXuatKho;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -58,3 +58,12 @@ Route::post('/check-update-mahh', [DanhMucController::class, 'checkUpdateMaHH'])
 // Cập nhật thực sự
 Route::post('/update-mahh', [DanhMucController::class, 'updateMaHH'])->name('updateMaHH');
 Route::get('/suggest-mahh', [DanhMucController::class, 'suggestMaHH'])->name('mahh.suggest');
+
+
+
+
+
+// Client Route //
+// Route for Home
+Route::get('/client/home', [ClientHomeController::class, 'index']);
+Route::get('/api/production-orders', [ClientHomeController::class, 'getData']);

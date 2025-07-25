@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DataKetoanData;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -9,11 +10,15 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        $data = DB::table('DataKetoanData')
-            ->join('codekhachang', 'DataKetoanData.Ma_kh', '=', 'codekhachang.Ma_kh')
-            ->join('codehanghoa', 'DataKetoanData.Ma_hh', '=', 'codehanghoa.Ma_hh')
+        // $data = DB::table('DataKetoanData')
+        //     ->join('codekhachang', 'DataKetoanData.Ma_kh', '=', 'codekhachang.Ma_kh')
+        //     ->join('codehanghoa', 'DataKetoanData.Ma_hh', '=', 'codehanghoa.Ma_hh')
+        //     ->where('Ma_ct', '=', 'GO')
+        //     ->get();
+        $data = DataKetoanData::with(['khachHang', 'hangHoa'])
             ->where('Ma_ct', '=', 'GO')
             ->get();
+        //->paginate(1000);
 
         //sum số lượng tổng theo So_ct  
         $sumSoLuong = DB::table('DataKetoanData')

@@ -77,9 +77,9 @@
                             </span>
                         </td>
                         <td>{{ $row->So_dh }}</td>
-                        <td>{{ $row->Ten_kh }}</td>
+                        <td>{{ optional($row->khachHang)->Ten_kh ?? '' }}</td>
                         <td>{{ $row->Ma_hh }}</td>
-                        <td>{{ $row->Ten_hh }}</td>
+                        <td>{{ optional($row->hangHoa)->Ten_hh ?? '' }}</td>
                         <td>{{ $row->Msize }}</td>
                         <td>{{ $row->Ma_ch }}</td>
                         <td>{{ round($row->Dgbannte, 0) }}</td>
@@ -117,7 +117,7 @@
                                 <span class="text-muted">{{ $lastLabel }}</span>
                             @endif
                         </td>
-                        <td>{{ $row->Dvt }}</td>
+                        <td>{{ optional($row->hangHoa)->Dvt ?? '' }}</td>
                         <td>{{ \Carbon\Carbon::parse($row->Ngay_ct)->format('d/m/Y') }}</td>
                         <td>{{ \Carbon\Carbon::parse($row->Date)->format('d/m/Y') }}</td>
                         <td>{{ in_array($row->So_ct, $nxSoDhs) ? '✅' : '❌' }}</td>
@@ -141,13 +141,13 @@
                         <td>{{ $tong_nhap }}</td>
                         <td>{{ $tong_xuat }}</td>
                         <td>
-                            @if ($tong_nhap >= $row->Soluong && $tong_xuat == 0)
+                            @if ($tong_nhap >= $row->Dgbannte && $tong_xuat == 0)
                                 <span class="text-warning">📦 Chưa xuất kho</span>
                             @elseif ($tong_xuat >= $tong_nhap && $tong_nhap > 0)
                                 <span class="text-success">✔️ Hoàn thành</span>
                             @elseif ($tong_nhap == 0)
                                 <span class="text-danger">⛔ Chưa nhập kho</span>
-                            @elseif ($tong_nhap > 0 && $tong_nhap < $row->Soluong)
+                            @elseif ($tong_nhap > 0 && $tong_nhap < $row->Dgbannte)
                                 <span class="text-warning">📦 Chưa đủ số lượng</span>
                             @endif
                         </td>
@@ -204,7 +204,7 @@
                 }],
                 scrollX: true,
                 responsive: true,
-                pageLength: 25,
+                pageLength: 10,
                 language: {
                     url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/vi.json'
                 }
