@@ -60,7 +60,7 @@
                     <th>SIZE</th>
                     <th>MÀU</th>
                     <th>SL ĐƠN HÀNG</th>
-                    <th>SL CẦN SX</th>
+
                     <th>SẢN XUẤT</th>
                     <th>ĐVT</th>
                     <th>Ngày nhận</th>
@@ -68,6 +68,8 @@
                     <th>Phân tích</th>
                     <th>Chuẩn bị</th>
                     <th>Nhập kho</th>
+                    <th>Nhập thành phẩm Kế toán</th>
+                    <th>Mã kế toán</th>
                     <th>Xuất kho</th>
                     <th>Tình trạng</th>
                 </tr>
@@ -103,11 +105,14 @@
                         nx,
                         xv,
                         nhapKho,
+                        nhaptpketoan,
+                        datamahhketoan,
                         xuatKho
                     } = response;
 
                     const rows = data.map((row, index) => {
                         const key = `${row.So_ct}|${row.Ma_hh}`;
+                        const keyketoan = `${row.So_dh}|${row.Ma_hh}`;
                         const cdSteps = [cd1, cd2, cd3, cd4];
                         let step = 0,
                             label = 'Chưa bắt đầu';
@@ -119,23 +124,22 @@
                             }
                         }
 
-                        const nhap = nhapKho[key]?.total ?? 0;
-                        const xuat = xuatKho[key]?.total ?? 0;
+                        const nhap = Math.round(nhapKho[key]?.total_nhap ?? 0);
+                        const nhaptp = Math.round(nhaptpketoan[keyketoan]?.total_nhaptpketoan ?? 0);
+                        const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
+
 
                         let statusLabel = '';
-                        switch (true) {
-                            case nhap >= row.Dgbannte && xuat == 0:
-                                statusLabel = '<span class="text-primary">📦 Chưa xuất kho</span>';
-                                break;
-                            case xuat >= row.Dgbannte && row.Dgbannte > 0:
-                                statusLabel = '<span class="text-success">✔️ Hoàn th2ành</span>';
-                                break;
-                            case nhap == 0:
-                                statusLabel = '<span class="text-danger">⛔ Chưa nhập kho</span>';
-                                break;
-                            case nhap > 0 && nhap < row.Dgbannte:
-                                statusLabel = '<span class="text-warning">📦 Chưa đủ số lượng</span>';
+                        if (xuat >= row.Dgbannte && row.Dgbannte > 0) {
+                            statusLabel = '<span class="text-success">✔️ Hoàn thành</span>';
+                        } else if (nhap >= row.Dgbannte && xuat === 0) {
+                            statusLabel = '<span class="text-primary">📦 Chưa xuất kho</span>';
+                        } else if (nhap === 0) {
+                            statusLabel = '<span class="text-danger">⛔ Chưa nhập kho</span>';
+                        } else if (nhap > 0 && nhap < row.Dgbannte) {
+                            statusLabel = '<span class="text-warning">📦 Chưa đủ số lượng</span>';
                         }
+
 
                         return [
                             index + 1,
@@ -149,7 +153,7 @@
                             row.Msize,
                             row.Ma_ch,
                             Math.round(row.Dgbannte),
-                            Math.round(sumSoLuong[row.So_ct]) ?? 0,
+
                             `<span class="text-primary">${label}</span>`,
                             row.hang_hoa?.Dvt ?? '',
                             new Date(row.Ngay_ct).toLocaleDateString(),
@@ -157,6 +161,10 @@
                             nx.includes(row.So_ct) ? '✅' : '❌',
                             xv.includes(row.So_ct) ? '✅' : '❌',
                             Math.round(nhap),
+                            Math.round(nhaptp),
+                            datamahhketoan[row.So_dh] ?
+                            `<span class="text-success">✅ ${datamahhketoan[row.So_dh].join(", ")}</span>` :
+                            '<span class="text-danger">❌ Chưa có</span>',
                             Math.round(xuat),
                             statusLabel
                         ];
@@ -198,9 +206,7 @@
                                 {
                                     title: "SL ĐƠN HÀNG"
                                 },
-                                {
-                                    title: "SL CẦN SX"
-                                },
+
                                 {
                                     title: "SẢN XUẤT"
                                 },
@@ -221,6 +227,12 @@
                                 },
                                 {
                                     title: "Nhập kho"
+                                },
+                                {
+                                    title: "Nhập thành phẩm Kế toán"
+                                },
+                                {
+                                    title: "Mã Kế toán"
                                 },
                                 {
                                     title: "Xuất kho"

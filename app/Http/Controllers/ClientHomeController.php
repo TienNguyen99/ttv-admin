@@ -49,14 +49,54 @@ class ClientHomeController extends Controller
             ->toArray();
 
         $nhapKho = DB::table('DataKetoan2025')
-            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total'))
+            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_nhap'))
             ->where('Ma_ct', '=', 'NV')
             ->groupBy('So_dh', 'Ma_hh')
             ->get()
             ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
 
+        // $nhaptpketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        //     ->selectdistinct('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
+        //     ->where('Ma_ct', '=', 'NX')
+        //     ->groupBy('Ma_vv', 'Ma_sp')
+        //     ->get()
+        //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
+        //Phan ke toan
+        //Nhập thành phẩm kế toán 
+        $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+            ->select('Ma_vv', 'Ma_sp', 'Noluong')
+            ->where('Ma_ct', '=', 'NX')
+            ->distinct();
+
+        $nhaptpketoan = DB::table(DB::raw("({$sub->toSql()}) as sub"))
+            ->mergeBindings($sub)
+            ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
+            ->groupBy('Ma_vv', 'Ma_sp')
+            ->get()
+            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
+        // Get Ma_sp from DataKetoan2025 Ketoan
+        // $datamahhketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        //     ->select('Ma_vv', 'Ma_sp')
+        //     ->where('Ma_ct', '=', 'NX')
+        //     ->distinct()
+        //     ->get()
+        //     ->keyBy('Ma_vv');
+        $rawData = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+            ->select('Ma_vv', 'Ma_sp')
+            ->where('Ma_ct', '=', 'NX')
+            ->distinct()
+            ->get();
+
+        // Gộp theo Ma_vv => [Ma_sp1, Ma_sp2, ...]
+        $datamahhketoan = [];
+
+        foreach ($rawData as $item) {
+            $datamahhketoan[$item->Ma_vv][] = $item->Ma_sp;
+        }
+
+        // XUAT KHO DATA KETOAN
         $xuatKho = DB::table('TSoft_NhanTG_kt_test.dbo.DataKetoan2024')
-            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total'))
+            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_xuat'))
             ->where('Ma_ct', '=', 'XU')
             ->groupBy('So_dh', 'Ma_hh')
             ->get()
@@ -72,6 +112,8 @@ class ClientHomeController extends Controller
             'nx' => $nx,
             'xv' => $xv,
             'nhapKho' => $nhapKho,
+            'nhaptpketoan' => $nhaptpketoan,
+            'datamahhketoan' => $datamahhketoan,
             'xuatKho' => $xuatKho
         ]);
     }
