@@ -64,16 +64,32 @@ class ClientHomeController extends Controller
         //Phan ke toan
         //Nhập thành phẩm kế toán 
         $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
-            ->select('Ma_vv', 'Ma_sp', 'Noluong')
+            ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
             ->where('Ma_ct', '=', 'NX')
+            ->whereBetween('Ngay_ct', ['2025-01-01', '2025-12-31'])
             ->distinct();
-
-        $nhaptpketoan = DB::table(DB::raw("({$sub->toSql()}) as sub"))
+        $nhaptpketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->mergeBindings($sub)
             ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
             ->groupBy('Ma_vv', 'Ma_sp')
             ->get()
             ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
+        // Tổng tồn kế toán theo Ma_sp
+        $tongnhapkhoketoan = DB::table(DB::raw("({$sub->toSql()}) as sub"))
+            ->mergeBindings($sub)
+            ->select('Ma_sp', DB::raw('SUM(Noluong) as totalnhapkho_ketoan'))
+            ->groupBy('Ma_sp')
+            ->get()
+            ->keyBy('Ma_sp');
+        $tongxuatkhoketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+            ->select('Ma_hh', DB::raw('SUM(Soluong) as totalxuatkho_ketoan'))
+            ->groupBy('Ma_hh')
+            ->get()
+            ->keyBy('Ma_hh');
+
+
+
+
         // Get Ma_sp from DataKetoan2025 Ketoan
         // $datamahhketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
         //     ->select('Ma_vv', 'Ma_sp')
@@ -81,6 +97,7 @@ class ClientHomeController extends Controller
         //     ->distinct()
         //     ->get()
         //     ->keyBy('Ma_vv');
+        // Lấy mã HH kế toán
         $rawData = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->select('Ma_vv', 'Ma_sp')
             ->where('Ma_ct', '=', 'NX')
@@ -114,6 +131,8 @@ class ClientHomeController extends Controller
             'nhapKho' => $nhapKho,
             'nhaptpketoan' => $nhaptpketoan,
             'datamahhketoan' => $datamahhketoan,
+            'tongnhapkhoketoan' => $tongnhapkhoketoan,
+            'tongxuatkhoketoan' => $tongxuatkhoketoan,
             'xuatKho' => $xuatKho
         ]);
     }

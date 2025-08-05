@@ -46,13 +46,46 @@
     <div class="container mt-4">
         <h3 class="mb-4">📋 Theo dõi đơn sản xuất - Realtime</h3>
 
+        <!-- 🔍 Bộ lọc -->
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <label for="filterKhachHang" class="form-label">Khách hàng</label>
+                <input type="text" class="form-control" id="filterKhachHang" placeholder="Nhập tên khách hàng">
+            </div>
+            <div class="col-md-3">
+                <label for="filterMaHH" class="form-label">Mã HH</label>
+                <input type="text" class="form-control" id="filterMaHH" placeholder="Nhập mã hàng hóa">
+            </div>
+            <div class="col-md-3">
+                <label for="filterTinhTrang" class="form-label">Tình trạng</label>
+                <select class="form-select" id="filterTinhTrang">
+                    <option value="">Tất cả</option>
+                    <option value="✔️ Hoàn thành">✔️ Hoàn thành</option>
+                    <option value="📦 Chưa xuất kho">📦 Chưa xuất kho</option>
+                    <option value="⛔ Chưa nhập kho">⛔ Chưa nhập kho</option>
+                    <option value="📦 Chưa đủ số lượng">📦 Chưa đủ số lượng</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="filterNgayGiao" class="form-label">Tháng giao</label>
+                <input type="month" class="form-control" id="filterNgayGiao">
+            </div>
+            <div class="col-md-3">
+                <label for="filterLenhSanXuat" class="form-label">Lệnh sản xuất</label>
+                <input type="text" class="form-control" id="filterLenhSanXuat" placeholder="Nhập lệnh sản xuất">
+            </div>
+            <div class="col-md-12 mt-2 text-end">
+                <button class="btn btn-secondary" id="clearFilters">🧹 Xóa bộ lọc</button>
+            </div>
+        </div>
+
         <table class="table table-bordered table-hover" id="productionTable" style="width: 100%;">
             <thead class="table-dark">
                 <tr>
                     <th>STT</th>
                     <th>SỐ ĐƠN HÀNG</th>
-                    <th>MÃ LỆNH</th>
                     <th>TÊN PO</th>
+                    <th>MÃ LỆNH</th>
                     <th>KHÁCH HÀNG</th>
                     <th>MÃ KINH DOANH</th>
                     <th>Mã HH</th>
@@ -60,7 +93,6 @@
                     <th>SIZE</th>
                     <th>MÀU</th>
                     <th>SL ĐƠN HÀNG</th>
-
                     <th>SẢN XUẤT</th>
                     <th>ĐVT</th>
                     <th>Ngày nhận</th>
@@ -70,7 +102,9 @@
                     <th>Nhập kho</th>
                     <th>Nhập thành phẩm Kế toán</th>
                     <th>Mã kế toán</th>
-                    <th>Xuất kho</th>
+                    {{-- <th>Tổng nhập kho kế toán</th>
+                    <th>Tổng xuất kho kế toán</th> --}}
+                    <th>Tồn</th>
                     <th>Tình trạng</th>
                 </tr>
             </thead>
@@ -97,7 +131,6 @@
                 .then(response => {
                     const {
                         data,
-                        sumSoLuong,
                         cd1,
                         cd2,
                         cd3,
@@ -107,6 +140,8 @@
                         nhapKho,
                         nhaptpketoan,
                         datamahhketoan,
+                        tongnhapkhoketoan,
+                        tongxuatkhoketoan,
                         xuatKho
                     } = response;
 
@@ -127,7 +162,9 @@
                         const nhap = Math.round(nhapKho[key]?.total_nhap ?? 0);
                         const nhaptp = Math.round(nhaptpketoan[keyketoan]?.total_nhaptpketoan ?? 0);
                         const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
-
+                        const tongnhap = Math.round(tongnhapkhoketoan[row.Ma_hh]?.totalnhapkho_ketoan ?? 0);
+                        const tongxuat = Math.round(tongxuatkhoketoan[row.Ma_hh]?.totalxuatkho_ketoan ?? 0);
+                        const tongton = Math.round(tongnhap - tongxuat);
 
                         let statusLabel = '';
                         if (xuat >= row.Dgbannte && row.Dgbannte > 0) {
@@ -140,11 +177,13 @@
                             statusLabel = '<span class="text-warning">📦 Chưa đủ số lượng</span>';
                         }
 
-
                         return [
                             index + 1,
                             row.So_hd,
-                            row.So_ct,
+                            `                 <span class="copy-text" data-text="${row.So_ct}" style="cursor:pointer; color:blue;">
+                                ${row.So_ct}
+                            </span>`,
+
                             row.So_dh,
                             row.khach_hang?.Ten_kh ?? '',
                             row.Soseri,
@@ -153,7 +192,6 @@
                             row.Msize,
                             row.Ma_ch,
                             Math.round(row.Dgbannte),
-
                             `<span class="text-primary">${label}</span>`,
                             row.hang_hoa?.Dvt ?? '',
                             new Date(row.Ngay_ct).toLocaleDateString(),
@@ -165,7 +203,9 @@
                             datamahhketoan[row.So_dh] ?
                             `<span class="text-success">✅ ${datamahhketoan[row.So_dh].join(", ")}</span>` :
                             '<span class="text-danger">❌ Chưa có</span>',
-                            Math.round(xuat),
+                            // tongnhap,
+                            // tongxuat,
+                            tongton,
                             statusLabel
                         ];
                     });
@@ -173,93 +213,70 @@
                     if (!dataTable) {
                         dataTable = $('#productionTable').DataTable({
                             data: rows,
-                            columns: [{
-                                    title: "STT"
-                                },
-                                {
-                                    title: "SỐ ĐƠN HÀNG"
-                                },
-                                {
-                                    title: "MÃ LỆNH"
-                                },
-                                {
-                                    title: "TÊN PO"
-                                },
-                                {
-                                    title: "KHÁCH HÀNG"
-                                },
-                                {
-                                    title: "MÃ KINH DOANH"
-                                },
-                                {
-                                    title: "Mã HH"
-                                },
-                                {
-                                    title: "TÊN SP"
-                                },
-                                {
-                                    title: "SIZE"
-                                },
-                                {
-                                    title: "MÀU"
-                                },
-                                {
-                                    title: "SL ĐƠN HÀNG"
-                                },
-
-                                {
-                                    title: "SẢN XUẤT"
-                                },
-                                {
-                                    title: "ĐVT"
-                                },
-                                {
-                                    title: "Ngày nhận"
-                                },
-                                {
-                                    title: "Ngày giao"
-                                },
-                                {
-                                    title: "Phân tích"
-                                },
-                                {
-                                    title: "Chuẩn bị"
-                                },
-                                {
-                                    title: "Nhập kho"
-                                },
-                                {
-                                    title: "Nhập thành phẩm Kế toán"
-                                },
-                                {
-                                    title: "Mã Kế toán"
-                                },
-                                {
-                                    title: "Xuất kho"
-                                },
-                                {
-                                    title: "Tình trạng"
-                                }
-                            ],
+                            columns: Array(22).fill().map((_, i) => ({
+                                title: $('thead th').eq(i).text()
+                            })),
                             pageLength: 25,
                             language: {
                                 url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/vi.json'
                             },
-                            dom: 'Bfrtip', // 👈 thêm dòng này để hiển thị nút
+                            dom: 'Bfrtip',
                             buttons: [{
                                 extend: 'excelHtml5',
                                 text: '📤 Xuất Excel',
                                 className: 'btn btn-success',
                                 exportOptions: {
-                                    columns: ':visible' // xuất tất cả cột đang hiển thị
+                                    columns: ':visible'
                                 },
-                                title: 'Don_San_Xuat'
+                                title: 'Bang_Lenh_San_Xuat',
                             }]
                         });
+
+                        $('#filterKhachHang, #filterMaHH, #filterTinhTrang, #filterNgayGiao,#filterLenhSanXuat').on(
+                            'input change',
+                            function() {
+                                dataTable.draw();
+                            });
+                        $('#clearFilters').on('click', function() {
+                            $('#filterKhachHang').val('');
+                            $('#filterMaHH').val('');
+                            $('#filterTinhTrang').val('');
+                            $('#filterNgayGiao').val('');
+                            $('#filterLenhSanXuat').val('');
+                            dataTable.draw();
+                        });
+
+                        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+                            const khachHang = $('#filterKhachHang').val().toLowerCase();
+                            const maHH = $('#filterMaHH').val().toLowerCase();
+                            const tinhTrang = $('#filterTinhTrang').val();
+                            const ngayGiao = $('#filterNgayGiao').val();
+                            const lenhSanXuat = $('#filterLenhSanXuat').val(); // yyyy-MM
+
+                            const khachHangCol = data[4].toLowerCase();
+                            const maHHCol = data[5].toLowerCase();
+                            const tinhTrangCol = $('<div>').html(data[21]).text(); // get text without span
+                            const ngayGiaoCol = data[14]; // dd/mm/yyyy
+                            const lenhSanXuatCol = data[3];
+
+                            if (khachHang && !khachHangCol.includes(khachHang)) return false;
+                            if (maHH && !maHHCol.includes(maHH)) return false;
+                            if (tinhTrang && !tinhTrangCol.includes(tinhTrang)) return false;
+                            if (lenhSanXuat && !lenhSanXuatCol.includes(lenhSanXuat)) return false;
+
+                            if (ngayGiao) {
+                                const [day, month, year] = ngayGiaoCol.split('/');
+                                const tableMonth = `${year}-${month.padStart(2, '0')}`;
+                                if (!tableMonth.startsWith(ngayGiao)) return false;
+                            }
+
+                            return true;
+                        });
+
                     } else {
                         dataTable.clear();
                         dataTable.rows.add(rows);
-                        dataTable.draw(false); // Giữ lại trang và tìm kiếm hiện tại
+                        dataTable.draw(false);
                     }
                 })
                 .catch(err => {
@@ -268,14 +285,28 @@
         }
 
         fetchData();
-        setInterval(fetchData, 10000); // cập nhật mỗi 10 giây
+        setInterval(fetchData, 10000);
     </script>
+
     <!-- Buttons + JSZip (Excel) -->
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+    {{-- Script copy --}}
+    <script>
+        $(document).on('click', '.copy-text', function() {
+            const text = $(this).data('text');
+            const tempInput = document.createElement("input");
+            document.body.appendChild(tempInput);
+            tempInput.value = text;
+            tempInput.select();
+            tempInput.setSelectionRange(0, 99999); // For mobile
+            document.execCommand("copy");
+            document.body.removeChild(tempInput);
 
+        });
+    </script>
 </body>
 
 </html>
