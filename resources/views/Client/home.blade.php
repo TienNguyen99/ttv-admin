@@ -93,6 +93,7 @@
                     <th>SIZE</th>
                     <th>MÀU</th>
                     <th>SL ĐƠN HÀNG</th>
+                    <th>Số lượng cần</th>
                     <th>SẢN XUẤT</th>
                     <th>ĐVT</th>
                     <th>Ngày nhận</th>
@@ -131,6 +132,7 @@
                 .then(response => {
                     const {
                         data,
+                        sumSoLuong,
                         cd1,
                         cd2,
                         cd3,
@@ -158,6 +160,7 @@
                                 break;
                             }
                         }
+                        const sum = Math.round(sumSoLuong[row.So_ct] ?? 0);
 
                         const nhap = Math.round(nhapKho[key]?.total_nhap ?? 0);
                         const nhaptp = Math.round(nhaptpketoan[keyketoan]?.total_nhaptpketoan ?? 0);
@@ -167,13 +170,13 @@
                         const tongton = Math.round(tongnhap - tongxuat);
 
                         let statusLabel = '';
-                        if (xuat >= row.Dgbannte && row.Dgbannte > 0) {
+                        if (xuat >= sum && sum > 0) {
                             statusLabel = '<span class="text-success">✔️ Hoàn thành</span>';
-                        } else if (nhap >= row.Dgbannte && xuat === 0) {
+                        } else if (nhap >= sum && xuat === 0) {
                             statusLabel = '<span class="text-primary">📦 Chưa xuất kho</span>';
                         } else if (nhap === 0) {
                             statusLabel = '<span class="text-danger">⛔ Chưa nhập kho</span>';
-                        } else if (nhap > 0 && nhap < row.Dgbannte) {
+                        } else if (nhap > 0 && nhap < sum) {
                             statusLabel = '<span class="text-warning">📦 Chưa đủ số lượng</span>';
                         }
 
@@ -192,6 +195,8 @@
                             row.Msize,
                             row.Ma_ch,
                             Math.round(row.Dgbannte),
+
+                            sum,
                             `<span class="text-primary">${label}</span>`,
                             row.hang_hoa?.Dvt ?? '',
                             new Date(row.Ngay_ct).toLocaleDateString(),
@@ -213,7 +218,7 @@
                     if (!dataTable) {
                         dataTable = $('#productionTable').DataTable({
                             data: rows,
-                            columns: Array(22).fill().map((_, i) => ({
+                            columns: Array(23).fill().map((_, i) => ({
                                 title: $('thead th').eq(i).text()
                             })),
                             pageLength: 25,
@@ -255,8 +260,8 @@
 
                             const khachHangCol = data[4].toLowerCase();
                             const maHHCol = data[5].toLowerCase();
-                            const tinhTrangCol = $('<div>').html(data[21]).text(); // get text without span
-                            const ngayGiaoCol = data[14]; // dd/mm/yyyy
+                            const tinhTrangCol = $('<div>').html(data[22]).text(); // get text without span
+                            const ngayGiaoCol = data[15]; // dd/mm/yyyy
                             const lenhSanXuatCol = data[3];
 
                             if (khachHang && !khachHangCol.includes(khachHang)) return false;
