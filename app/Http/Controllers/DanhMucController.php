@@ -69,7 +69,7 @@ class DanhMucController extends Controller
         DataKetoanData::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
         //EditHanghoa::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
         //EditHanghoa::where('Ma_sp', $old)->update(['Ma_sp' => $new]);
-        CodeHangHoa::where('Ma_so', $old)->update(['Ma_so' => $new]);
+        // CodeHangHoa::where('Ma_so', $old)->update(['Ma_so' => $new]);
         DataCdLO2025::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
         DataKetoan2025::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
 

@@ -127,7 +127,7 @@
         let dataTable;
 
         function fetchData() {
-            fetch("http://192.168.1.89:8080/api/production-orders")
+            fetch("http://192.168.1.89:8888/api/production-orders")
                 .then(res => res.json())
                 .then(response => {
                     const {

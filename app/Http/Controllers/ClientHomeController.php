@@ -47,13 +47,16 @@ class ClientHomeController extends Controller
             ->where('Ma_ct', '=', 'XV')
             ->pluck('So_dh')
             ->toArray();
-
+        //Nhập kho data
+        // Lấy tổng nhập kho theo Ma_hh và So_dh
         $nhapKho = DB::table('DataKetoan2025')
             ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_nhap'))
             ->where('Ma_ct', '=', 'NV')
             ->groupBy('So_dh', 'Ma_hh')
             ->get()
             ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
+        //Hiển thị So  tạo nên tổng nhập kho Theo ma_hh và So_dh
+
 
         // $nhaptpketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
         //     ->selectdistinct('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
@@ -118,6 +121,7 @@ class ClientHomeController extends Controller
             ->groupBy('So_dh', 'Ma_hh')
             ->get()
             ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
+
 
         return response()->json([
             'data' => $data,
