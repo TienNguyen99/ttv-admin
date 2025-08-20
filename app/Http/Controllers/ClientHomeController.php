@@ -17,6 +17,9 @@ class ClientHomeController extends Controller
     {
         $data = DataKetoanData::with(['khachHang', 'hangHoa'])
             ->where('Ma_ct', '=', 'GO')
+            ->orderby('Ngay_ct', 'asc')
+
+
             ->get();
 
         $sumSoLuong = DB::table('DataKetoanData')
@@ -139,5 +142,37 @@ class ClientHomeController extends Controller
             'tongxuatkhoketoan' => $tongxuatkhoketoan,
             'xuatKho' => $xuatKho
         ]);
+    }
+    // API riêng lấy chi tiết nhập kho
+    public function getNhapKhoDetail(Request $request)
+    {
+        $so_dh = urldecode($request->query('so_dh'));
+        $ma_hh = urldecode($request->query('ma_hh'));
+        // $so_dh = $request->query('so_dh');   // 👈 phải là So_dh
+        // $ma_hh = $request->query('ma_hh');   // giữ nguyên
+
+
+
+        $details = DB::table('DataKetoan2025')
+            ->select('Ngay_ct', 'So_ct', 'Ma_hh', 'Soluong')
+            ->where('Ma_ct', '=', 'NV')
+            ->where('So_dh', $so_dh)         // lọc theo số đơn hàng
+            ->where('Ma_hh', $ma_hh)         // lọc theo mã hàng
+            ->orderBy('Ngay_ct')
+            ->get();
+
+        return response()->json($details);
+    }
+    // API lấy danh sách xuất vật tư
+    public function getXuatVatTu(Request $request)
+    {
+        $so_dh = urldecode($request->query('so_dh'));
+        $data = DB::table('DataKetoan2025')
+            ->select('Ngay_ct', 'So_ct', 'Ma_ko', 'Ma3ko', 'Ma_hh', 'Soluong')
+            ->where('Ma_ct', '=', 'CK')
+            ->where('So_dh', $so_dh)         // lọc theo số đơn hàng
+            ->orderBy('Ngay_ct')
+            ->get();
+        return response()->json($data);
     }
 }

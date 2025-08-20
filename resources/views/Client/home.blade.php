@@ -74,6 +74,10 @@
                 <label for="filterLenhSanXuat" class="form-label">Lệnh sản xuất</label>
                 <input type="text" class="form-control" id="filterLenhSanXuat" placeholder="Nhập lệnh sản xuất">
             </div>
+            <div class="col-md-3">
+                <label for="filterMaKinhDoanh" class="form-label">Mã kinh doanh</label>
+                <input type="text" class="form-control" id="filterMaKinhDoanh" placeholder="Nhập mã kinh doanh">
+            </div>
             <div class="col-md-12 mt-2 text-end">
                 <button class="btn btn-secondary" id="clearFilters">🧹 Xóa bộ lọc</button>
             </div>
@@ -103,14 +107,38 @@
                     <th>Nhập kho</th>
                     <th>Nhập thành phẩm Kế toán</th>
                     <th>Mã kế toán</th>
-                    {{-- <th>Tổng nhập kho kế toán</th>
-                    <th>Tổng xuất kho kế toán</th> --}}
                     <th>Tồn</th>
                     <th>Tình trạng</th>
                 </tr>
             </thead>
             <tbody></tbody>
         </table>
+    </div>
+
+    <!-- Modal Chi tiết nhập kho -->
+    <div class="modal fade" id="nhapModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Chi tiết nhập kho</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-bordered" id="nhapDetailTable">
+                        <thead>
+                            <tr>
+
+                                <th>Ngày chứng từ</th>
+                                <th>Số chứng từ</th>
+                                <th>Mã hàng</th>
+                                <th>Số lượng</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- jQuery -->
@@ -183,10 +211,9 @@
                         return [
                             index + 1,
                             row.So_hd,
-                            `                 <span class="copy-text" data-text="${row.So_ct}" style="cursor:pointer; color:blue;">
+                            `<span class="copy-text" data-text="${row.So_ct}" style="cursor:pointer; color:blue;">
                                 ${row.So_ct}
                             </span>`,
-
                             row.So_dh,
                             row.khach_hang?.Ten_kh ?? '',
                             row.Soseri,
@@ -195,7 +222,6 @@
                             row.Msize,
                             row.Ma_ch,
                             Math.round(row.Dgbannte),
-
                             sum,
                             `<span class="text-primary">${label}</span>`,
                             row.hang_hoa?.Dvt ?? '',
@@ -203,13 +229,14 @@
                             new Date(row.Date).toLocaleDateString(),
                             nx.includes(row.So_ct) ? '✅' : '❌',
                             xv.includes(row.So_ct) ? '✅' : '❌',
-                            Math.round(nhap),
+                            `<button class="btn btn-link p-0 text-primary show-nhap" 
+                                    data-key="${row.So_ct}|${row.Ma_hh}">
+                                ${nhap}
+                             </button>`,
                             Math.round(nhaptp),
                             datamahhketoan[row.So_dh] ?
                             `<span class="text-success">✅ ${datamahhketoan[row.So_dh].join(", ")}</span>` :
                             '<span class="text-danger">❌ Chưa có</span>',
-                            // tongnhap,
-                            // tongxuat,
                             tongton,
                             statusLabel
                         ];
@@ -237,17 +264,19 @@
                             }]
                         });
 
-                        $('#filterKhachHang, #filterMaHH, #filterTinhTrang, #filterNgayGiao,#filterLenhSanXuat').on(
-                            'input change',
-                            function() {
-                                dataTable.draw();
-                            });
+                        $('#filterKhachHang, #filterMaHH, #filterTinhTrang, #filterNgayGiao,#filterLenhSanXuat, #filterMaKinhDoanh')
+                            .on(
+                                'input change',
+                                function() {
+                                    dataTable.draw();
+                                });
                         $('#clearFilters').on('click', function() {
                             $('#filterKhachHang').val('');
                             $('#filterMaHH').val('');
                             $('#filterTinhTrang').val('');
                             $('#filterNgayGiao').val('');
                             $('#filterLenhSanXuat').val('');
+                            $('#filterMaKinhDoanh').val('');
                             dataTable.draw();
                         });
 
@@ -256,18 +285,22 @@
                             const maHH = $('#filterMaHH').val().toLowerCase();
                             const tinhTrang = $('#filterTinhTrang').val();
                             const ngayGiao = $('#filterNgayGiao').val();
-                            const lenhSanXuat = $('#filterLenhSanXuat').val(); // yyyy-MM
+                            const lenhSanXuat = $('#filterLenhSanXuat').val();
+                            const maKinhDoanh = $('#filterMaKinhDoanh').val().toLowerCase();
 
                             const khachHangCol = data[4].toLowerCase();
                             const maHHCol = data[5].toLowerCase();
-                            const tinhTrangCol = $('<div>').html(data[22]).text(); // get text without span
-                            const ngayGiaoCol = data[15]; // dd/mm/yyyy
+                            const tinhTrangCol = $('<div>').html(data[22]).text();
+                            const ngayGiaoCol = data[15];
                             const lenhSanXuatCol = data[3];
+                            const maKinhDoanhCol = data[5].toLowerCase();
+
 
                             if (khachHang && !khachHangCol.includes(khachHang)) return false;
                             if (maHH && !maHHCol.includes(maHH)) return false;
                             if (tinhTrang && !tinhTrangCol.includes(tinhTrang)) return false;
                             if (lenhSanXuat && !lenhSanXuatCol.includes(lenhSanXuat)) return false;
+                            if (maKinhDoanh && !maKinhDoanhCol.includes(maKinhDoanh)) return false;
 
                             if (ngayGiao) {
                                 const [day, month, year] = ngayGiaoCol.split('/');
@@ -291,6 +324,39 @@
 
         fetchData();
         setInterval(fetchData, 10000);
+
+        // Xem chi tiết nhập kho
+        $(document).on("click", ".show-nhap", function() {
+            const key = $(this).data("key");
+            const [so_dh, ma_hh] = key.split("|");
+
+            fetch(
+                    `http://192.168.1.89:8888/api/nhapkho-chi-tiet?so_dh=${encodeURIComponent(so_dh)}&ma_hh=${encodeURIComponent(ma_hh)}`
+                )
+                .then(res => res.json())
+                .then(details => {
+                    const tbody = $("#nhapDetailTable tbody");
+                    tbody.empty();
+
+                    if (details.length === 0) {
+                        tbody.append(`<tr><td colspan="4" class="text-center">Không có dữ liệu</td></tr>`);
+                    } else {
+                        details.forEach(d => {
+                            tbody.append(`
+                            <tr>
+                              
+                              <td>${new Date(d.Ngay_ct).toLocaleDateString()}</td>
+                              <td>${d.So_ct}</td>
+                              <td>${d.Ma_hh}</td>
+                              <td>${d.Soluong}</td>
+                            </tr>
+                          `);
+                        });
+                    }
+
+                    new bootstrap.Modal(document.getElementById("nhapModal")).show();
+                });
+        });
     </script>
 
     <!-- Buttons + JSZip (Excel) -->
@@ -298,6 +364,7 @@
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+
     {{-- Script copy --}}
     <script>
         $(document).on('click', '.copy-text', function() {
@@ -306,10 +373,9 @@
             document.body.appendChild(tempInput);
             tempInput.value = text;
             tempInput.select();
-            tempInput.setSelectionRange(0, 99999); // For mobile
+            tempInput.setSelectionRange(0, 99999);
             document.execCommand("copy");
             document.body.removeChild(tempInput);
-
         });
     </script>
 </body>

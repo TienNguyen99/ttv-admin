@@ -67,3 +67,6 @@ Route::get('/suggest-mahh', [DanhMucController::class, 'suggestMaHH'])->name('ma
 // Route for Home
 Route::get('/client/home', [ClientHomeController::class, 'index']);
 Route::get('/api/production-orders', [ClientHomeController::class, 'getData']);
+Route::get('/api/nhapkho-chi-tiet', [ClientHomeController::class, 'getNhapKhoDetail']);
+//API lấy danh sách xuất vật tư của lệnh
+Route::get('/api/xuat-vat-tu', [ClientHomeController::class, 'getXuatVatTu']);
