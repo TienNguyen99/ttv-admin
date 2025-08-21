@@ -105,6 +105,7 @@
                     <th>Phân tích</th>
                     <th>Chuẩn bị</th>
                     <th>Nhập kho</th>
+                    <th>Xuất VT</th> <!-- Mới -->
                     <th>Nhập thành phẩm Kế toán</th>
                     <th>Mã kế toán</th>
                     <th>Tồn</th>
@@ -127,7 +128,6 @@
                     <table class="table table-bordered" id="nhapDetailTable">
                         <thead>
                             <tr>
-
                                 <th>Ngày chứng từ</th>
                                 <th>Số chứng từ</th>
                                 <th>Mã hàng</th>
@@ -141,6 +141,58 @@
         </div>
     </div>
 
+    <!-- Modal Chi tiết xuất vật tư (mới) -->
+    <div class="modal fade" id="xuatModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Chi tiết xuất vật tư</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-bordered" id="xuatDetailTable">
+                        <thead>
+                            <tr>
+                                <th>Ngày chứng từ</th>
+                                <th>Số chứng từ</th>
+                                <th>Kho xuất</th>
+                                <th>Kho nhập</th>
+                                <th>Mã hàng</th>
+                                <th>Thực xuất</th>
+                                <th>Nhu cầu</th>
+                                <th>Tổng đã xuất</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Modal Chi tiết xuất kho kế toán -->
+    <div class="modal fade" id="xuatKhoModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Chi tiết xuất kho kế toán</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-bordered" id="xuatKhoDetailTable">
+                        <thead>
+                            <tr>
+                                <th>Ngày chứng từ</th>
+                                <th>Số chứng từ</th>
+                                <th>Mã hàng</th>
+                                <th>Số lượng</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 
@@ -198,7 +250,7 @@
                         const tongton = Math.round(tongnhap - tongxuat);
 
                         let statusLabel = '';
-                        if (xuat >= sum && sum > 0) {
+                        if (xuat >= sum && sum > 0 || (row.Noibo && row.Noibo.includes("R"))) {
                             statusLabel = '<span class="text-success">✔️ Hoàn thành</span>';
                         } else if (nhap >= sum && xuat === 0) {
                             statusLabel = '<span class="text-primary">📦 Chưa xuất kho</span>';
@@ -233,11 +285,19 @@
                                     data-key="${row.So_ct}|${row.Ma_hh}">
                                 ${nhap}
                              </button>`,
+                            // Thêm cột Xuất VT (nút mở modal)
+                            `<button class="btn btn-link p-0 text-danger show-xuat" 
+                                    data-so-dh="${row.So_ct}">
+                                Xem
+                             </button>`,
                             Math.round(nhaptp),
                             datamahhketoan[row.So_dh] ?
                             `<span class="text-success">✅ ${datamahhketoan[row.So_dh].join(", ")}</span>` :
                             '<span class="text-danger">❌ Chưa có</span>',
-                            tongton,
+                            `<button class="btn btn-link p-0 text-success show-xuatketoan" 
+        data-ma-hh="${row.Ma_hh}">
+    ${tongton} 
+ </button>`,
                             statusLabel
                         ];
                     });
@@ -245,7 +305,7 @@
                     if (!dataTable) {
                         dataTable = $('#productionTable').DataTable({
                             data: rows,
-                            columns: Array(23).fill().map((_, i) => ({
+                            columns: Array(24).fill().map((_, i) => ({
                                 title: $('thead th').eq(i).text()
                             })),
                             pageLength: 25,
@@ -288,12 +348,13 @@
                             const lenhSanXuat = $('#filterLenhSanXuat').val();
                             const maKinhDoanh = $('#filterMaKinhDoanh').val().toLowerCase();
 
-                            const khachHangCol = data[4].toLowerCase();
-                            const maHHCol = data[5].toLowerCase();
-                            const tinhTrangCol = $('<div>').html(data[22]).text();
-                            const ngayGiaoCol = data[15];
-                            const lenhSanXuatCol = data[3];
-                            const maKinhDoanhCol = data[5].toLowerCase();
+                            // CẬP NHẬT CHỈ SỐ CỘT (phù hợp với cấu trúc bảng hiện tại)
+                            const khachHangCol = (data[4] || '').toLowerCase();
+                            const maHHCol = (data[6] || '').toLowerCase();
+                            const tinhTrangCol = $('<div>').html(data[23] || '').text();
+                            const ngayGiaoCol = data[15] || '';
+                            const lenhSanXuatCol = data[3] || '';
+                            const maKinhDoanhCol = (data[5] || '').toLowerCase();
 
 
                             if (khachHang && !khachHangCol.includes(khachHang)) return false;
@@ -348,13 +409,78 @@
                               <td>${new Date(d.Ngay_ct).toLocaleDateString()}</td>
                               <td>${d.So_ct}</td>
                               <td>${d.Ma_hh}</td>
-                              <td>${d.Soluong}</td>
+                              <td>${Math.round(d.Soluong, 0)}</td>
                             </tr>
                           `);
                         });
                     }
 
                     new bootstrap.Modal(document.getElementById("nhapModal")).show();
+                });
+        });
+
+        // Xem chi tiết xuất vật tư (mới)
+        $(document).on("click", ".show-xuat", function() {
+            const so_dh = decodeURIComponent($(this).data("so-dh"));
+
+            fetch(
+                    `http://192.168.1.89:8888/api/xuat-vat-tu?so_dh=${encodeURIComponent(so_dh)}`
+                )
+                .then(res => res.json())
+                .then(vat_tu => {
+                    const tbody = $("#xuatDetailTable tbody");
+                    tbody.empty();
+
+                    if (vat_tu.length === 0) {
+                        tbody.append(`<tr><td colspan="6" class="text-center">Không có dữ liệu</td></tr>`);
+                    } else {
+                        vat_tu.forEach(d => {
+                            tbody.append(`
+                            <tr>
+                              <td>${new Date(d.Ngay_ct).toLocaleDateString()}</td>
+                              <td>${d.So_ct}</td>
+                              <td>${d.Ma_ko ?? ''}</td>
+                              <td>${d.Ma3ko ?? ''}</td>
+                              <td>${d.Ma_hh}</td>
+                              <td>${Math.round(d.Soluong, 0)}</td>
+                                <td>${Math.round(d.Nhu_cau, 0)}</td>
+                                <td>${Math.round(d.Tong_da_xuat, 0)}</td>
+                            
+
+                            </tr>
+                          `);
+                        });
+                    }
+
+                    new bootstrap.Modal(document.getElementById("xuatModal")).show();
+                });
+        });
+        // Xem chi tiết xuất kho kế toán
+        $(document).on("click", ".show-xuatketoan", function() {
+            const ma_hh = $(this).data("ma-hh");
+
+            fetch(`http://192.168.1.89:8888/api/xuatkhoketoan-chi-tiet?ma_hh=${encodeURIComponent(ma_hh)}`)
+                .then(res => res.json())
+                .then(details => {
+                    const tbody = $("#xuatKhoDetailTable tbody");
+                    tbody.empty();
+
+                    if (details.length === 0) {
+                        tbody.append(`<tr><td colspan="4" class="text-center">Không có dữ liệu</td></tr>`);
+                    } else {
+                        details.forEach(d => {
+                            tbody.append(`
+                      <tr>
+                        <td>${new Date(d.Ngay_ct).toLocaleDateString()}</td>
+                        <td>${d.So_ct}</td>
+                        <td>${d.Ma_hh}</td>
+                        <td>${Math.round(d.Soluong)}</td>
+                      </tr>
+                    `);
+                        });
+                    }
+
+                    new bootstrap.Modal(document.getElementById("xuatKhoModal")).show();
                 });
         });
     </script>

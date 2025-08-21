@@ -47,7 +47,7 @@ class ClientHomeController extends Controller
             ->toArray();
 
         $xv = DB::table('DataKetoan2025')
-            ->where('Ma_ct', '=', 'XV')
+            ->where('Ma_ct', '=', 'CK')
             ->pluck('So_dh')
             ->toArray();
         //Nhập kho data
@@ -72,7 +72,7 @@ class ClientHomeController extends Controller
         $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
             ->where('Ma_ct', '=', 'NX')
-            ->whereBetween('Ngay_ct', ['2025-01-01', '2025-12-31'])
+            ->whereBetween('Ngay_ct', ['2024-01-01', '2025-12-31'])
             ->distinct();
         $nhaptpketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->mergeBindings($sub)
@@ -89,9 +89,11 @@ class ClientHomeController extends Controller
             ->keyBy('Ma_sp');
         $tongxuatkhoketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->select('Ma_hh', DB::raw('SUM(Soluong) as totalxuatkho_ketoan'))
+            ->where('Ma_ct', '=', 'XU')
             ->groupBy('Ma_hh')
             ->get()
             ->keyBy('Ma_hh');
+        // Chi tiết xuất kho API
 
 
 
@@ -148,11 +150,6 @@ class ClientHomeController extends Controller
     {
         $so_dh = urldecode($request->query('so_dh'));
         $ma_hh = urldecode($request->query('ma_hh'));
-        // $so_dh = $request->query('so_dh');   // 👈 phải là So_dh
-        // $ma_hh = $request->query('ma_hh');   // giữ nguyên
-
-
-
         $details = DB::table('DataKetoan2025')
             ->select('Ngay_ct', 'So_ct', 'Ma_hh', 'Soluong')
             ->where('Ma_ct', '=', 'NV')
@@ -163,16 +160,74 @@ class ClientHomeController extends Controller
 
         return response()->json($details);
     }
+    // API riêng lấy chi tiết xuất kho
+    public function getXuatKhoKeToanDetail(Request $request)
+    {
+        $ma_hh = urldecode($request->query('ma_hh'));
+
+        $details = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+            ->select('Ngay_ct', 'So_ct', 'Ma_hh', 'Soluong')
+            ->where('Ma_ct', '=', 'XU')
+            ->where('Ma_hh', $ma_hh)
+            ->orderBy('Ngay_ct')
+            ->get();
+
+        return response()->json($details);
+    }
     // API lấy danh sách xuất vật tư
     public function getXuatVatTu(Request $request)
     {
         $so_dh = urldecode($request->query('so_dh'));
-        $data = DB::table('DataKetoan2025')
+
+        // 1️⃣ Lấy tổng số lượng đơn hàng (GO)
+        $soLuongDonHang = DB::table('DataKetoanData')
+            ->where('Ma_ct', 'GO')
+            ->where('So_ct', $so_dh)
+            ->sum('Soluong');
+
+        // 2️⃣ Lấy định mức NX theo mã NVL (Ma_hh)
+        $dinhMuc = DB::table('DataKetoanData')
+            ->where('Ma_ct', 'NX')
+            ->where('So_dh', $so_dh)
+            ->pluck('Soluong', 'Ma_hh');
+
+        // 3️⃣ Lấy danh sách xuất vật tư (CK)
+        $dsXuat = DB::table('DataKetoan2025')
             ->select('Ngay_ct', 'So_ct', 'Ma_ko', 'Ma3ko', 'Ma_hh', 'Soluong')
             ->where('Ma_ct', '=', 'CK')
-            ->where('So_dh', $so_dh)         // lọc theo số đơn hàng
+            ->where('So_dh', $so_dh)
             ->orderBy('Ngay_ct')
             ->get();
-        return response()->json($data);
+
+        // 4️⃣ Tính thêm "Nhu cầu" và "Tổng đã xuất"
+        $tongDaXuat = []; // cộng dồn
+        $vat_tu = [];
+
+        foreach ($dsXuat as $row) {
+            $maHH = $row->Ma_hh;
+
+            // Tính nhu cầu = định mức * số lượng đơn hàng
+            $nhuCau = ($dinhMuc[$maHH] ?? 0) * $soLuongDonHang;
+
+            // Cộng dồn tổng đã xuất
+            if (!isset($tongDaXuat[$maHH])) {
+                $tongDaXuat[$maHH] = 0;
+            }
+            $tongDaXuat[$maHH] += $row->Soluong;
+
+            // Thêm vào danh sách kết quả
+            $vat_tu[] = [
+                'Ngay_ct'      => $row->Ngay_ct,
+                'So_ct'        => $row->So_ct,
+                'Ma_ko'        => $row->Ma_ko,
+                'Ma3ko'        => $row->Ma3ko,
+                'Ma_hh'        => $maHH,
+                'Soluong'      => $row->Soluong,
+                'Nhu_cau'      => $nhuCau,
+                'Tong_da_xuat' => $tongDaXuat[$maHH],
+            ];
+        }
+
+        return response()->json($vat_tu);
     }
 }
