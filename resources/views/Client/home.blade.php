@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Dashboard Đơn Sản Xuất</title>
+    <title>THEO DÕI LỆNH SẢN XUẤT TAGTIME</title>
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -43,8 +43,8 @@
 </head>
 
 <body>
-    <div class="container mt-4">
-        <h3 class="mb-4">📋 Theo dõi đơn sản xuất - Realtime</h3>
+    <div class="container-fluid mt-4">
+        <h3 class="mb-4">📋 BẢNG THEO DÕI LỆNH SẢN XUẤT TAGTIME</h3>
 
         <!-- 🔍 Bộ lọc -->
         <div class="row mb-3">
@@ -140,7 +140,6 @@
             </div>
         </div>
     </div>
-
     <!-- Modal Chi tiết xuất vật tư (mới) -->
     <div class="modal fade" id="xuatModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -193,6 +192,58 @@
             </div>
         </div>
     </div>
+    <!-- Modal phân tích -->
+    <div class="modal fade" id="phanTichModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Chi tiết phân tích</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-bordered" id="phanTichDetailTable">
+                        <thead>
+                            <tr>
+                                <th>Ngày chứng từ</th>
+                                <th>Số chứng từ</th>
+                                <th>Mã hàng</th>
+                                <th>Tên Hàng</th>
+                                <th>Định mức</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Modal Vật tư thành phẩm kế toán -->
+    <div class="modal fade" id="vatTuKetoanModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Chi tiết Vật tư của lệnh kế toán</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-bordered" id="vatTuKeToanDetailTable">
+                        <thead>
+                            <tr>
+                                <th>Diễn giải</th>
+                                <th>Mã sản phẩm</th>
+                                <th>Mã vật tư</th>
+                                <th>Số lượng</th>
+                                <th>Tổng đơn hàng</th>
+                                <th>Định mức</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 
@@ -263,9 +314,7 @@
                         return [
                             index + 1,
                             row.So_hd,
-                            `<span class="copy-text" data-text="${row.So_ct}" style="cursor:pointer; color:blue;">
-                                ${row.So_ct}
-                            </span>`,
+                            `<span class="copy-text" data-text="${row.So_ct}" style="cursor:pointer; color:blue;">${row.So_ct}</span>`,
                             row.So_dh,
                             row.khach_hang?.Ten_kh ?? '',
                             row.Soseri,
@@ -279,25 +328,16 @@
                             row.hang_hoa?.Dvt ?? '',
                             new Date(row.Ngay_ct).toLocaleDateString(),
                             new Date(row.Date).toLocaleDateString(),
-                            nx.includes(row.So_ct) ? '✅' : '❌',
+                            `<button class="btn btn-link p-0 show-phantich" data-so-dh="${row.So_ct}">${nx.includes(row.So_ct) ? '✅' : '❌'} </button>`,
                             xv.includes(row.So_ct) ? '✅' : '❌',
-                            `<button class="btn btn-link p-0 text-primary show-nhap" 
-                                    data-key="${row.So_ct}|${row.Ma_hh}">
-                                ${nhap}
-                             </button>`,
-                            // Thêm cột Xuất VT (nút mở modal)
-                            `<button class="btn btn-link p-0 text-danger show-xuat" 
-                                    data-so-dh="${row.So_ct}">
-                                Xem
-                             </button>`,
-                            Math.round(nhaptp),
+                            `<button class="btn btn-link p-0 text-primary show-nhap" data-key="${row.So_ct}|${row.Ma_hh}">${nhap}</button>`,
+                            `<button class="btn btn-link p-0 text-danger show-xuat" data-so-dh="${row.So_ct}">Xem</button>`,
+
+                            `<button class="btn btn-link p-0 text-success show-vattuketoan" data-ma-vv="${row.So_dh}">${Math.round(nhaptp)} </button>`,
                             datamahhketoan[row.So_dh] ?
                             `<span class="text-success">✅ ${datamahhketoan[row.So_dh].join(", ")}</span>` :
                             '<span class="text-danger">❌ Chưa có</span>',
-                            `<button class="btn btn-link p-0 text-success show-xuatketoan" 
-        data-ma-hh="${row.Ma_hh}">
-    ${tongton} 
- </button>`,
+                            `<button class="btn btn-link p-0 text-success show-xuatketoan" data-ma-hh="${row.Ma_hh}">${tongton} </button>`,
                             statusLabel
                         ];
                     });
@@ -410,6 +450,8 @@
                               <td>${d.So_ct}</td>
                               <td>${d.Ma_hh}</td>
                               <td>${Math.round(d.Soluong, 0)}</td>
+                              
+                            
                             </tr>
                           `);
                         });
@@ -418,7 +460,6 @@
                     new bootstrap.Modal(document.getElementById("nhapModal")).show();
                 });
         });
-
         // Xem chi tiết xuất vật tư (mới)
         $(document).on("click", ".show-xuat", function() {
             const so_dh = decodeURIComponent($(this).data("so-dh"));
@@ -432,7 +473,7 @@
                     tbody.empty();
 
                     if (vat_tu.length === 0) {
-                        tbody.append(`<tr><td colspan="6" class="text-center">Không có dữ liệu</td></tr>`);
+                        tbody.append(`<tr><td colspan="8" class="text-center">Không có dữ liệu</td></tr>`);
                     } else {
                         vat_tu.forEach(d => {
                             tbody.append(`
@@ -442,10 +483,10 @@
                               <td>${d.Ma_ko ?? ''}</td>
                               <td>${d.Ma3ko ?? ''}</td>
                               <td>${d.Ma_hh}</td>
-                              <td>${Math.round(d.Soluong, 0)}</td>
-                                <td>${Math.round(d.Nhu_cau, 0)}</td>
-                                <td>${Math.round(d.Tong_da_xuat, 0)}</td>
-                            
+                              <td>${Number(d.Soluong).toFixed(4)}</td>
+                                <td>${Number(d.Nhu_cau).toFixed(4)}</td>
+                                <td>${Number(d.Tong_da_xuat).toFixed(4)}</td>
+                                
 
                             </tr>
                           `);
@@ -474,13 +515,76 @@
                         <td>${new Date(d.Ngay_ct).toLocaleDateString()}</td>
                         <td>${d.So_ct}</td>
                         <td>${d.Ma_hh}</td>
-                        <td>${Math.round(d.Soluong)}</td>
+                        <td>${Number(d.Soluong).toFixed(4)}</td>
+                        
                       </tr>
                     `);
                         });
                     }
 
                     new bootstrap.Modal(document.getElementById("xuatKhoModal")).show();
+                });
+        });
+        // Xem chi tiết phân tích
+        $(document).on("click", ".show-phantich", function() {
+            const so_dh = decodeURIComponent($(this).data("so-dh"));
+
+            fetch(
+                    `http://192.168.1.89:8888/api/phan-tich?so_dh=${encodeURIComponent(so_dh)}`
+                )
+                .then(res => res.json())
+                .then(phantich => {
+                    const tbody = $("#phanTichDetailTable tbody");
+                    tbody.empty();
+
+                    if (phantich.length === 0) {
+                        tbody.append(`<tr><td colspan="5" class="text-center">Không có dữ liệu</td></tr>`);
+                    } else {
+                        phantich.forEach(d => {
+                            tbody.append(`
+                            <tr>
+                              <td>${new Date(d.Ngay_ct).toLocaleDateString()}</td>
+                              <td>${d.So_ct}</td>
+                              <td>${d.Ma_hh}</td>
+                              <td>${d.hang_hoa?.Ten_hh ?? ''}</td>
+                              <td>${Number(d.Soluong).toFixed(4)}</td> 
+
+                            </tr>
+                          `);
+                        });
+                    }
+
+                    new bootstrap.Modal(document.getElementById("phanTichModal")).show();
+                });
+        });
+        // Xem chi tiết vật tư thành phẩm kế toán
+        $(document).on("click", ".show-vattuketoan", function() {
+            const ma_vv = $(this).data("ma-vv");
+
+            fetch(`http://192.168.1.89:8888/api/vat-tu-thanh-pham-ketoan?ma_vv=${encodeURIComponent(ma_vv)}`)
+                .then(res => res.json())
+                .then(vattu => {
+                    const tbody = $("#vatTuKeToanDetailTable tbody");
+                    tbody.empty();
+
+                    if (vattu.length === 0) {
+                        tbody.append(`<tr><td colspan="6" class="text-center">Không có dữ liệu</td></tr>`);
+                    } else {
+                        vattu.forEach(d => {
+                            tbody.append(`
+                      <tr>
+                        <td>${d.DgiaiV}</td>
+                        <td>${d.Ma_sp}</td>
+                        <td>${d.Ma_hh}</td>
+                        <td>${Math.round(d.Soluong)}</td>
+                        <td>${Math.round(d.Noluong)}</td>
+                        <td>${Number(d.Soluong/d.Noluong).toFixed(4)}</td>
+                      </tr>
+                    `);
+                        });
+                    }
+
+                    new bootstrap.Modal(document.getElementById("vatTuKetoanModal")).show();
                 });
         });
     </script>

@@ -72,10 +72,10 @@ class ClientHomeController extends Controller
         $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
             ->where('Ma_ct', '=', 'NX')
-            ->whereBetween('Ngay_ct', ['2024-01-01', '2025-12-31'])
             ->distinct();
-        $nhaptpketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
-            ->mergeBindings($sub)
+
+        $nhaptpketoan = DB::query()
+            ->fromSub($sub, 'sub')
             ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
             ->groupBy('Ma_vv', 'Ma_sp')
             ->get()
@@ -160,6 +160,7 @@ class ClientHomeController extends Controller
 
         return response()->json($details);
     }
+    // API của DATA kế toán
     // API riêng lấy chi tiết xuất kho
     public function getXuatKhoKeToanDetail(Request $request)
     {
@@ -174,6 +175,37 @@ class ClientHomeController extends Controller
 
         return response()->json($details);
     }
+    // API lấy danh sách vật tư Nhập thành phẩm của kế toán để tìm nguyên liệu phân tích
+    public function getVatTuThanhPhamKeToan(Request $request)
+    {
+        $ma_vv = urldecode($request->query('ma_vv'));
+
+        $vattu = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+            ->select('Ma_vv', 'Ma_sp', 'Ma_hh', 'Soluong', 'DgiaiV', 'Noluong')
+            ->where('Ma_ct', '=', 'NX')
+            ->where('Ma_vv', $ma_vv)         // lọc theo số đơn hàng
+            ->orderBy('Ma_sp')
+            ->get();
+
+        return response()->json($vattu);
+    }
+
+    //API của DATA Sản xuất
+    // API lấy danh sách phân tích
+    public function getPhanTich(Request $request)
+    {
+        $so_dh = urldecode($request->query('so_dh'));
+
+        $phantich = DataKetoanData::with(['hangHoa'])
+            ->select('Ngay_ct', 'So_ct', 'Ma_hh', 'Soluong')
+            ->where('Ma_ct', '=', 'NX')
+            ->where('So_dh', $so_dh)         // lọc theo số đơn hàng
+            ->orderBy('Ngay_ct')
+            ->get();
+
+        return response()->json($phantich);
+    }
+
     // API lấy danh sách xuất vật tư
     public function getXuatVatTu(Request $request)
     {
@@ -198,6 +230,7 @@ class ClientHomeController extends Controller
             ->where('So_dh', $so_dh)
             ->orderBy('Ngay_ct')
             ->get();
+
 
         // 4️⃣ Tính thêm "Nhu cầu" và "Tổng đã xuất"
         $tongDaXuat = []; // cộng dồn

@@ -72,3 +72,7 @@ Route::get('/api/nhapkho-chi-tiet', [ClientHomeController::class, 'getNhapKhoDet
 Route::get('/api/xuatkhoketoan-chi-tiet', [ClientHomeController::class, 'getXuatKhoKeToanDetail']);
 //API lấy danh sách xuất vật tư của lệnh
 Route::get('/api/xuat-vat-tu', [ClientHomeController::class, 'getXuatVatTu']);
+//API lấy danh sách phân tích theo số đơn hàng
+Route::get('/api/phan-tich', [ClientHomeController::class, 'getPhanTich']);
+//API lấy danh sách vật tư thành phẩm của kế toán để tìm nguyên liệu phân tích
+Route::get('/api/vat-tu-thanh-pham-ketoan', [ClientHomeController::class, 'getVatTuThanhPhamKeToan']);
