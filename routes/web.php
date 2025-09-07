@@ -49,15 +49,7 @@ Route::get('/suggest-mahh', [DonHangController::class, 'suggestMaHH'])->name('ma
 //Route for NhapXuatKho
 
 Route::get('/kho', [PhieuNhapXuatKhoController::class, 'index'])->name('kho');
-//Tool đổi mã hh toàn bộ
-// Route for DanhMuc
-Route::get('/danhmuc', [DanhMucController::class, 'index'])->name('danhmuc');
-// Kiểm tra trước khi cập nhật
-Route::post('/check-update-mahh', [DanhMucController::class, 'checkUpdateMaHH'])->name('checkUpdateMaHH');
 
-// Cập nhật thực sự
-Route::post('/update-mahh', [DanhMucController::class, 'updateMaHH'])->name('updateMaHH');
-Route::get('/suggest-mahh', [DanhMucController::class, 'suggestMaHH'])->name('mahh.suggest');
 
 
 
@@ -76,3 +68,16 @@ Route::get('/api/xuat-vat-tu', [ClientHomeController::class, 'getXuatVatTu']);
 Route::get('/api/phan-tich', [ClientHomeController::class, 'getPhanTich']);
 //API lấy danh sách vật tư thành phẩm của kế toán để tìm nguyên liệu phân tích
 Route::get('/api/vat-tu-thanh-pham-ketoan', [ClientHomeController::class, 'getVatTuThanhPhamKeToan']);
+//Tool đổi mã hh toàn bộ//
+// Route for DanhMuc
+Route::get('/danhmuc', [DanhMucController::class, 'index'])->name('danhmuc');
+Route::get('/doinl', [DanhMucController::class, 'doinl'])->name('doinl');
+// Kiểm tra trước khi cập nhật
+Route::post('/check-update-mahh', [DanhMucController::class, 'checkUpdateMaHH'])->name('checkUpdateMaHH');
+
+// Cập nhật thực sự
+Route::post('/update-mahh', [DanhMucController::class, 'updateMaHH'])->name('updateMaHH');
+// update mã nguyên liệu
+Route::post('/update-manl', [DanhMucController::class, 'updateMaNL'])->name('updateMaNL');
+// 
+Route::get('/suggest-mahh', [DanhMucController::class, 'suggestMaHH'])->name('mahh.suggest');

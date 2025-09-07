@@ -67,6 +67,10 @@
                 </select>
             </div>
             <div class="col-md-3">
+                <label for="filterNgayRaLenh" class="form-label">Ngày ra lệnh</label>
+                <input type="month" class="form-control" id="filterNgayRaLenh">
+            </div>
+            <div class="col-md-3">
                 <label for="filterNgayGiao" class="form-label">Tháng giao</label>
                 <input type="month" class="form-control" id="filterNgayGiao">
             </div>
@@ -104,11 +108,12 @@
                     <th>Ngày giao</th>
                     <th>Phân tích</th>
                     <th>Chuẩn bị</th>
-                    <th>Nhập kho</th>
-                    <th>Xuất VT</th> <!-- Mới -->
+                    <th>Nhập kho (chị Nghiêm)</th>
+                    <th>Xuất kho (kế toán)</th>
+                    <th>Xuất VT</th>
                     <th>Nhập thành phẩm Kế toán</th>
                     <th>Mã kế toán</th>
-                    <th>Tồn</th>
+                    <th>Tồn kế toán</th>
                     <th>Tình trạng</th>
                 </tr>
             </thead>
@@ -258,7 +263,7 @@
         let dataTable;
 
         function fetchData() {
-            fetch("http://192.168.1.89:8888/api/production-orders")
+            fetch("http://192.168.1.13:8888/api/production-orders")
                 .then(res => res.json())
                 .then(response => {
                     const {
@@ -275,6 +280,7 @@
                         datamahhketoan,
                         tongnhapkhoketoan,
                         tongxuatkhoketoan,
+                        xuatkhotheomavvketoan,
                         xuatKho
                     } = response;
 
@@ -296,6 +302,9 @@
                         const nhap = Math.round(nhapKho[key]?.total_nhap ?? 0);
                         const nhaptp = Math.round(nhaptpketoan[keyketoan]?.total_nhaptpketoan ?? 0);
                         const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
+                        // Xuất kho kế toán theo Ma_vv và Ma_hh
+                        const xuatkhomavvkt = Math.round(xuatkhotheomavvketoan[keyketoan]
+                            ?.xuatkhotheomavv_ketoan ?? 0);
                         const tongnhap = Math.round(tongnhapkhoketoan[row.Ma_hh]?.totalnhapkho_ketoan ?? 0);
                         const tongxuat = Math.round(tongxuatkhoketoan[row.Ma_hh]?.totalxuatkho_ketoan ?? 0);
                         const tongton = Math.round(tongnhap - tongxuat);
@@ -326,11 +335,12 @@
                             sum,
                             `<span class="text-primary">${label}</span>`,
                             row.hang_hoa?.Dvt ?? '',
-                            new Date(row.Ngay_ct).toLocaleDateString(),
-                            new Date(row.Date).toLocaleDateString(),
+                            new Date(row.Ngay_ct).toLocaleDateString("vi-VN"),
+                            new Date(row.Date).toLocaleDateString("vi-VN"),
                             `<button class="btn btn-link p-0 show-phantich" data-so-dh="${row.So_ct}">${nx.includes(row.So_ct) ? '✅' : '❌'} </button>`,
                             xv.includes(row.So_ct) ? '✅' : '❌',
                             `<button class="btn btn-link p-0 text-primary show-nhap" data-key="${row.So_ct}|${row.Ma_hh}">${nhap}</button>`,
+                            xuatkhomavvkt,
                             `<button class="btn btn-link p-0 text-danger show-xuat" data-so-dh="${row.So_ct}">Xem</button>`,
 
                             `<button class="btn btn-link p-0 text-success show-vattuketoan" data-ma-vv="${row.So_dh}">${Math.round(nhaptp)} </button>`,
@@ -345,7 +355,7 @@
                     if (!dataTable) {
                         dataTable = $('#productionTable').DataTable({
                             data: rows,
-                            columns: Array(24).fill().map((_, i) => ({
+                            columns: Array(25).fill().map((_, i) => ({
                                 title: $('thead th').eq(i).text()
                             })),
                             pageLength: 25,
@@ -358,13 +368,13 @@
                                 text: '📤 Xuất Excel',
                                 className: 'btn btn-success',
                                 exportOptions: {
-                                    columns: ':visible'
+                                    columns: [3, 5, 10, 11, 18, 19, 20]
                                 },
                                 title: 'Bang_Lenh_San_Xuat',
                             }]
                         });
 
-                        $('#filterKhachHang, #filterMaHH, #filterTinhTrang, #filterNgayGiao,#filterLenhSanXuat, #filterMaKinhDoanh')
+                        $('#filterKhachHang, #filterMaHH, #filterTinhTrang, #filterNgayRaLenh,#filterLenhSanXuat, #filterMaKinhDoanh')
                             .on(
                                 'input change',
                                 function() {
@@ -377,6 +387,7 @@
                             $('#filterNgayGiao').val('');
                             $('#filterLenhSanXuat').val('');
                             $('#filterMaKinhDoanh').val('');
+                            $('#filterNgayRaLenh').val('');
                             dataTable.draw();
                         });
 
@@ -384,15 +395,18 @@
                             const khachHang = $('#filterKhachHang').val().toLowerCase();
                             const maHH = $('#filterMaHH').val().toLowerCase();
                             const tinhTrang = $('#filterTinhTrang').val();
+
                             const ngayGiao = $('#filterNgayGiao').val();
+                            const ngayRaLenh = $('#filterNgayRaLenh').val();
                             const lenhSanXuat = $('#filterLenhSanXuat').val();
                             const maKinhDoanh = $('#filterMaKinhDoanh').val().toLowerCase();
 
                             // CẬP NHẬT CHỈ SỐ CỘT (phù hợp với cấu trúc bảng hiện tại)
                             const khachHangCol = (data[4] || '').toLowerCase();
                             const maHHCol = (data[6] || '').toLowerCase();
-                            const tinhTrangCol = $('<div>').html(data[23] || '').text();
+                            const tinhTrangCol = $('<div>').html(data[24] || '').text();
                             const ngayGiaoCol = data[15] || '';
+                            const ngayRaLenhCol = data[14] || '';
                             const lenhSanXuatCol = data[3] || '';
                             const maKinhDoanhCol = (data[5] || '').toLowerCase();
 
@@ -408,6 +422,12 @@
                                 const tableMonth = `${year}-${month.padStart(2, '0')}`;
                                 if (!tableMonth.startsWith(ngayGiao)) return false;
                             }
+                            if (ngayRaLenh) {
+                                const [day, month, year] = ngayRaLenhCol.split('/');
+                                const tableMonth = `${year}-${month.padStart(2, '0')}`;
+                                if (!tableMonth.startsWith(ngayRaLenh)) return false;
+                            }
+
 
                             return true;
                         });
@@ -432,7 +452,7 @@
             const [so_dh, ma_hh] = key.split("|");
 
             fetch(
-                    `http://192.168.1.89:8888/api/nhapkho-chi-tiet?so_dh=${encodeURIComponent(so_dh)}&ma_hh=${encodeURIComponent(ma_hh)}`
+                    `http://192.168.1.13:8888/api/nhapkho-chi-tiet?so_dh=${encodeURIComponent(so_dh)}&ma_hh=${encodeURIComponent(ma_hh)}`
                 )
                 .then(res => res.json())
                 .then(details => {
@@ -446,7 +466,7 @@
                             tbody.append(`
                             <tr>
                               
-                              <td>${new Date(d.Ngay_ct).toLocaleDateString()}</td>
+                              <td>${new Date(d.Ngay_ct).toLocaleDateString("vi-VN")}</td>
                               <td>${d.So_ct}</td>
                               <td>${d.Ma_hh}</td>
                               <td>${Math.round(d.Soluong, 0)}</td>
@@ -465,7 +485,7 @@
             const so_dh = decodeURIComponent($(this).data("so-dh"));
 
             fetch(
-                    `http://192.168.1.89:8888/api/xuat-vat-tu?so_dh=${encodeURIComponent(so_dh)}`
+                    `http://192.168.1.13:8888/api/xuat-vat-tu?so_dh=${encodeURIComponent(so_dh)}`
                 )
                 .then(res => res.json())
                 .then(vat_tu => {
@@ -478,7 +498,7 @@
                         vat_tu.forEach(d => {
                             tbody.append(`
                             <tr>
-                              <td>${new Date(d.Ngay_ct).toLocaleDateString()}</td>
+                              <td>${new Date(d.Ngay_ct).toLocaleDateString("vi-VN")}</td>
                               <td>${d.So_ct}</td>
                               <td>${d.Ma_ko ?? ''}</td>
                               <td>${d.Ma3ko ?? ''}</td>
@@ -500,7 +520,7 @@
         $(document).on("click", ".show-xuatketoan", function() {
             const ma_hh = $(this).data("ma-hh");
 
-            fetch(`http://192.168.1.89:8888/api/xuatkhoketoan-chi-tiet?ma_hh=${encodeURIComponent(ma_hh)}`)
+            fetch(`http://192.168.1.13:8888/api/xuatkhoketoan-chi-tiet?ma_hh=${encodeURIComponent(ma_hh)}`)
                 .then(res => res.json())
                 .then(details => {
                     const tbody = $("#xuatKhoDetailTable tbody");
@@ -512,7 +532,7 @@
                         details.forEach(d => {
                             tbody.append(`
                       <tr>
-                        <td>${new Date(d.Ngay_ct).toLocaleDateString()}</td>
+                        <td>${new Date(d.Ngay_ct).toLocaleDateString("vi-VN")}</td>
                         <td>${d.So_ct}</td>
                         <td>${d.Ma_hh}</td>
                         <td>${Number(d.Soluong).toFixed(4)}</td>
@@ -530,7 +550,7 @@
             const so_dh = decodeURIComponent($(this).data("so-dh"));
 
             fetch(
-                    `http://192.168.1.89:8888/api/phan-tich?so_dh=${encodeURIComponent(so_dh)}`
+                    `http://192.168.1.13:8888/api/phan-tich?so_dh=${encodeURIComponent(so_dh)}`
                 )
                 .then(res => res.json())
                 .then(phantich => {
@@ -543,7 +563,7 @@
                         phantich.forEach(d => {
                             tbody.append(`
                             <tr>
-                              <td>${new Date(d.Ngay_ct).toLocaleDateString()}</td>
+                              <td>${new Date(d.Ngay_ct).toLocaleDateString("vi-VN")}</td>
                               <td>${d.So_ct}</td>
                               <td>${d.Ma_hh}</td>
                               <td>${d.hang_hoa?.Ten_hh ?? ''}</td>
@@ -561,7 +581,7 @@
         $(document).on("click", ".show-vattuketoan", function() {
             const ma_vv = $(this).data("ma-vv");
 
-            fetch(`http://192.168.1.89:8888/api/vat-tu-thanh-pham-ketoan?ma_vv=${encodeURIComponent(ma_vv)}`)
+            fetch(`http://192.168.1.13:8888/api/vat-tu-thanh-pham-ketoan?ma_vv=${encodeURIComponent(ma_vv)}`)
                 .then(res => res.json())
                 .then(vattu => {
                     const tbody = $("#vatTuKeToanDetailTable tbody");

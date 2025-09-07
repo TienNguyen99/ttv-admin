@@ -93,6 +93,13 @@ class ClientHomeController extends Controller
             ->groupBy('Ma_hh')
             ->get()
             ->keyBy('Ma_hh');
+        // Tổng xuất kho của kế toán theo Ma_vv
+        $xuatkhotheomavvketoan = DB::table('DataKetoan2025')
+            ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))
+            ->where('Ma_ct', '=', 'XV')
+            ->groupBy('Ma_vv', 'Ma_hh')
+            ->get()
+            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
         // Chi tiết xuất kho API
 
 
@@ -142,6 +149,7 @@ class ClientHomeController extends Controller
             'datamahhketoan' => $datamahhketoan,
             'tongnhapkhoketoan' => $tongnhapkhoketoan,
             'tongxuatkhoketoan' => $tongxuatkhoketoan,
+            'xuatkhotheomavvketoan' => $xuatkhotheomavvketoan,
             'xuatKho' => $xuatKho
         ]);
     }
