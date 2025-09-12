@@ -310,7 +310,10 @@
                         const tongton = Math.round(tongnhap - tongxuat);
 
                         let statusLabel = '';
-                        if (xuat >= sum && sum > 0 || (row.Noibo && row.Noibo.includes("R"))) {
+                        //if (xuat >= sum && sum > 0 || (row.Noibo && row.Noibo.includes("R"))) {
+                        //    statusLabel = '<span class="text-success">✔️ Hoàn thành</span>';
+                        //}
+                        if (xuatkhomavvkt >= sum || (row.Noibo && row.Noibo.includes("R"))) {
                             statusLabel = '<span class="text-success">✔️ Hoàn thành</span>';
                         } else if (nhap >= sum && xuat === 0) {
                             statusLabel = '<span class="text-primary">📦 Chưa xuất kho</span>';
