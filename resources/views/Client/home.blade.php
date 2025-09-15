@@ -62,6 +62,7 @@
                     <option value="">Tất cả</option>
                     <option value="✔️ Hoàn thành">✔️ Hoàn thành</option>
                     <option value="📦 Chưa xuất kho">📦 Chưa xuất kho</option>
+                    <option value="📦 Xuất kho chưa đủ đơn hàng">📦 Xuất kho chưa đủ đơn hàng</option>
                     <option value="⛔ Chưa nhập kho">⛔ Chưa nhập kho</option>
                     <option value="📦 Chưa đủ số lượng">📦 Chưa đủ số lượng</option>
                 </select>
@@ -81,6 +82,11 @@
             <div class="col-md-3">
                 <label for="filterMaKinhDoanh" class="form-label">Mã kinh doanh</label>
                 <input type="text" class="form-control" id="filterMaKinhDoanh" placeholder="Nhập mã kinh doanh">
+            </div>
+            <div class="col-md-3">
+                <label for="filterexcludeMaLenh" class="form-label">Loại trừ (ẩn)</label>
+                <input type="text" class="form-control" id="filterexcludeMaLenh"
+                    placeholder="Nhập từ khóa cần loại bỏ">
             </div>
             <div class="col-md-12 mt-2 text-end">
                 <button class="btn btn-secondary" id="clearFilters">🧹 Xóa bộ lọc</button>
@@ -287,6 +293,7 @@
                     const rows = data.map((row, index) => {
                         const key = `${row.So_ct}|${row.Ma_hh}`;
                         const keyketoan = `${row.So_dh}|${row.Ma_hh}`;
+                        const keyketoan2 = `${row.So_dh}|${row.hang_hoa?.Ma_so}`;
                         const cdSteps = [cd1, cd2, cd3, cd4];
                         let step = 0,
                             label = 'Chưa bắt đầu';
@@ -303,7 +310,7 @@
                         const nhaptp = Math.round(nhaptpketoan[keyketoan]?.total_nhaptpketoan ?? 0);
                         const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
                         // Xuất kho kế toán theo Ma_vv và Ma_hh
-                        const xuatkhomavvkt = Math.round(xuatkhotheomavvketoan[keyketoan]
+                        const xuatkhomavvkt = Math.round(xuatkhotheomavvketoan[keyketoan2]
                             ?.xuatkhotheomavv_ketoan ?? 0);
                         const tongnhap = Math.round(tongnhapkhoketoan[row.Ma_hh]?.totalnhapkho_ketoan ?? 0);
                         const tongxuat = Math.round(tongxuatkhoketoan[row.Ma_hh]?.totalxuatkho_ketoan ?? 0);
@@ -315,6 +322,8 @@
                         //}
                         if (xuatkhomavvkt >= sum || (row.Noibo && row.Noibo.includes("R"))) {
                             statusLabel = '<span class="text-success">✔️ Hoàn thành</span>';
+                        } else if (xuatkhomavvkt < sum && xuatkhomavvkt > 0) {
+                            statusLabel = '<span class="text-danger">📦 Xuất kho chưa đủ đơn hàng</span>';
                         } else if (nhap >= sum && xuat === 0) {
                             statusLabel = '<span class="text-primary">📦 Chưa xuất kho</span>';
                         } else if (nhap === 0) {
@@ -371,13 +380,13 @@
                                 text: '📤 Xuất Excel',
                                 className: 'btn btn-success',
                                 exportOptions: {
-                                    columns: [3, 5, 10, 11, 18, 19, 20]
+                                    columns: [3, 4, 5, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23, 24]
                                 },
                                 title: 'Bang_Lenh_San_Xuat',
                             }]
                         });
 
-                        $('#filterKhachHang, #filterMaHH, #filterTinhTrang, #filterNgayRaLenh,#filterLenhSanXuat, #filterMaKinhDoanh')
+                        $('#filterKhachHang, #filterMaHH, #filterTinhTrang, #filterNgayRaLenh,#filterLenhSanXuat, #filterMaKinhDoanh, #filterNgayGiao, #filterexcludeMaLenh')
                             .on(
                                 'input change',
                                 function() {
@@ -391,6 +400,8 @@
                             $('#filterLenhSanXuat').val('');
                             $('#filterMaKinhDoanh').val('');
                             $('#filterNgayRaLenh').val('');
+                            $('#filterexcludeMaLenh').val('');
+
                             dataTable.draw();
                         });
 
@@ -403,6 +414,7 @@
                             const ngayRaLenh = $('#filterNgayRaLenh').val();
                             const lenhSanXuat = $('#filterLenhSanXuat').val();
                             const maKinhDoanh = $('#filterMaKinhDoanh').val().toLowerCase();
+                            const excludeText = $('#filterexcludeMaLenh').val().toLowerCase();
 
                             // CẬP NHẬT CHỈ SỐ CỘT (phù hợp với cấu trúc bảng hiện tại)
                             const khachHangCol = (data[4] || '').toLowerCase();
@@ -412,7 +424,20 @@
                             const ngayRaLenhCol = data[14] || '';
                             const lenhSanXuatCol = data[3] || '';
                             const maKinhDoanhCol = (data[5] || '').toLowerCase();
+                            const excludeCol = (data[2] || '').toLowerCase();
 
+                            //Ẩn mã lệnh
+                            if (excludeText && excludeCol.includes(excludeText)) return false;
+
+                            // if (excludeText) {
+                            //     // Ghép toàn bộ row thành 1 string để check
+                            //     const rowText = data.join(' ').toLowerCase();
+
+                            //     // Nếu row chứa từ khóa -> loại bỏ
+                            //     if (rowText.includes(excludeText)) {
+                            //         return false;
+                            //     }
+                            // }
 
                             if (khachHang && !khachHangCol.includes(khachHang)) return false;
                             if (maHH && !maHHCol.includes(maHH)) return false;
@@ -434,6 +459,7 @@
 
                             return true;
                         });
+
 
                     } else {
                         dataTable.clear();

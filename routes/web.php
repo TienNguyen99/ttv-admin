@@ -10,6 +10,8 @@ use App\Http\Controllers\PhieuNhapXuatKhoController;
 use App\Http\Controllers\PhieuXuatKhoController;
 use App\Http\Controllers\SanXuatController;
 use App\Http\Controllers\UnipaxController;
+use App\Http\Controllers\KeToanController;
+use App\Http\Controllers\TiviController;
 
 
 /*
@@ -56,6 +58,10 @@ Route::get('/kho', [PhieuNhapXuatKhoController::class, 'index'])->name('kho');
 
 
 // Client Route //
+// Routeu for Hiển thị Tivi trên Client
+Route::get('/client/tivi', [TiviController::class, 'tiviIndex']);
+Route::get('/api/tivi', [TiviController::class, 'getTiviData']);
+
 // Route for Home
 Route::get('/client/home', [ClientHomeController::class, 'index']);
 Route::get('/api/production-orders', [ClientHomeController::class, 'getData']);
@@ -81,3 +87,13 @@ Route::post('/update-mahh', [DanhMucController::class, 'updateMaHH'])->name('upd
 Route::post('/update-manl', [DanhMucController::class, 'updateMaNL'])->name('updateMaNL');
 // 
 Route::get('/suggest-mahh', [DanhMucController::class, 'suggestMaHH'])->name('mahh.suggest');
+
+
+
+
+
+
+// DATABASE KE TOAN
+Route::get('/client/ketoan', [App\Http\Controllers\KeToanController::class, 'index']);
+// API DATABASE KETOAN  
+Route::get('/api/ketoan-today', [App\Http\Controllers\KeToanController::class, 'getDataToday']);

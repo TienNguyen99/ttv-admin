@@ -72,6 +72,7 @@ class ClientHomeController extends Controller
         $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
             ->where('Ma_ct', '=', 'NX')
+            ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
             ->distinct();
 
         $nhaptpketoan = DB::query()
@@ -90,16 +91,26 @@ class ClientHomeController extends Controller
         $tongxuatkhoketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->select('Ma_hh', DB::raw('SUM(Soluong) as totalxuatkho_ketoan'))
             ->where('Ma_ct', '=', 'XU')
+            ->where('Ma_ko', '=', 'KTPHAM') // kHO THÀNH PHẨM
             ->groupBy('Ma_hh')
             ->get()
             ->keyBy('Ma_hh');
         // Tổng xuất kho của kế toán theo Ma_vv
-        $xuatkhotheomavvketoan = DB::table('DataKetoan2025')
-            ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))
-            ->where('Ma_ct', '=', 'XU')
-            ->groupBy('Ma_vv', 'Ma_hh')
+        // $xuatkhotheomavvketoan = DB::table('DataKetoan2025')
+        //     ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))
+        //     ->where('Ma_ct', '=', 'XU')
+        //     ->groupBy('Ma_vv', 'Ma_hh')
+        //     ->get()
+        //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
+        //
+        $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
+            ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
+            ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
+            ->where('dk.Ma_ct', '=', 'XU')
+            ->groupBy('dk.Ma_vv', 'hh.Ma_so')
             ->get()
-            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
+            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_so);
+
         // Chi tiết xuất kho API
 
 
@@ -271,4 +282,5 @@ class ClientHomeController extends Controller
 
         return response()->json($vat_tu);
     }
+
 }
