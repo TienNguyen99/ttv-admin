@@ -30,6 +30,26 @@
             <input type="text" id="filter-kh" class="form-control" placeholder="Nhập tên khách hàng cần tìm...">
         </div>
 
+        <!-- Filter Tháng -->
+        <div class="mb-3">
+            <label for="filter-month" class="form-label">Chọn Tháng:</label>
+            <select id="filter-month" class="form-select">
+                <option value="">-- Tất cả --</option>
+                <option value="1">Tháng 1</option>
+                <option value="2">Tháng 2</option>
+                <option value="3">Tháng 3</option>
+                <option value="4">Tháng 4</option>
+                <option value="5">Tháng 5</option>
+                <option value="6">Tháng 6</option>
+                <option value="7">Tháng 7</option>
+                <option value="8">Tháng 8</option>
+                <option value="9" selected>Tháng 9</option>
+                <option value="10">Tháng 10</option>
+                <option value="11">Tháng 11</option>
+                <option value="12">Tháng 12</option>
+            </select>
+        </div>
+
         <table id="ketoan-table" class="table table-bordered table-striped">
             <thead class="table-light">
                 <tr>
@@ -54,6 +74,12 @@
                     <td colspan="6">Đang tải...</td>
                 </tr>
             </tbody>
+            <tfoot>
+                <tr>
+                    <th colspan="13" class="text-end">Tổng Thành tiền:</th>
+                    <th id="total-thanh-tien">0</th>
+                </tr>
+            </tfoot>
         </table>
     </div>
 
@@ -97,7 +123,6 @@
                                 <td>${row.Ma_hh ?? ''}</td>
                                 <td>${row.Ten_hh ?? ''}</td>
                                 <td>${Math.round(row.Soluong ?? 0)}</td>
-                                
                                 <td>${row.Dvt ?? ''}</td>
                                 <td>${row.DgiaiV ?? ''}</td>  
                                 <td>${row.DgiaiE ?? ''}</td>
@@ -125,32 +150,43 @@
                             }],
                             rowGroup: {
                                 dataSrc: 1 // group theo Ngay_ct
+                            },
+                            footerCallback: function(row, data, start, end, display) {
+                                let api = this.api();
+                                let selectedMonth = parseInt($('#filter-month').val());
+                                let total = 0;
+
+                                api.rows({ search: 'applied' }).every(function() {
+                                    let rowData = this.data();
+                                    let ngay = rowData[1]; // dd/mm/yyyy
+                                    let tien = parseFloat(rowData[13]) || 0;
+
+                                    let parts = ngay.split('/');
+                                    let thang = parseInt(parts[1]);
+
+                                    if (!selectedMonth || thang === selectedMonth) {
+                                        total += tien;
+                                    }
+                                });
+
+                                document.getElementById('total-thanh-tien').innerText =
+                                    total.toLocaleString('vi-VN');
                             }
                         });
 
-                        // Filter theo So_hd
-                        $('#filter-sohd, #filter-kh').on('keyup change', function() {
+                        // Filter theo So_hd + Khách hàng + Tháng
+                        $('#filter-sohd, #filter-kh, #filter-month').on('keyup change', function() {
                             dataTable.column(3).search($('#filter-sohd').val());
                             dataTable.column(2).search($('#filter-kh').val()).draw();
                         });
 
                     } else {
-                        // Lưu trạng thái hiện tại
-                        let currentPage = dataTable.page();
-                        let currentSearch = dataTable.search();
-                        let currentOrder = dataTable.order();
-
                         // Cập nhật lại dữ liệu
                         dataTable.clear();
                         $("#ketoan-table tbody tr").each(function() {
                             dataTable.row.add($(this));
                         });
                         dataTable.draw(false);
-
-                        // Restore lại trạng thái
-                        dataTable.page(currentPage).draw(false);
-                        dataTable.search(currentSearch).draw(false);
-                        dataTable.order(currentOrder).draw(false);
                     }
                 })
                 .catch(error => console.error("Lỗi load dữ liệu:", error));

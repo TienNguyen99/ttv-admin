@@ -265,11 +265,6 @@
                         <tbody></tbody>
                     </table>
                 </div>
-                <!-- Danh sách mã vật tư cần copy -->
-                <div class="modal-footer flex-column align-items-start">
-                    <label><strong>📋 Danh sách mã vật tư cần copy:</strong></label>
-                    <textarea id="uniqueMaVTList" class="form-control" rows="5" readonly></textarea>
-                </div>
             </div>
         </div>
     </div>
@@ -292,7 +287,7 @@
                 .then(res => res.json())
                 .then(response => {
                     const {
-                        data,
+                        dataunipax,
                         sumSoLuong,
                         cd1,
                         cd2,
@@ -323,7 +318,7 @@
                     } else {
                         tbodyLast.innerHTML = `<tr><td colspan="4" class="text-center">Không có dữ liệu</td></tr>`;
                     }
-                    const rows = data.map((row, index) => {
+                    const rows = dataunipax.map((row, index) => {
                         const key = `${row.So_ct}|${row.Ma_hh}`;
                         const keyketoan = `${row.So_dh}|${row.Ma_hh}`;
                         const keyketoan2 = `${row.So_dh}|${row.hang_hoa?.Ma_so}`;
@@ -651,27 +646,19 @@
 
                     if (vattu.length === 0) {
                         tbody.append(`<tr><td colspan="6" class="text-center">Không có dữ liệu</td></tr>`);
-                        $("#uniqueMaVTList").val(""); // clear textarea khi không có dữ liệu
                     } else {
-                        let listMaVT = [];
-
                         vattu.forEach(d => {
                             tbody.append(`
-                        <tr>
-                            <td>${d.DgiaiV}</td>
-                            <td>${d.Ma_sp}</td>
-                            <td>${d.Ma_hh}</td>
-                            <td>${Math.round(d.Soluong)}</td>
-                            <td>${Math.round(d.Noluong)}</td>
-                            <td>${Number(d.Soluong / d.Noluong).toFixed(4)}</td>
-                        </tr>
+                      <tr>
+                        <td>${d.DgiaiV}</td>
+                        <td>${d.Ma_sp}</td>
+                        <td>${d.Ma_hh}</td>
+                        <td>${Math.round(d.Soluong)}</td>
+                        <td>${Math.round(d.Noluong)}</td>
+                        <td>${Number(d.Soluong/d.Noluong).toFixed(4)}</td>
+                      </tr>
                     `);
-                            listMaVT.push(d.Ma_hh); // thu thập mã vật tư
                         });
-
-                        // lọc unique
-                        let unique = [...new Set(listMaVT)];
-                        $("#uniqueMaVTList").val(unique.join("\n"));
                     }
 
                     new bootstrap.Modal(document.getElementById("vatTuKetoanModal")).show();

@@ -12,15 +12,24 @@ class ClientHomeController extends Controller
     {
         return view('client.home');
     }
+    public function indexUnipax()
+    {
+        return view('client.unipax');
+    }
 
     public function getData()
     {
         $data = DataKetoanData::with(['khachHang', 'hangHoa'])
             ->where('Ma_ct', '=', 'GO')
             ->orderby('Ngay_ct', 'asc')
-
-
             ->get();
+        // Chỉ show data Ma_ct = GO và Ma_kh = 'KHTN001024'
+        $dataunipax = DataKetoanData::with(['khachHang', 'hangHoa'])
+            ->where('Ma_ct', '=', 'GO')
+            ->where('Ma_kh', '=', 'KHTN001024')
+            ->orderby('Ngay_ct', 'asc')
+            ->get();
+
 
         $sumSoLuong = DB::table('DataKetoanData')
             ->select('So_ct', DB::raw('SUM(Soluong) as total'))
@@ -136,6 +145,13 @@ class ClientHomeController extends Controller
         foreach ($rawData as $item) {
             $datamahhketoan[$item->Ma_vv][] = $item->Ma_sp;
         }
+        // Mã hh thay đổi gần nhất
+        $lastChange = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+            ->select('Ma_vv', 'Ma_sp', 'UserNg0') // giả sử có cột updated_at
+            ->where('Ma_ct', '=', 'NX')
+            ->orderBy('UserNg0', 'desc')
+            ->take(10)
+            ->get();
 
         // XUAT KHO DATA KETOAN
         $xuatKho = DB::table('TSoft_NhanTG_kt_test.dbo.DataKetoan2024')
@@ -161,7 +177,9 @@ class ClientHomeController extends Controller
             'tongnhapkhoketoan' => $tongnhapkhoketoan,
             'tongxuatkhoketoan' => $tongxuatkhoketoan,
             'xuatkhotheomavvketoan' => $xuatkhotheomavvketoan,
-            'xuatKho' => $xuatKho
+            'xuatKho' => $xuatKho,
+            'lastChange' => $lastChange,
+            'dataunipax' => $dataunipax,
         ]);
     }
     // API riêng lấy chi tiết nhập kho
@@ -282,5 +300,4 @@ class ClientHomeController extends Controller
 
         return response()->json($vat_tu);
     }
-
 }
