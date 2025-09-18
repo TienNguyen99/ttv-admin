@@ -104,14 +104,8 @@ class ClientHomeController extends Controller
             ->groupBy('Ma_hh')
             ->get()
             ->keyBy('Ma_hh');
-        // Tổng xuất kho của kế toán theo Ma_vv
-        // $xuatkhotheomavvketoan = DB::table('DataKetoan2025')
-        //     ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))
-        //     ->where('Ma_ct', '=', 'XU')
-        //     ->groupBy('Ma_vv', 'Ma_hh')
-        //     ->get()
-        //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
-        //
+
+        // $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025 as dk')
         $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
             ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
             ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
@@ -119,7 +113,14 @@ class ClientHomeController extends Controller
             ->groupBy('dk.Ma_vv', 'hh.Ma_so')
             ->get()
             ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_so);
-
+            //Dùng cái này khi đổi database Kế toán
+            //         $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025 as dk')
+            // ->join('TSoft_NhanTG_kt_new.dbo.CodeHanghoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
+            // ->select('dk.Ma_vv', 'hh.Ma_hh', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
+            // ->where('dk.Ma_ct', '=', 'XU')
+            // ->groupBy('dk.Ma_vv', 'hh.Ma_hh')
+            // ->get()
+            // ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
         // Chi tiết xuất kho API
 
 

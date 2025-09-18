@@ -156,7 +156,9 @@
                                 let selectedMonth = parseInt($('#filter-month').val());
                                 let total = 0;
 
-                                api.rows({ search: 'applied' }).every(function() {
+                                api.rows({
+                                    search: 'applied'
+                                }).every(function() {
                                     let rowData = this.data();
                                     let ngay = rowData[1]; // dd/mm/yyyy
                                     let tien = parseFloat(rowData[13]) || 0;
@@ -176,9 +178,12 @@
 
                         // Filter theo So_hd + Khách hàng + Tháng
                         $('#filter-sohd, #filter-kh, #filter-month').on('keyup change', function() {
-                            dataTable.column(3).search($('#filter-sohd').val());
-                            dataTable.column(2).search($('#filter-kh').val()).draw();
+                            dataTable
+                                .column(3).search($('#filter-sohd').val())
+                                .column(2).search($('#filter-kh').val())
+                                .draw(); // buộc redraw để footerCallback chạy lại
                         });
+
 
                     } else {
                         // Cập nhật lại dữ liệu

@@ -267,7 +267,7 @@
                 </div>
                 <!-- Danh sách mã vật tư cần copy -->
                 <div class="modal-footer flex-column align-items-start">
-                    <label><strong>📋 Danh sách mã vật tư cần copy:</strong></label>
+                    <label><strong>Danh sách mã vật tư cần copy:</strong></label>
                     <textarea id="uniqueMaVTList" class="form-control" rows="5" readonly></textarea>
                 </div>
             </div>
@@ -338,17 +338,24 @@
                             }
                         }
                         const sum = Math.round(sumSoLuong[row.So_ct] ?? 0);
-
                         const nhap = Math.round(nhapKho[key]?.total_nhap ?? 0);
                         const nhaptp = Math.round(nhaptpketoan[keyketoan]?.total_nhaptpketoan ?? 0);
                         const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
                         // Xuất kho kế toán theo Ma_vv và Ma_hh
                         const xuatkhomavvkt = Math.round(xuatkhotheomavvketoan[keyketoan2]
                             ?.xuatkhotheomavv_ketoan ?? 0);
+
                         const tongnhap = Math.round(tongnhapkhoketoan[row.Ma_hh]?.totalnhapkho_ketoan ?? 0);
                         const tongxuat = Math.round(tongxuatkhoketoan[row.Ma_hh]?.totalxuatkho_ketoan ?? 0);
                         const tongton = Math.round(tongnhap - tongxuat);
-
+                        // Kiểm tra Ma_hh có giống datamahhketoan không
+                        const maHh = row.Ma_hh;
+                        const dsMaHHKeToan = datamahhketoan[row.So_dh] || [];
+                        const isMismatch = !dsMaHHKeToan.includes(maHh);
+                        const maHhCell = isMismatch ?
+                            `<span style="color:red; font-weight:bold;">${maHh}</span>` :
+                            maHh; // Mã hàng hóa
+                        // Xác định tình trạng
                         let statusLabel = '';
                         //if (xuat >= sum && sum > 0 || (row.Noibo && row.Noibo.includes("R"))) {
                         //    statusLabel = '<span class="text-success">✔️ Hoàn thành</span>';
@@ -372,7 +379,7 @@
                             row.So_dh,
                             row.khach_hang?.Ten_kh ?? '',
                             row.Soseri,
-                            row.Ma_hh,
+                            maHhCell,
                             row.hang_hoa?.Ten_hh ?? '',
                             row.Msize,
                             row.Ma_ch,
@@ -405,7 +412,15 @@
                             // })),
                             pageLength: 25,
                             language: {
-                                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/vi.json'
+                                search: "Tìm kiếm:",
+                                lengthMenu: "Hiển thị _MENU_ dòng",
+                                info: "Hiển thị _START_ đến _END_ của _TOTAL_ dòng",
+                                paginate: {
+                                    first: "Đầu",
+                                    last: "Cuối",
+                                    next: "Sau",
+                                    previous: "Trước"
+                                }
                             },
                             dom: 'Bfrtip',
                             buttons: [{
@@ -413,7 +428,7 @@
                                 text: '📤 Xuất Excel',
                                 className: 'btn btn-success',
                                 exportOptions: {
-                                    columns: [3, 4, 5, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23, 24]
+                                    columns: [3, 4, 5,6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23, 24]
                                 },
                                 title: 'Bang_Lenh_San_Xuat',
                             }]
@@ -434,7 +449,6 @@
                             $('#filterMaKinhDoanh').val('');
                             $('#filterNgayRaLenh').val('');
                             $('#filterexcludeMaLenh').val('');
-
                             dataTable.draw();
                         });
 
@@ -461,17 +475,6 @@
 
                             //Ẩn mã lệnh
                             if (excludeText && excludeCol.includes(excludeText)) return false;
-
-                            // if (excludeText) {
-                            //     // Ghép toàn bộ row thành 1 string để check
-                            //     const rowText = data.join(' ').toLowerCase();
-
-                            //     // Nếu row chứa từ khóa -> loại bỏ
-                            //     if (rowText.includes(excludeText)) {
-                            //         return false;
-                            //     }
-                            // }
-
                             if (khachHang && !khachHangCol.includes(khachHang)) return false;
                             if (maHH && !maHHCol.includes(maHH)) return false;
                             if (tinhTrang && !tinhTrangCol.includes(tinhTrang)) return false;
@@ -651,11 +654,13 @@
 
                     if (vattu.length === 0) {
                         tbody.append(`<tr><td colspan="6" class="text-center">Không có dữ liệu</td></tr>`);
-                        $("#uniqueMaVTList").val(""); // clear textarea khi không có dữ liệu
+                        $("#uniqueMaVTList").val("");
                     } else {
                         let listMaVT = [];
 
                         vattu.forEach(d => {
+                            let dinhmuc = Number(d.Soluong / d.Noluong).toFixed(4);
+
                             tbody.append(`
                         <tr>
                             <td>${d.DgiaiV}</td>
@@ -663,13 +668,15 @@
                             <td>${d.Ma_hh}</td>
                             <td>${Math.round(d.Soluong)}</td>
                             <td>${Math.round(d.Noluong)}</td>
-                            <td>${Number(d.Soluong / d.Noluong).toFixed(4)}</td>
+                            <td>${dinhmuc}</td>
                         </tr>
                     `);
-                            listMaVT.push(d.Ma_hh); // thu thập mã vật tư
+
+                            // Lưu cặp mã vật tư + định mức
+                            listMaVT.push(`${d.Ma_hh} - ${dinhmuc}`);
                         });
 
-                        // lọc unique
+                        // Lọc unique (chỉ lấy 1 dòng cho mỗi mã vật tư)
                         let unique = [...new Set(listMaVT)];
                         $("#uniqueMaVTList").val(unique.join("\n"));
                     }
