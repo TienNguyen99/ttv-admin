@@ -12,6 +12,7 @@ use App\Http\Controllers\SanXuatController;
 use App\Http\Controllers\UnipaxController;
 use App\Http\Controllers\KeToanController;
 use App\Http\Controllers\TiviController;
+use App\Http\Controllers\PhieuUnipax;
 
 
 /*
@@ -98,3 +99,9 @@ Route::get('/suggest-mahh', [DanhMucController::class, 'suggestMaHH'])->name('ma
 Route::get('/client/ketoan', [App\Http\Controllers\KeToanController::class, 'index']);
 // API DATABASE KETOAN  
 Route::get('/api/ketoan-today', [App\Http\Controllers\KeToanController::class, 'getDataToday']);
+
+
+// Route riêng dành cho tool unipax
+Route::get('/phieu-nhap', [PhieuUnipax::class, 'index']);
+Route::get('/phieu-nhap/rows', [PhieuUnipax::class, 'getRows']); // AJAX: lấy các row thiếu dữ liệu theo PS
+Route::post('/phieu-nhap', [PhieuUnipax::class, 'store']);  

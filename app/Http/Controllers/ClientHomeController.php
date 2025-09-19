@@ -133,7 +133,7 @@ class ClientHomeController extends Controller
         //     ->distinct()
         //     ->get()
         //     ->keyBy('Ma_vv');
-        // Lấy mã HH kế toán
+        // Lấy mã HH kế toán chỗ nhập thành phẩm
         $rawData = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->select('Ma_vv', 'Ma_sp')
             ->where('Ma_ct', '=', 'NX')
@@ -145,6 +145,19 @@ class ClientHomeController extends Controller
 
         foreach ($rawData as $item) {
             $datamahhketoan[$item->Ma_vv][] = $item->Ma_sp;
+        }
+                // Lấy mã HH kế toán chỗ xuất bán thành phẩm
+        $rawDataXuat = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+            ->select('Ma_vv', 'Ma_hh')
+            ->where('Ma_ct', '=', 'XU')
+            ->distinct()
+            ->get();
+
+        // Gộp theo Ma_vv => [Ma_sp1, Ma_sp2, ...]
+        $datamahhketoanxuat = [];
+
+        foreach ($rawDataXuat as $item) {
+            $datamahhketoanxuat[$item->Ma_vv][] = $item->Ma_hh;
         }
         // Mã hh thay đổi gần nhất
         $lastChange = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
@@ -175,6 +188,7 @@ class ClientHomeController extends Controller
             'nhapKho' => $nhapKho,
             'nhaptpketoan' => $nhaptpketoan,
             'datamahhketoan' => $datamahhketoan,
+            'datamahhketoanxuat' => $datamahhketoanxuat,
             'tongnhapkhoketoan' => $tongnhapkhoketoan,
             'tongxuatkhoketoan' => $tongxuatkhoketoan,
             'xuatkhotheomavvketoan' => $xuatkhotheomavvketoan,

@@ -135,6 +135,7 @@
                     <th>Mã kế toán</th>
                     <th>Tồn kế toán</th>
                     <th>Tình trạng</th>
+                    <th>Mã kế toán xuất</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -303,6 +304,7 @@
                         nhapKho,
                         nhaptpketoan,
                         datamahhketoan,
+                        datamahhketoanxuat,
                         tongnhapkhoketoan,
                         tongxuatkhoketoan,
                         xuatkhotheomavvketoan,
@@ -363,7 +365,9 @@
                         if (xuatkhomavvkt >= sum || (row.Noibo && row.Noibo.includes("R"))) {
                             statusLabel = '<span class="text-success">✔️ Hoàn thành</span>';
                         } else if (xuatkhomavvkt < sum && xuatkhomavvkt > 0) {
-                            statusLabel = '<span class="text-danger">📦 Xuất kho chưa đủ đơn hàng</span>';
+                            const thieu = Math.round(row.Dgbannte) - xuatkhomavvkt;
+                            statusLabel =
+                                `<span class="text-danger">📦 Xuất kho chưa đủ đơn hàng (Thiếu: ${thieu})</span>`;
                         } else if (nhap >= sum && xuat === 0) {
                             statusLabel = '<span class="text-primary">📦 Chưa xuất kho</span>';
                         } else if (nhap === 0) {
@@ -400,7 +404,8 @@
                             `<span class="text-success">✅ ${datamahhketoan[row.So_dh].join(", ")}</span>` :
                             '<span class="text-danger">❌ Chưa có</span>',
                             `<button class="btn btn-link p-0 text-success show-xuatketoan" data-ma-hh="${row.Ma_hh}">${tongton} </button>`,
-                            statusLabel
+                            statusLabel,
+                            datamahhketoanxuat[row.So_dh] ? datamahhketoanxuat[row.So_dh].join(", ") : ''
                         ];
                     });
 
@@ -428,7 +433,7 @@
                                 text: '📤 Xuất Excel',
                                 className: 'btn btn-success',
                                 exportOptions: {
-                                    columns: [3, 4, 5,6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23, 24]
+                                    columns: [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23, 24]
                                 },
                                 title: 'Bang_Lenh_San_Xuat',
                             }]

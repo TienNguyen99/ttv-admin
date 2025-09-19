@@ -41,6 +41,7 @@
                     <th>Ngày nhận</th>
                     <th>Ngày giao</th>
                     <th>Nơi giao</th>
+                    <th>PO</th>
                     <th>Cập nhật</th>
                 </tr>
             </thead>
@@ -65,6 +66,7 @@
                         <td>{{ \Carbon\Carbon::parse($row->Ngay_ct)->format('d/m/Y') }}</td>
                         <td>{{ \Carbon\Carbon::parse($row->Ngay_dh)->format('d/m/Y') }}</td>
                         <td>{{ $row->Ghichu }}</td>
+                        <td>{{ $row->DgiaiV }}</td>
                         <td><button type="submit">Cập nhật</button></td>
                     </tr>
                 @endforeach
