@@ -183,9 +183,11 @@
                                 <th>Kho xuất</th>
                                 <th>Kho nhập</th>
                                 <th>Mã hàng</th>
+                                <th>Tên hàng</th>
                                 <th>Thực xuất</th>
                                 <th>Nhu cầu</th>
                                 <th>Tổng đã xuất</th>
+                                <th>ĐVT</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -573,9 +575,11 @@
                               <td>${d.Ma_ko ?? ''}</td>
                               <td>${d.Ma3ko ?? ''}</td>
                               <td>${d.Ma_hh}</td>
-                              <td>${Number(d.Soluong).toFixed(4)}</td>
-                                <td>${Number(d.Nhu_cau).toFixed(4)}</td>
-                                <td>${Number(d.Tong_da_xuat).toFixed(4)}</td>
+                              <td>${d.Ten_hh ?? ''}</td>
+                              <td>${Number(d.Soluong).toFixed(0)}</td>
+                                <td>${Number(d.Nhu_cau).toFixed(0)}</td>
+                                <td>${Number(d.Tong_da_xuat).toFixed(0)}</td>
+                                <td>${d.Dvt}</td>
                                 
 
                             </tr>

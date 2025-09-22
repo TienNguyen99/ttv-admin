@@ -9,6 +9,7 @@ class CodeHangHoa extends Model
 {
 
     protected $table = 'codehanghoa';
+    protected $hidden = ['Pnghinh', 'Prghinh'];// Ẩn các trường không cần thiết
     public $timestamps = false;
 
     public function ketoanoder()

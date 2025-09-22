@@ -4,6 +4,10 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\DataKetoanData;
+use App\Models\DataKetoanOder;
+use App\Models\DataKetoan2025;
+use App\Models\CodeHangHoa;
+
 use Illuminate\Support\Facades\DB;
 
 class ClientHomeController extends Controller
@@ -20,6 +24,7 @@ class ClientHomeController extends Controller
     public function getData()
     {
         $data = DataKetoanData::with(['khachHang', 'hangHoa'])
+            ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
             ->where('Ma_ct', '=', 'GO')
             ->orderby('Ngay_ct', 'asc')
             ->get();
@@ -51,6 +56,7 @@ class ClientHomeController extends Controller
         $cd4 = $cd('04');
 
         $nx = DB::table('DataKetoanData')
+            
             ->where('Ma_ct', '=', 'NX')
             ->pluck('So_dh')
             ->toArray();
@@ -259,60 +265,121 @@ class ClientHomeController extends Controller
     }
 
     // API lấy danh sách xuất vật tư
-    public function getXuatVatTu(Request $request)
-    {
-        $so_dh = urldecode($request->query('so_dh'));
+    // public function getXuatVatTu(Request $request)
+    // {
+    //     $so_dh = urldecode($request->query('so_dh'));
 
-        // 1️⃣ Lấy tổng số lượng đơn hàng (GO)
-        $soLuongDonHang = DB::table('DataKetoanData')
-            ->where('Ma_ct', 'GO')
-            ->where('So_ct', $so_dh)
-            ->sum('Soluong');
+    //     // 1️⃣ Lấy tổng số lượng đơn hàng (GO)
+    //     $soLuongDonHang = DB::table('DataKetoanData')
+    //         ->where('Ma_ct', 'GO')
+    //         ->where('So_ct', $so_dh)
+    //         ->sum('Soluong');
 
-        // 2️⃣ Lấy định mức NX theo mã NVL (Ma_hh)
-        $dinhMuc = DB::table('DataKetoanData')
-            ->where('Ma_ct', 'NX')
-            ->where('So_dh', $so_dh)
-            ->pluck('Soluong', 'Ma_hh');
+    //     // 2️⃣ Lấy định mức NX theo mã NVL (Ma_hh)
+    //     $dinhMuc = DB::table('DataKetoanData')
+    //         ->where('Ma_ct', 'NX')
+    //         ->where('So_dh', $so_dh)
+    //         ->pluck('Soluong', 'Ma_hh');
 
-        // 3️⃣ Lấy danh sách xuất vật tư (CK)
-        $dsXuat = DB::table('DataKetoan2025')
-            ->select('Ngay_ct', 'So_ct', 'Ma_ko', 'Ma3ko', 'Ma_hh', 'Soluong')
-            ->where('Ma_ct', '=', 'CK')
-            ->where('So_dh', $so_dh)
-            ->orderBy('Ngay_ct')
-            ->get();
+    //     // 3️⃣ Lấy danh sách xuất vật tư (CK)
+    //     $dsXuat = DB::table('DataKetoan2025')
+    //         ->select('Ngay_ct', 'So_ct', 'Ma_ko', 'Ma3ko', 'Ma_hh', 'Soluong')
+    //         ->where('Ma_ct', '=', 'CK')
+    //         ->where('So_dh', $so_dh)
+    //         ->orderBy('Ngay_ct')
+    //         ->get();
 
 
-        // 4️⃣ Tính thêm "Nhu cầu" và "Tổng đã xuất"
-        $tongDaXuat = []; // cộng dồn
-        $vat_tu = [];
+    //     // 4️⃣ Tính thêm "Nhu cầu" và "Tổng đã xuất"
+    //     $tongDaXuat = []; // cộng dồn
+    //     $vat_tu = [];
 
-        foreach ($dsXuat as $row) {
-            $maHH = $row->Ma_hh;
+    //     foreach ($dsXuat as $row) {
+    //         $maHH = $row->Ma_hh;
 
-            // Tính nhu cầu = định mức * số lượng đơn hàng
-            $nhuCau = ($dinhMuc[$maHH] ?? 0) * $soLuongDonHang;
+    //         // Tính nhu cầu = định mức * số lượng đơn hàng
+    //         $nhuCau = ($dinhMuc[$maHH] ?? 0) * $soLuongDonHang;
 
-            // Cộng dồn tổng đã xuất
-            if (!isset($tongDaXuat[$maHH])) {
-                $tongDaXuat[$maHH] = 0;
-            }
-            $tongDaXuat[$maHH] += $row->Soluong;
+    //         // Cộng dồn tổng đã xuất
+    //         if (!isset($tongDaXuat[$maHH])) {
+    //             $tongDaXuat[$maHH] = 0;
+    //         }
+    //         $tongDaXuat[$maHH] += $row->Soluong;
 
-            // Thêm vào danh sách kết quả
-            $vat_tu[] = [
-                'Ngay_ct'      => $row->Ngay_ct,
-                'So_ct'        => $row->So_ct,
-                'Ma_ko'        => $row->Ma_ko,
-                'Ma3ko'        => $row->Ma3ko,
-                'Ma_hh'        => $maHH,
-                'Soluong'      => $row->Soluong,
-                'Nhu_cau'      => $nhuCau,
-                'Tong_da_xuat' => $tongDaXuat[$maHH],
-            ];
+    //         // Thêm vào danh sách kết quả
+    //         $vat_tu[] = [
+    //             'Ngay_ct'      => $row->Ngay_ct,
+    //             'So_ct'        => $row->So_ct,
+    //             'Ma_ko'        => $row->Ma_ko,
+    //             'Ma3ko'        => $row->Ma3ko,
+    //             'Ma_hh'        => $maHH,
+    //             'Soluong'      => $row->Soluong,
+    //             'Nhu_cau'      => $nhuCau,
+    //             'Tong_da_xuat' => $tongDaXuat[$maHH],
+    //         ];
+    //     }
+
+    //     return response()->json($vat_tu);
+    // }
+  
+
+public function getXuatVatTu(Request $request)
+{
+    $so_dh = urldecode($request->query('so_dh'));
+
+    // 1️⃣ Lấy tổng số lượng đơn hàng (GO)
+    $soLuongDonHang = DB::table('DataKetoanData')
+        ->where('Ma_ct', 'GO')
+        ->where('So_ct', $so_dh)
+        ->sum('Soluong');
+
+    // 2️⃣ Lấy định mức NX theo mã NVL (Ma_hh)
+    $dinhMuc = DB::table('DataKetoanData')
+        ->where('Ma_ct', 'NX')
+        ->where('So_dh', $so_dh)
+        ->pluck('Soluong', 'Ma_hh');
+
+    // 3️⃣ Lấy danh sách xuất vật tư (CK) + join đơn vị tính từ CodeHangHoa
+    $dsXuat = DB::table('DataKetoan2025 as d')
+        ->select('d.Ngay_ct', 'd.So_ct', 'd.Ma_ko', 'd.Ma3ko', 'd.Ma_hh', 'd.Soluong', 'c.Dvt','c.Ten_hh')
+        ->leftJoin('CodeHangHoa as c', 'd.Ma_hh', '=', 'c.Ma_hh')
+        ->where('d.Ma_ct', '=', 'CK')
+        ->where('d.So_dh', $so_dh)
+        ->orderBy('d.Ngay_ct')
+        ->get();
+
+    // 4️⃣ Tính thêm "Nhu cầu" và "Tổng đã xuất"
+    $tongDaXuat = []; 
+    $vat_tu = [];
+
+    foreach ($dsXuat as $row) {
+        $maHH = $row->Ma_hh;
+
+        // Tính nhu cầu = định mức * số lượng đơn hàng
+        $nhuCau = ($dinhMuc[$maHH] ?? 0) * $soLuongDonHang;
+
+        // Cộng dồn tổng đã xuất
+        if (!isset($tongDaXuat[$maHH])) {
+            $tongDaXuat[$maHH] = 0;
         }
+        $tongDaXuat[$maHH] += $row->Soluong;
 
-        return response()->json($vat_tu);
+        // Thêm vào danh sách kết quả
+        $vat_tu[] = [
+            'Ngay_ct'      => $row->Ngay_ct,
+            'So_ct'        => $row->So_ct,
+            'Ma_ko'        => $row->Ma_ko,
+            'Ma3ko'        => $row->Ma3ko,
+            'Ma_hh'        => $maHH,
+            'Soluong'      => $row->Soluong,
+            'Dvt'          => $row->Dvt,  // ✅ lấy thêm đơn vị tính
+            'Ten_hh'       => $row->Ten_hh,  // ✅ lấy thêm tên hàng hóa
+            'Nhu_cau'      => $nhuCau,
+            'Tong_da_xuat' => $tongDaXuat[$maHH],
+        ];
     }
+
+    return response()->json($vat_tu);
+}
+
 }

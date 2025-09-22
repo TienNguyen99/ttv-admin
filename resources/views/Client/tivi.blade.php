@@ -27,11 +27,13 @@
                     <th>Lệnh sản xuất</th>
                     <th>Khách hàng</th>
                     <th>Mã hàng</th>
+                    <th>Mã hàng (tên)</th>
                     <th>Tên hàng</th>
                     <th>Số lượng đơn hàng</th>
                     <th>Nhập kho</th>
                     <th>Xuất kho</th>
                     <th>Ngày hẹn (xuất hàng)</th>
+                    <th>Hình ảnh</th>
                     <th>Tình trạng</th>
                     <th>Sắp đến hạn</th>
                 </tr>
@@ -109,11 +111,15 @@
                             row.So_dh,
                             row.khach_hang?.Ten_kh ?? '',
                             row.Soseri,
+                            row.Ma_hh,
                             row.hang_hoa?.Ten_hh ?? '',
                             Math.round(row.Soluong),
                             nhap,
                             xuatkhomavvkt,
                             row.Date ? new Date(row.Date).toLocaleDateString('vi-VN') : '',
+                            row.hang_hoa?.Ma_so ?
+                            `<img src="http://192.168.1.13:8888/hinh_hh/HH_${row.hang_hoa?.Ma_so}/${row.hang_hoa?.Pngpath}" alt="Hình ảnh" width="100%" height="100%">` :
+                            '',
                             statusLabel,
                             deadlineLabel
                         ];
@@ -127,7 +133,7 @@
                             // })),
                             pageLength: 25,
                             order: [
-                                [7, 'asc']
+                                [8, 'asc']
                             ],
                             dom: 'Bfrtip',
                             buttons: [{

@@ -21,8 +21,8 @@ class TiviController extends Controller
         $data = DataKetoanData::with(['khachHang', 'hangHoa'])
             ->where('Ma_ct', '=', 'GO')
             ->where('Loaisx', '!=', 'M')
-            // ->whereBetween('Date', [$today, $upcoming])
-            // ->where('Date', '<=', $upcoming)
+             ->whereBetween('Date', [$today, $upcoming])
+             
             ->orderby('Date', 'desc')
             ->limit(50)
             ->get();
