@@ -18,11 +18,23 @@ class KeToanController extends Controller
     {
         $data = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025 as d')
             ->join('TSoft_NhanTG_kt_new.dbo.CodeHanghoa as c', 'd.Ma_hh', '=', 'c.Ma_hh')
+            ->join('TSoft_NhanTG_kt_new.dbo.CodeKhachang as kh', 'd.Ma_kh', '=', 'kh.Ma_kh')
             ->where('d.Ma_ct', '=', 'XU')
             ->orderBy('d.Ngay_ct', 'desc')
-            ->limit(250)
+            ->limit(500)
             ->select(
-                'd.*',
+                'd.Ngay_ct',
+                'd.Ma_ct',
+                'd.So_hd',
+                'd.Ma_hh',
+                'd.Soluong',
+                'd.DgiaiV',
+                'd.DgiaiE',
+                'd.Ma_vv',
+                'd.Dgbanvnd',
+                'd.Ghichu',
+                'd.Tien_vnd',
+                'kh.Ten_kh',
                 'c.Dvt',
                 'c.Ten_hh' // đơn vị tính từ bảng codehanghoa
             )

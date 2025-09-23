@@ -343,7 +343,7 @@
                         }
                         const sum = Math.round(sumSoLuong[row.So_ct] ?? 0);
                         const nhap = Math.round(nhapKho[key]?.total_nhap ?? 0);
-                        const nhaptp = Math.round(nhaptpketoan[keyketoan]?.total_nhaptpketoan ?? 0);
+                        const nhaptp = Math.round(nhaptpketoan[keyketoan2]?.total_nhaptpketoan ?? 0);
                         const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
                         // Xuất kho kế toán theo Ma_vv và Ma_hh
                         const xuatkhomavvkt = Math.round(xuatkhotheomavvketoan[keyketoan2]
@@ -405,7 +405,7 @@
                             datamahhketoan[row.So_dh] ?
                             `<span class="text-success">✅ ${datamahhketoan[row.So_dh].join(", ")}</span>` :
                             '<span class="text-danger">❌ Chưa có</span>',
-                            `<button class="btn btn-link p-0 text-success show-xuatketoan" data-ma-hh="${row.Ma_hh}">${tongton} </button>`,
+                            `<button class="btn btn-link p-0 text-success show-xuatketoan" data-ma-hh="${row.hang_hoa?.Ma_so}">${tongton} </button>`,
                             statusLabel,
                             datamahhketoanxuat[row.So_dh] ? datamahhketoanxuat[row.So_dh].join(", ") : ''
                         ];

@@ -118,7 +118,7 @@
                             <tr>
                                 <td>${index + 1}</td>
                                 <td>${new Date(row.Ngay_ct).toLocaleDateString("vi-VN")}</td>
-                                <td>${row.Namekh ?? ''}</td>
+                                <td>${row.Ten_kh ?? ''}</td>
                                 <td>${row.So_hd ?? ''}</td>
                                 <td>${row.Ma_hh ?? ''}</td>
                                 <td>${row.Ten_hh ?? ''}</td>
