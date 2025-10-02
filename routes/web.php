@@ -62,10 +62,14 @@ Route::get('/kho', [PhieuNhapXuatKhoController::class, 'index'])->name('kho');
 // Routeu for Hiển thị Tivi trên Client
 Route::get('/client/tivi', [TiviController::class, 'tiviIndex']);
 Route::get('/api/tivi', [TiviController::class, 'getTiviData']);
+// KHU VỰC ROUTE HIỂN THỊ HOME CHO CLIENT //////    
 // Route for Unipax only
 Route::get('/client/unipax', [ClientHomeController::class, 'indexUnipax']);
+// Route for GRS only
+Route::get('/client/grs', [ClientHomeController::class, 'indexGRS']);
 // Route for Home
-Route::get('/client/home', [ClientHomeController::class, 'index']);
+Route::get('/client/home', [ClientHomeController::class, 'index']); 
+////////////////////////////////////////////////////////////////////////
 Route::get('/api/production-orders', [ClientHomeController::class, 'getData']);
 Route::get('/api/nhapkho-chi-tiet', [ClientHomeController::class, 'getNhapKhoDetail']);
 //API lấy danh sách xuất kho ke toán theo mã hàng hóa

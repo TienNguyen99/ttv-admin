@@ -117,7 +117,9 @@
                             response($.map(data, function(item) {
                                 return {
                                     label: item.Ma_hh + " - " + item.Ten_hh +
-                                        " - " + item.Dvt,
+                                        " - " + item.Dvt + " - " + Math.round(
+                                            item.Dgbanvnd).toLocaleString(
+                                            'vi-VN') + " VND",
                                     value: item.Ma_hh
                                 };
                             }));

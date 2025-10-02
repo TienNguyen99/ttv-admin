@@ -21,7 +21,7 @@ class KeToanController extends Controller
             ->join('TSoft_NhanTG_kt_new.dbo.CodeKhachang as kh', 'd.Ma_kh', '=', 'kh.Ma_kh')
             ->where('d.Ma_ct', '=', 'XU')
             ->orderBy('d.Ngay_ct', 'desc')
-            ->limit(500)
+            
             ->select(
                 'd.Ngay_ct',
                 'd.Ma_ct',

@@ -20,6 +20,10 @@ class ClientHomeController extends Controller
     {
         return view('client.unipax');
     }
+    public function indexGRS()
+    {
+        return view('client.grs');
+    }
 
     public function getData()
     {
@@ -32,6 +36,12 @@ class ClientHomeController extends Controller
         $dataunipax = DataKetoanData::with(['khachHang', 'hangHoa'])
             ->where('Ma_ct', '=', 'GO')
             ->where('Ma_kh', '=', 'KHTN001024')
+            ->orderby('Ngay_ct', 'asc')
+            ->get();
+        // Chỉ show data MA_ct = GO và Loaisx = 'G'
+        $datagrs = DataKetoanData::with(['khachHang', 'hangHoa'])
+            ->where('Ma_ct', '=', 'GO')
+            ->where('Loaisx', '=', 'G')
             ->orderby('Ngay_ct', 'asc')
             ->get();
 
@@ -201,6 +211,7 @@ class ClientHomeController extends Controller
             'xuatKho' => $xuatKho,
             'lastChange' => $lastChange,
             'dataunipax' => $dataunipax,
+            'datagrs' => $datagrs,
         ]);
     }
     // API riêng lấy chi tiết nhập kho

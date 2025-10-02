@@ -152,7 +152,7 @@ class DanhMucController extends Controller
         $results = CodeHangHoa::where('Ma_hh', 'like', '%' . $term . '%')
             ->orWhere('Ten_hh', 'like', '%' . $term . '%')
             ->limit(20)
-            ->get(['Ma_hh', 'Ten_hh', 'Dvt']);
+            ->get(['Ma_hh', 'Ten_hh', 'Dvt','Dgbanvnd']);
         return response()->json($results);
     }
 }
