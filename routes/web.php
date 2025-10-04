@@ -15,6 +15,7 @@ use App\Http\Controllers\TiviController;
 use App\Http\Controllers\PhieuUnipax;
 
 
+
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -55,21 +56,32 @@ Route::get('/kho', [PhieuNhapXuatKhoController::class, 'index'])->name('kho');
 
 
 
-
+// KHU VỰC ROUTE HIỂN THỊ HOME CHO CLIENT //////    
 
 
 // Client Route //
 // Routeu for Hiển thị Tivi trên Client
 Route::get('/client/tivi', [TiviController::class, 'tiviIndex']);
 Route::get('/api/tivi', [TiviController::class, 'getTiviData']);
-// KHU VỰC ROUTE HIỂN THỊ HOME CHO CLIENT //////    
 // Route for Unipax only
 Route::get('/client/unipax', [ClientHomeController::class, 'indexUnipax']);
 // Route for GRS only
 Route::get('/client/grs', [ClientHomeController::class, 'indexGRS']);
 // Route for Home
 Route::get('/client/home', [ClientHomeController::class, 'index']); 
+// Route for San Xuat
+Route::get('/client/sanxuat', [SanXuatController::class, 'index']);
+Route::get('/api/sanxuat', [SanXuatController::class, 'getData']);
+Route::put('/api/sanxuat/{SttRecN}', [SanXuatController::class, 'update']);
+Route::delete('/api/sanxuat/{SttRecN}', [SanXuatController::class, 'destroy']);
 ////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
 Route::get('/api/production-orders', [ClientHomeController::class, 'getData']);
 Route::get('/api/nhapkho-chi-tiet', [ClientHomeController::class, 'getNhapKhoDetail']);
 //API lấy danh sách xuất kho ke toán theo mã hàng hóa

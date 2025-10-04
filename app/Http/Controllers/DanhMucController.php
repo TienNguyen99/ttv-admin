@@ -149,7 +149,8 @@ class DanhMucController extends Controller
     {
         $term = $request->input('term');
 
-        $results = CodeHangHoa::where('Ma_hh', 'like', '%' . $term . '%')
+        // $results = CodeHangHoa::where('Ma_hh', 'like', '%' . $term . '%')
+        $results = DB::table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')->where('Ma_hh', 'like', '%' . $term . '%')
             ->orWhere('Ten_hh', 'like', '%' . $term . '%')
             ->limit(20)
             ->get(['Ma_hh', 'Ten_hh', 'Dvt','Dgbanvnd']);

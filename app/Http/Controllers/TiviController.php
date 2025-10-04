@@ -17,24 +17,28 @@ class TiviController extends Controller
     public function getTiviData(Request $request)
     {
         $range = $request->get('range', 7);
-        $today = now()->startOfDay(); // ✅ reset về 00:00:00 để so sánh đúng ngày
+        $today = now()->startOfDay(); // reset về 00:00:00
 
         $query = DataKetoanData::with(['khachHang', 'hangHoa'])
             ->where('Ma_ct', '=', 'GO')
             ->where('Loaisx', '!=', 'M');
 
         if ($range === 'overdue') {
-            // 🔹 Lấy tất cả đơn trước hôm nay (quá hạn)
+            // 🔹 Quá hạn tất cả
             $query->whereDate('Date', '<', $today);
+
+        } elseif ($range === 'overdue14') {
+            // 🔹 Quá hạn trong vòng 14 ngày
+            $twoWeeksAgo = $today->copy()->subDays(14);
+            $query->whereBetween('Date', [$twoWeeksAgo, $today->copy()->subDay()]);
+
         } else {
-            // 🔹 Lấy đơn từ hôm nay → hôm nay + range ngày
+            // 🔹 Đơn sắp đến hạn (today → today + range)
             $upcoming = $today->copy()->addDays((int)$range);
             $query->whereBetween('Date', [$today, $upcoming]);
         }
 
-        $data = $query
-            ->orderBy('Date', 'asc')
-            ->get();
+        $data = $query->orderBy('Date', 'asc')->get();
 
         // 🔹 Xuất kho kế toán
         $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
@@ -60,7 +64,7 @@ class TiviController extends Controller
             ->get()
             ->keyBy('Ma_so');
 
-        // 🔹 Gán thêm Pngpath_fixed
+        // 🔹 Gán ảnh vào kết quả
         $data->transform(function ($item) use ($hinhAnh) {
             if ($item->hangHoa && $item->hangHoa->Ma_so) {
                 $maSo = $item->hangHoa->Ma_so;

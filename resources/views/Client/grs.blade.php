@@ -45,21 +45,7 @@
 <body>
     <div class="container-fluid mt-4">
         <h3 class="mb-4">📋 THEO DÕI LỆNH GRS</h3>
-        <!-- ✅ Danh sách 10 thay đổi gần nhất -->
-        <div class="mb-3">
-            <label class="form-label">Mã kế toán thay đổi gần nhất:</label>
-            <table class="table table-sm table-bordered" id="last-changes-table" style="max-width:600px;">
-                <thead class="table-light">
-                    <tr>
-                        <th>#</th>
-                        <th>Mã SP</th>
-                        <th>Vụ việc</th>
-                        <th>Ngày chứng từ</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
+
         <!-- 🔍 Bộ lọc -->
         <div class="row mb-3">
             <div class="col-md-3">
@@ -313,20 +299,7 @@
                         xuatKho,
                         lastChange
                     } = response;
-                    // Hiển thị mã kế toán thay đổi gần nhất
-                    const tbodyLast = document.querySelector("#last-changes-table tbody");
-                    if (lastChange && lastChange.length > 0) {
-                        tbodyLast.innerHTML = lastChange.map((item, idx) => `
-        <tr>
-            <td>${idx + 1}</td>
-            <td>${item.Ma_sp}</td>
-            <td>${item.Ma_vv}</td>
-            <td>${new Date(item.UserNg0).toLocaleDateString("vi-VN")}</td>
-        </tr>
-    `).join("");
-                    } else {
-                        tbodyLast.innerHTML = `<tr><td colspan="4" class="text-center">Không có dữ liệu</td></tr>`;
-                    }
+
                     const rows = datagrs.map((row, index) => {
                         const key = `${row.So_ct}|${row.Ma_hh}`;
                         const keyketoan = `${row.So_dh}|${row.Ma_hh}`;

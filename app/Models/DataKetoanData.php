@@ -10,6 +10,8 @@ class DataKetoanData extends Model
     protected $table = 'DataKetoanData';
     
     public $timestamps = false;
+        protected $primaryKey = null;
+    public $incrementing = false;
     use HasFactory;
     function dataother()
     {
