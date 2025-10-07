@@ -117,7 +117,11 @@ Route::get('/client/ketoan', [App\Http\Controllers\KeToanController::class, 'ind
 Route::get('/api/ketoan-today', [App\Http\Controllers\KeToanController::class, 'getDataToday']);
 
 
-// Route riêng dành cho tool unipax
-Route::get('/phieu-nhap', [PhieuUnipax::class, 'index']);
-Route::get('/phieu-nhap/rows', [PhieuUnipax::class, 'getRows']); // AJAX: lấy các row thiếu dữ liệu theo PS
-Route::post('/phieu-nhap', [PhieuUnipax::class, 'store']);  
+// Route riêng dành cho tool Unipax
+
+
+Route::prefix('phieu-nhap')->group(function () {
+    Route::get('/', [PhieuUnipax::class, 'index'])->name('phieuunipax.index');
+    Route::get('/rows', [PhieuUnipax::class, 'getRows'])->name('phieuunipax.rows'); // AJAX
+    Route::post('/', [PhieuUnipax::class, 'store'])->name('phieuunipax.store');
+});

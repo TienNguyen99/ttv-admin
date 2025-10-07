@@ -11,25 +11,36 @@
             background: #f8f9fa;
         }
 
-        .status-overdue {
-            background-color: #f8d7da !important;
-        }
-
-        /* đỏ nhạt */
-        .status-upcoming {
-            background-color: #fff3cd !important;
-        }
-
-        /* vàng nhạt */
         img {
             border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        img:hover {
+            transform: scale(1.05);
+        }
+
+        .mode-buttons {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .mode-buttons button {
+            margin: 5px;
         }
     </style>
 </head>
 
 <body>
-    <div class="container-fluid mt-4">
+    <div class="container-fluid mt-3">
+        <div class="mode-buttons">
+            <button id="btnOverdue" class="btn btn-danger fw-bold">❌ Trễ trong 2 tuần</button>
+            <button id="btnUpcoming" class="btn btn-warning fw-bold">⚠️ Sắp đến hạn (≤ 7 ngày)</button>
+        </div>
+
         <h4 id="titleTable" class="fw-bold text-center mb-3 text-danger">❌ Đơn hàng Trễ trong 2 tuần</h4>
+
         <table class="table table-bordered table-hover" id="productionTable" style="width: 100%;">
             <thead class="table-dark">
                 <tr>
@@ -37,18 +48,30 @@
                     <th>Lệnh SX</th>
                     <th>Khách hàng</th>
                     <th>Mã hàng</th>
+                    <th>Mã kinh doanh</th>
                     <th>Tên hàng</th>
                     <th>SL đơn</th>
                     <th>Nhập kho</th>
                     <th>Xuất kho</th>
                     <th>Ngày hẹn</th>
-                    <th>Hình ảnh</th> <!-- thêm lại -->
+                    <th>Hình ảnh</th>
                     <th>Tình trạng</th>
                     <th>Trạng thái</th>
                 </tr>
             </thead>
             <tbody></tbody>
         </table>
+    </div>
+
+    <!-- 🔹 Modal xem ảnh to -->
+    <div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content bg-dark">
+                <div class="modal-body text-center">
+                    <img id="modalImage" src="" class="img-fluid rounded" alt="Ảnh sản phẩm">
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- jQuery + Bootstrap + DataTables -->
@@ -100,8 +123,9 @@
                         // Hình ảnh
                         const imageHtml = (row.hang_hoa?.Ma_so && row.hang_hoa?.Pngpath_fixed) ?
                             `<img src="http://192.168.1.13:8888/hinh_hh/HH_${row.hang_hoa.Ma_so}/${row.hang_hoa.Pngpath_fixed}" 
-                       alt="Hình ảnh" style="max-width:80px;max-height:80px" 
-                       onerror="this.style.display='none'">` :
+                                alt="Hình ảnh" style="max-width:80px;max-height:80px" 
+                                class="clickable-image"
+                                onerror="this.style.display='none'">` :
                             '';
 
                         return [
@@ -109,12 +133,13 @@
                             row.So_dh,
                             row.khach_hang?.Ten_kh ?? '',
                             row.Ma_hh,
+                            row.Soseri ?? '',
                             row.hang_hoa?.Ten_hh ?? '',
                             Math.round(row.Soluong),
                             nhap,
                             xuat,
                             row.Date ? new Date(row.Date).toLocaleDateString('vi-VN') : '',
-                            imageHtml, // thêm cột hình
+                            imageHtml,
                             statusLabel,
                             deadlineLabel
                         ];
@@ -125,22 +150,29 @@
                             data: rows,
                             pageLength: 15,
                             columnDefs: [{
-                                    targets: 9,
-                                    orderable: false
-                                } // không sort cột hình ảnh
-                            ]
+                                targets: 10,
+                                orderable: false
+                            }],
                         });
                     } else {
                         dataTable.clear().rows.add(rows).draw(false);
                     }
 
+                    // Khi click ảnh → mở modal
+                    $('#productionTable').off('click', '.clickable-image').on('click', '.clickable-image', function() {
+                        const src = $(this).attr('src');
+                        $('#modalImage').attr('src', src);
+                        const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+                        modal.show();
+                    });
+
                     // Cập nhật tiêu đề
                     if (range === "overdue14") {
-                        document.getElementById("titleTable").innerHTML = "❌ Đơn hàng Trễ trong 2 tuần";
-                        document.getElementById("titleTable").className = "fw-bold text-center mb-3 text-danger";
-                    } else if (range === "7") {
-                        document.getElementById("titleTable").innerHTML = "⚠️ Đơn hàng Sắp đến hạn (≤ 7 ngày)";
-                        document.getElementById("titleTable").className = "fw-bold text-center mb-3 text-warning";
+                        $("#titleTable").text("❌ Đơn hàng Trễ trong 2 tuần").removeClass("text-warning").addClass(
+                            "text-danger");
+                    } else {
+                        $("#titleTable").text("⚠️ Đơn hàng Sắp đến hạn (≤ 7 ngày)").removeClass("text-danger").addClass(
+                            "text-warning");
                     }
                 });
         }
@@ -148,16 +180,50 @@
         // lần đầu load
         loadTable(currentMode);
 
-        // auto refresh
+        // tự refresh
         setInterval(() => loadTable(currentMode), 10000);
 
-        // bắt phím xuống để đổi mode
+        // bắt phím trái/phải để đổi mode (PC)
         document.addEventListener("keydown", function(e) {
             if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                currentMode = (currentMode === "overdue14") ? "7" : "overdue14";
-                loadTable(currentMode);
+                toggleMode();
             }
         });
+
+        // hai nút chuyển mode
+        $("#btnOverdue").on("click", () => {
+            currentMode = "overdue14";
+            loadTable(currentMode);
+        });
+        $("#btnUpcoming").on("click", () => {
+            currentMode = "7";
+            loadTable(currentMode);
+        });
+
+        // 🔹 Vuốt trái/phải (cho mobile)
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener("touchstart", e => {
+            touchStartX = e.changedTouches[0].screenX;
+        });
+
+        document.addEventListener("touchend", e => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        });
+
+        function handleSwipe() {
+            const diff = touchEndX - touchStartX;
+            if (Math.abs(diff) > 100) { // Vuốt đủ dài mới đổi
+                toggleMode();
+            }
+        }
+
+        function toggleMode() {
+            currentMode = (currentMode === "overdue14") ? "7" : "overdue14";
+            loadTable(currentMode);
+        }
     </script>
 </body>
 
