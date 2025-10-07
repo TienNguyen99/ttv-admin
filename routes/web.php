@@ -125,3 +125,4 @@ Route::prefix('phieu-nhap')->group(function () {
     Route::get('/rows', [PhieuUnipax::class, 'getRows'])->name('phieuunipax.rows'); // AJAX
     Route::post('/', [PhieuUnipax::class, 'store'])->name('phieuunipax.store');
 });
+Route::get('/phieu-nhap/view-all', [PhieuUnipax::class, 'viewAllFixed']);

@@ -70,11 +70,32 @@
     <div class="card mb-3 p-3">
         <label class="form-label fw-semibold">🔍 Chọn hoặc nhập mã P/S</label>
         <input list="psOptions" id="psSelect" class="form-control" placeholder="Nhập hoặc chọn P/S...">
+
         <datalist id="psOptions">
             @foreach ($psList as $ps)
                 <option value="{{ $ps }}">
             @endforeach
         </datalist>
+    </div>
+    {{-- Xem toàn bộ phiếu đã nhập --}}
+    <div class="text-end mb-2">
+        <button type="button" id="btnViewAll" class="btn btn-outline-primary btn-sm">
+            📄 Xem toàn bộ phiếu đã nhập
+        </button>
+    </div>
+    {{-- Modal xem toàn bộ --}}
+    <div class="modal fade" id="viewAllModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">📋 Danh sách phiếu đã nhập</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="viewAllContent">
+                    <p class="text-center text-muted">Chưa có dữ liệu.</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     {{-- Danh sách dòng --}}
@@ -129,6 +150,7 @@
                 <button type="submit" class="btn btn-primary">💾 Lưu phiếu</button>
             </div>
     </form>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         const psSelect = document.getElementById('psSelect');
@@ -206,6 +228,64 @@
                     rowsArea.style.display = 'block';
                     phieuForm.style.display = 'none';
                 });
+        });
+        // Xem toàn bộ phiếu đã nhập
+        const btnViewAll = document.getElementById('btnViewAll');
+        const viewAllContent = document.getElementById('viewAllContent');
+
+        btnViewAll.addEventListener('click', () => {
+            viewAllContent.innerHTML = '<p class="text-center text-muted py-2">⏳ Đang tải dữ liệu...</p>';
+
+            fetch('/phieu-nhap/view-all')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data || data.length === 0) {
+                        viewAllContent.innerHTML =
+                            '<p class="text-center text-muted">Chưa có phiếu nào được nhập.</p>';
+                        return;
+                    }
+
+                    let html = `
+                <div class="table-responsive">
+                <table class="table table-bordered table-sm align-middle text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Ngày</th>
+                            <th>P/S</th>
+                            <th>Dòng KD</th>
+                            <th>Đạt</th>
+                            <th>Lỗi</th>
+                            <th>Trạng thái</th>
+                            <th>Người nhập</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map((item, i) => `
+                                    <tr>
+                                        <td>${i + 1}</td>
+                                        <td>${item.ngay}</td>
+                                        <td>${item.ps}</td>
+                                        <td>${item.row_kd}</td>
+                                        <td>${item.dat}</td>
+                                        <td class="text-danger">${item.loi}</td>
+                                        <td>${item.trangthai}</td>
+                                        <td>${item.nguoitao}</td>
+                                    </tr>
+                                `).join('')}
+                    </tbody>
+                </table>
+                </div>
+            `;
+                    viewAllContent.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error(err);
+                    viewAllContent.innerHTML = '<p class="text-center text-danger">Lỗi khi tải dữ liệu.</p>';
+                });
+
+            const modal = new bootstrap.Modal(document.getElementById('viewAllModal'));
+            modal.show();
         });
     </script>
 

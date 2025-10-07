@@ -125,11 +125,8 @@ public function store(Request $request)
 
     return back()->with('success', "Đã thêm 1 dòng mới vào sheet PHIEU_NHAP trong file fixed!");
 }
-public function viewFixedData(Request $request)
+public function viewAllFixed()
 {
-    $ps = trim($request->query('ps'));
-    if (!$ps) return response()->json([]);
-
     $fixedFile = storage_path('app/public/theodoi_fixed.xlsx');
 
     if (!file_exists($fixedFile)) {
@@ -147,24 +144,22 @@ public function viewFixedData(Request $request)
     $highestRow = $sheet->getHighestRow();
     $rows = [];
 
-    // Giả sử cấu trúc cột: A=Ngày, B=PS, C=Row_KD, D=Đạt, E=Lỗi, F=Trạng thái, G=Người nhập
+    // Giả sử: A=Ngày, B=P/S, C=Row_KD, D=Đạt, E=Lỗi, F=Trạng thái, G=Người nhập
     for ($r = 2; $r <= $highestRow; $r++) {
-        $psVal = trim((string)$sheet->getCell("B$r")->getValue());
-        if ($psVal === $ps) {
-            $rows[] = [
-                'ngay' => (string)$sheet->getCell("A$r")->getValue(),
-                'ps' => $psVal,
-                'row_kd' => (string)$sheet->getCell("C$r")->getValue(),
-                'dat' => (string)$sheet->getCell("D$r")->getValue(),
-                'loi' => (string)$sheet->getCell("E$r")->getValue(),
-                'trangthai' => (string)$sheet->getCell("F$r")->getValue(),
-                'nguoitao' => (string)$sheet->getCell("G$r")->getValue(),
-            ];
-        }
+        $rows[] = [
+            'ngay' => (string)$sheet->getCell("A$r")->getValue(),
+            'ps' => (string)$sheet->getCell("B$r")->getValue(),
+            'row_kd' => (string)$sheet->getCell("C$r")->getValue(),
+            'dat' => (string)$sheet->getCell("D$r")->getValue(),
+            'loi' => (string)$sheet->getCell("E$r")->getValue(),
+            'trangthai' => (string)$sheet->getCell("F$r")->getValue(),
+            'nguoitao' => (string)$sheet->getCell("G$r")->getValue(),
+        ];
     }
 
     return response()->json($rows);
 }
+
 
 
 
