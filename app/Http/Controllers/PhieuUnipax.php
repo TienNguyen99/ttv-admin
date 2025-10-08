@@ -47,7 +47,8 @@ class PhieuUnipax extends Controller
         // ✅ Lọc theo P/S và các dòng chưa có Delivery/Đạt/Lỗi
         $result = array_filter($rows, function ($row) use ($ps) {
             return $row['ps'] === $ps &&
-                ($row['delivery'] === '' || $row['dat'] === '' || $row['loi'] === '');
+                // ($row['delivery'] === '' || $row['dat'] === '' || $row['loi'] === '');
+                ($row['delivery'] === '' || ($row['dat'] === '' && $row['loi'] === ''));
         });
 
         // ✅ Trả lại toàn bộ dữ liệu, bao gồm cột mới
@@ -90,7 +91,7 @@ class PhieuUnipax extends Controller
 
     $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
     $reader->setLoadSheetsOnly(['PHIEU_NHAP']);
-    $reader->setReadDataOnly(false);
+    $reader->setReadDataOnly(true);
     $spreadsheet = $reader->load($fixedFile);
     $sheet = $spreadsheet->getSheetByName('PHIEU_NHAP');
 
@@ -169,7 +170,9 @@ class PhieuUnipax extends Controller
             $rows[] = [
                 'row' => $r,
                 'ps' => $ps,
-                'ngayxuat' => (string)$sheet->getCellByColumnAndRow($ngayxuatCol, $r)->getValue(),
+                // 'ngayxuat' => (string)$sheet->getCellByColumnAndRow($ngayxuatCol, $r)->getValue(),
+                'ngayxuat'=> $this->excelDate($sheet->getCellByColumnAndRow($ngayxuatCol, $r)->getValue()),
+
                 'mahang' => (string)$sheet->getCellByColumnAndRow($mahangCol, $r)->getValue(),
                 'logo' => (string)$sheet->getCellByColumnAndRow($logoCol, $r)->getValue(),
                 'mau' => (string)$sheet->getCellByColumnAndRow($mauCol, $r)->getValue(),

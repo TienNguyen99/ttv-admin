@@ -128,3 +128,4 @@ Route::prefix('phieu-nhap')->group(function () {
 Route::get('/phieu-nhap/view-all', [PhieuUnipax::class, 'viewAllFixed']);
 Route::get('/phieu-nhap/refresh-cache', [PhieuUnipax::class, 'refreshCache'])
     ->name('phieuunipax.refreshCache');
+    Route::delete('/phieu-nhap/delete', [PhieuUnipax::class, 'deleteRow'])->name('phieuunipax.delete');
