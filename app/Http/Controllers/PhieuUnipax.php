@@ -30,56 +30,23 @@ public function getRows(Request $request)
     $ps = trim($request->query('ps'));
     if (!$ps) return response()->json([]);
 
-    $reader = new Xlsx();
-    $reader->setReadDataOnly(true);
-    $spreadsheet = $reader->load($this->filePath);
-
-    $sheet = $spreadsheet->getSheetByName('KINHDOANH');
-    if (!$sheet) {
-        return response()->json(['error' => 'Không tìm thấy sheet KINHDOANH'], 400);
+    $cacheFile = storage_path('app/cache/kinhdoanh.json');
+    if (!file_exists($cacheFile)) {
+        return response()->json(['error' => 'Cache chưa được tạo.'], 400);
     }
 
-    $rows = [];
-    $startRow = 5;
-    $psCol = 4;       // Cột P/S
-    $mahangCol = 3;   // Cột Mã hàng
-    $sizeCol = 5;     // Cột Size
-    $mauCol = 6;      // Cột Màu
-    $slThucCol = 11;  // SL thực nhận
-    $deliveryCol = 12;
-    $datCol = 13;
-    $loiCol = 14;
-    $matCol = 16;     // Mặt
-    $ghichuCol = 17;  // Ghi chú (nếu có)
-    $highestRow = $sheet->getHighestRow();
+    $rows = json_decode(file_get_contents($cacheFile), true);
+    if (!$rows) return response()->json([]);
 
-    for ($r = $startRow; $r <= $highestRow; $r++) {
-        $psVal = trim((string)$sheet->getCellByColumnAndRow($psCol, $r)->getValue());
-        if ($psVal === $ps) {
-            $delivery = trim((string)$sheet->getCellByColumnAndRow($deliveryCol, $r)->getValue());
-            $dat = trim((string)$sheet->getCellByColumnAndRow($datCol, $r)->getValue());
-            $loi = trim((string)$sheet->getCellByColumnAndRow($loiCol, $r)->getValue());
+    // Lọc theo P/S và các dòng chưa có Delivery/Đạt/Lỗi
+    $result = array_filter($rows, function ($row) use ($ps) {
+        return $row['ps'] === $ps &&
+               ($row['delivery'] === '' || $row['dat'] === '' || $row['loi'] === '');
+    });
 
-            if ($delivery === '' || $dat === '' || $loi === '') {
-                $rows[] = [
-                    'row' => $r,
-                    'mahang' => (string)$sheet->getCellByColumnAndRow($mahangCol, $r)->getValue(),
-                    'mau' => (string)$sheet->getCellByColumnAndRow($mauCol, $r)->getValue(),
-                    // 'mau' => (string)$sheet->getCellByColumnAndRow($mauCol, $r)->getCalculatedValue(),
-                    'size' => (string)$sheet->getCellByColumnAndRow($sizeCol, $r)->getValue(),
-                    'mat' => (string)$sheet->getCellByColumnAndRow($matCol, $r)->getValue(),
-                    'ghichu' => (string)$sheet->getCellByColumnAndRow($ghichuCol, $r)->getValue(),
-                    'sl_thuc' => (string)$sheet->getCellByColumnAndRow($slThucCol, $r)->getValue(),
-                    'delivery' => $delivery,
-                    'dat' => $dat,
-                    'loi' => $loi,
-                ];
-            }
-        }
-    }
-
-    return response()->json($rows);
+    return response()->json(array_values($result));
 }
+
 
     // Lưu phiếu nhập sang sheet PHIEU_NHAP
 public function store(Request $request)
@@ -125,6 +92,57 @@ public function store(Request $request)
 
     return back()->with('success', "Đã thêm 1 dòng mới vào sheet PHIEU_NHAP trong file fixed!");
 }
+public function refreshCache()
+{
+    $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+    $reader->setReadDataOnly(true);
+    $reader->setLoadSheetsOnly(['KINHDOANH']);
+    $spreadsheet = $reader->load($this->filePath);
+
+    $sheet = $spreadsheet->getSheetByName('KINHDOANH');
+    if (!$sheet) return back()->with('error', 'Không tìm thấy sheet KINHDOANH');
+
+    $startRow = 5;
+    $psCol = 4;
+    $mahangCol = 3;
+    $sizeCol = 5;
+    $mauCol = 6;
+    $slThucCol = 11;
+    $deliveryCol = 12;
+    $datCol = 13;
+    $loiCol = 14;
+    $matCol = 16;
+    $ghichuCol = 17;
+    $highestRow = $sheet->getHighestRow();
+
+    $rows = [];
+    for ($r = $startRow; $r <= $highestRow; $r++) {
+        $ps = trim((string)$sheet->getCellByColumnAndRow($psCol, $r)->getValue());
+        if ($ps === '') continue;
+
+        $rows[] = [
+            'row' => $r,
+            'ps' => $ps,
+            'mahang' => (string)$sheet->getCellByColumnAndRow($mahangCol, $r)->getValue(),
+            'mau' => (string)$sheet->getCellByColumnAndRow($mauCol, $r)->getValue(),
+            'size' => (string)$sheet->getCellByColumnAndRow($sizeCol, $r)->getValue(),
+            'sl_thuc' => (string)$sheet->getCellByColumnAndRow($slThucCol, $r)->getValue(),
+            'delivery' => (string)$sheet->getCellByColumnAndRow($deliveryCol, $r)->getValue(),
+            'dat' => (string)$sheet->getCellByColumnAndRow($datCol, $r)->getValue(),
+            'loi' => (string)$sheet->getCellByColumnAndRow($loiCol, $r)->getValue(),
+            'mat' => (string)$sheet->getCellByColumnAndRow($matCol, $r)->getValue(),
+            'ghichu' => (string)$sheet->getCellByColumnAndRow($ghichuCol, $r)->getValue(),
+        ];
+    }
+
+    // ✅ Ghi ra file JSON cache
+    $cacheDir = storage_path('app/cache');
+    if (!file_exists($cacheDir)) mkdir($cacheDir, 0777, true);
+    file_put_contents("$cacheDir/kinhdoanh.json", json_encode($rows, JSON_UNESCAPED_UNICODE));
+
+    return back()->with('success', '✅ Đã làm mới cache dữ liệu từ KINHDOANH!');
+}
+
 public function viewAllFixed()
 {
     $fixedFile = storage_path('app/public/theodoi_fixed.xlsx');

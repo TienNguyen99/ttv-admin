@@ -126,3 +126,5 @@ Route::prefix('phieu-nhap')->group(function () {
     Route::post('/', [PhieuUnipax::class, 'store'])->name('phieuunipax.store');
 });
 Route::get('/phieu-nhap/view-all', [PhieuUnipax::class, 'viewAllFixed']);
+Route::get('/phieu-nhap/refresh-cache', [PhieuUnipax::class, 'refreshCache'])
+    ->name('phieuunipax.refreshCache');

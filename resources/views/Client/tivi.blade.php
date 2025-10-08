@@ -148,7 +148,7 @@
                     if (!dataTable) {
                         dataTable = $('#productionTable').DataTable({
                             data: rows,
-                            pageLength: 15,
+                            pageLength: 10,
                             columnDefs: [{
                                 targets: 10,
                                 orderable: false

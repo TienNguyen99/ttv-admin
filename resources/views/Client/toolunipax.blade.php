@@ -57,7 +57,9 @@
 <body class="container py-3">
 
     <h4 class="text-center mb-3 fw-bold text-primary">📦 Nhập phiếu kho (Unipax)</h4>
-
+    <a href="{{ route('phieuunipax.refreshCache') }}" class="btn btn-outline-secondary btn-sm">
+        🔄 Làm mới dữ liệu
+    </a>
     {{-- Thông báo --}}
     @if (session('success'))
         <div class="alert alert-success p-2 text-center">{{ session('success') }}</div>
@@ -262,17 +264,17 @@
                     </thead>
                     <tbody>
                         ${data.map((item, i) => `
-                                    <tr>
-                                        <td>${i + 1}</td>
-                                        <td>${item.ngay}</td>
-                                        <td>${item.ps}</td>
-                                        <td>${item.row_kd}</td>
-                                        <td>${item.dat}</td>
-                                        <td class="text-danger">${item.loi}</td>
-                                        <td>${item.trangthai}</td>
-                                        <td>${item.nguoitao}</td>
-                                    </tr>
-                                `).join('')}
+                                        <tr>
+                                            <td>${i + 1}</td>
+                                            <td>${item.ngay}</td>
+                                            <td>${item.ps}</td>
+                                            <td>${item.row_kd}</td>
+                                            <td>${item.dat}</td>
+                                            <td class="text-danger">${item.loi}</td>
+                                            <td>${item.trangthai}</td>
+                                            <td>${item.nguoitao}</td>
+                                        </tr>
+                                    `).join('')}
                     </tbody>
                 </table>
                 </div>
