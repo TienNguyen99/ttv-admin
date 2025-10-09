@@ -27,4 +27,9 @@ class DataKetoanData extends Model
     {
         return $this->belongsTo(CodeHangHoa::class, 'Ma_hh', 'Ma_hh');
     }
+    public function nhanVien()
+    {
+        return $this->belongsTo(CodeNhanVien::class, 'Ma_nv', 'Ma_nv');
+    }
+
 }

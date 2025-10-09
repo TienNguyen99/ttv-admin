@@ -62,7 +62,11 @@ Route::get('/kho', [PhieuNhapXuatKhoController::class, 'index'])->name('kho');
 // Client Route //
 // Routeu for Hiển thị Tivi trên Client
 Route::get('/client/tivi', [TiviController::class, 'tiviIndex']);
+// Trang TV riêng cho sản xuất
+Route::get('/client/tivisanxuat', [TiviController::class, 'tiviSanxuat']);
+// API hiển thị dữ liệu Tivi
 Route::get('/api/tivi', [TiviController::class, 'getTiviData']);
+Route::get('/api/tivi/sx-data', [TiviController::class, 'getSXData']);
 // Route for Unipax only
 Route::get('/client/unipax', [ClientHomeController::class, 'indexUnipax']);
 // Route for GRS only

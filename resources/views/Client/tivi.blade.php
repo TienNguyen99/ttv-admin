@@ -8,26 +8,84 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <style>
         body {
-            background: #f8f9fa;
+            background: #f0f2f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
-        img {
-            border-radius: 6px;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-
-        img:hover {
-            transform: scale(1.05);
+        h4#titleTable {
+            padding: 10px 0;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            display: inline-block;
+            width: 100%;
         }
 
         .mode-buttons {
             text-align: center;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         .mode-buttons button {
-            margin: 5px;
+            margin: 0 8px;
+            padding: 10px 18px;
+            font-size: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .mode-buttons button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        table.dataTable thead {
+            background-color: #343a40 !important;
+            color: #fff;
+            font-weight: bold;
+        }
+
+        table.dataTable tbody tr {
+            background-color: #fff;
+            transition: background-color 0.2s;
+        }
+
+        table.dataTable tbody tr:hover {
+            background-color: #f1f3f5;
+        }
+
+        table.dataTable td,
+        table.dataTable th {
+            vertical-align: middle;
+            text-align: center;
+        }
+
+        .clickable-image {
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+            max-width: 80px;
+            max-height: 80px;
+        }
+
+        .clickable-image:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+        }
+
+        /* Modal ảnh */
+        .modal-content {
+            background-color: rgba(0, 0, 0, 0.95);
+            border: none;
+        }
+
+        .text-danger {
+            font-weight: bold;
+        }
+
+        .text-warning {
+            font-weight: bold;
         }
     </style>
 </head>
@@ -66,7 +124,7 @@
     <!-- 🔹 Modal xem ảnh to -->
     <div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
-            <div class="modal-content bg-dark">
+            <div class="modal-content">
                 <div class="modal-body text-center">
                     <img id="modalImage" src="" class="img-fluid rounded" alt="Ảnh sản phẩm">
                 </div>
@@ -123,8 +181,7 @@
                         // Hình ảnh
                         const imageHtml = (row.hang_hoa?.Ma_so && row.hang_hoa?.Pngpath_fixed) ?
                             `<img src="http://192.168.1.13:8888/hinh_hh/HH_${row.hang_hoa.Ma_so}/${row.hang_hoa.Pngpath_fixed}" 
-                                alt="Hình ảnh" style="max-width:80px;max-height:80px" 
-                                class="clickable-image"
+                                alt="Hình ảnh" class="clickable-image"
                                 onerror="this.style.display='none'">` :
                             '';
 
@@ -149,6 +206,7 @@
                         dataTable = $('#productionTable').DataTable({
                             data: rows,
                             pageLength: 10,
+                            responsive: true,
                             columnDefs: [{
                                 targets: 10,
                                 orderable: false

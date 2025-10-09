@@ -4,8 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use PhpOffice\PhpSpreadsheet\Reader\Xlsx;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx as Writer;
-use Illuminate\Support\Facades\Auth;
+use Box\Spout\Writer\Common\Creator\WriterEntityFactory;
 
 class PhieuUnipax extends Controller
 {
@@ -56,80 +55,80 @@ class PhieuUnipax extends Controller
     }
 
     // ✅ Lưu phiếu nhập sang sheet PHIEU_NHAP
-    public function store(Request $request)
+  public function store(Request $request)
 {
     $data = $request->validate([
         'ps' => 'required|string',
-        'row_kd' => 'required|integer',
+        'row_kd' => 'nullable|integer',
         'dat' => 'required|integer|min:0',
         'loi' => 'required|integer|min:0',
         'ghichu' => 'nullable|string|max:255',
     ]);
 
     $ps = $data['ps'];
-    $rowKd = (int) $data['row_kd'];
-    $user = Auth::user()->name ?? 'unknown';
-
-    // ✅ Đọc cache KINHDOANH
-    $cacheFile = storage_path('app/cache/kinhdoanh.json');
-    if (!file_exists($cacheFile)) {
-        return back()->with('error', '❌ Cache chưa được tạo. Hãy bấm "Làm mới dữ liệu" trước.');
-    }
-
-    $rows = json_decode(file_get_contents($cacheFile), true);
-    $found = collect($rows)->first(fn($r) => $r['ps'] === $ps && (int)$r['row'] === $rowKd);
-
-    if (!$found) {
-        return back()->with('error', "Không tìm thấy dòng $rowKd của P/S $ps trong cache.");
-    }
-
-    // ✅ Mở file fixed
+    $rowKd = $data['row_kd'] ?? null;
     $fixedFile = storage_path('app/public/theodoi_fixed.xlsx');
     if (!file_exists($fixedFile)) {
-        return back()->with('error', 'Không tìm thấy file theodoi_fixed.xlsx.');
+        return back()->with('error', '❌ Không tìm thấy file theodoi_fixed.xlsx.');
     }
 
+    // ✅ Tìm nhanh dữ liệu trong cache (chỉ khi có row_kd)
+    $found = null;
+    if ($rowKd) {
+        $cacheFile = storage_path('app/cache/kinhdoanh.json');
+        if (file_exists($cacheFile)) {
+            $rows = json_decode(file_get_contents($cacheFile), true);
+            // chỉ tìm 1 lần, không dùng collect()
+            foreach ($rows as $r) {
+                if ($r['ps'] === $ps && (int)$r['row'] === (int)$rowKd) {
+                    $found = $r;
+                    break;
+                }
+            }
+        }
+    }
+
+    // ✅ Mở sheet PHIEU_NHAP để ghi dữ liệu
     $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
     $reader->setLoadSheetsOnly(['PHIEU_NHAP']);
-    $reader->setReadDataOnly(true);
     $spreadsheet = $reader->load($fixedFile);
     $sheet = $spreadsheet->getSheetByName('PHIEU_NHAP');
 
-    if (!$sheet) {
-        return back()->with('error', 'Không tìm thấy sheet PHIEU_NHAP trong file fixed.');
-    }
-
-    // ✅ Ghi dữ liệu vào dòng kế tiếp
     $nextRow = $sheet->getHighestRow() + 1;
 
-    // --- Ghi dữ liệu người nhập ---
-    $sheet->setCellValue("N{$nextRow}", now()->format('d/m/Y')); // Ngày nhập
+    // --- Dữ liệu cơ bản ---
+    $sheet->setCellValue("A{$nextRow}", $rowKd ?: '-');
     $sheet->setCellValue("D{$nextRow}", $ps);
-    $sheet->setCellValue("A{$nextRow}", $rowKd);
     $sheet->setCellValue("J{$nextRow}", $data['dat']);
     $sheet->setCellValue("K{$nextRow}", $data['loi']);
-    $sheet->setCellValue("O{$nextRow}", 'CHUA_DUYET');
-    // $sheet->setCellValue("{$nextRow}", $user);
-
-    // --- Ghi dữ liệu từ cache KINHDOANH ---
-    $sheet->setCellValue("B{$nextRow}", $found['ngayxuat'] ?? '');
-    $sheet->setCellValue("C{$nextRow}", $found['mahang'] ?? '');
-    $sheet->setCellValue("F{$nextRow}", $found['mau'] ?? '');
-    $sheet->setCellValue("E{$nextRow}", $found['size'] ?? '');
-    $sheet->setCellValue("M{$nextRow}", $found['mat'] ?? '');
-    $sheet->setCellValue("G{$nextRow}", $found['logo'] ?? '');
-    $sheet->setCellValue("I{$nextRow}", $found['soluongdonhang'] ?? '');
-    $sheet->setCellValue("P{$nextRow}", $found['sl_thuc'] ?? '');
-
-    // --- Ghi ghi chú từ người nhập form ---
     $sheet->setCellValue("L{$nextRow}", $data['ghichu'] ?? '');
+    $sheet->setCellValue("N{$nextRow}", now()->format('d/m/Y'));
+    $sheet->setCellValue("O{$nextRow}", 'CHUA_DUYET');
 
-    // ✅ Lưu lại file
+    // --- Dữ liệu phụ từ cache (nếu có) ---
+    if ($found) {
+        $sheet->setCellValue("B{$nextRow}", $found['ngayxuat'] ?? '');
+        $sheet->setCellValue("C{$nextRow}", $found['mahang'] ?? '');
+        $sheet->setCellValue("E{$nextRow}", $found['size'] ?? '');
+        $sheet->setCellValue("F{$nextRow}", $found['mau'] ?? '');
+        $sheet->setCellValue("G{$nextRow}", $found['logo'] ?? '');
+        $sheet->setCellValue("I{$nextRow}", $found['soluongdonhang'] ?? '');
+        $sheet->setCellValue("M{$nextRow}", $found['mat'] ?? '');
+        $sheet->setCellValue("P{$nextRow}", $found['sl_thuc'] ?? '');
+    }
+
+    // ✅ Lưu lại file — chỉ ghi sheet này, không load toàn bộ
     $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
     $writer->save($fixedFile);
 
-    return back()->with('success', "✅ Đã lưu phiếu cho P/S {$ps}, dòng {$rowKd} (đầy đủ thông tin).");
+    // ✅ Phản hồi
+    if ($found) {
+        return back()->with('success', "✅ Đã lưu phiếu cho P/S {$ps}, dòng {$rowKd} (từ cache).");
+    }
+    return back()->with('success', "✅ Đã lưu phiếu cho P/S {$ps} (chỉ dữ liệu cơ bản).");
 }
+
+
     
 
 

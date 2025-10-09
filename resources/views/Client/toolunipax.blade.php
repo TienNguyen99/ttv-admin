@@ -57,7 +57,7 @@
 <body class="container py-3">
     <h4 class="text-center mb-3 fw-bold text-primary">📦 Nhập phiếu kho (Unipax)</h4>
 
-    <a href="{{ route('phieuunipax.refreshCache') }}" class="btn btn-outline-secondary btn-sm">
+    <a href="{{ route('phieuunipax.refreshCache') }}" class="btn btn-outline-secondary btn-sm mb-2">
         🔄 Làm mới dữ liệu
     </a>
 
@@ -68,6 +68,7 @@
         <div class="alert alert-danger p-2 text-center">{{ session('error') }}</div>
     @endif
 
+    <!-- Nhập hoặc chọn PS -->
     <div class="card mb-3 p-3">
         <label class="form-label fw-semibold">🔍 Chọn hoặc nhập mã P/S</label>
         <input list="psOptions" id="psSelect" class="form-control" placeholder="Nhập hoặc chọn P/S...">
@@ -84,7 +85,7 @@
         </button>
     </div>
 
-    <!-- Modal xem toàn bộ -->
+    <!-- Modal xem toàn bộ phiếu -->
     <div class="modal fade" id="viewAllModal" tabindex="-1">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
@@ -99,6 +100,7 @@
         </div>
     </div>
 
+    <!-- Danh sách dòng chưa có Delivery/Đạt/Lỗi -->
     <div id="rowsArea" class="card p-2" style="display:none;">
         <h6 class="fw-semibold text-secondary mb-2">📋 Dòng chưa có Delivery/Đạt/Lỗi</h6>
         <div class="table-responsive">
@@ -123,7 +125,8 @@
         </div>
     </div>
 
-    <form id="phieuForm" method="POST" action="{{ route('phieuunipax.store') }}" style="display:none;">
+    <!-- Form nhập phiếu -->
+    <form id="phieuForm" method="POST" action="{{ route('phieuunipax.store') }}">
         @csrf
         <input type="hidden" name="ps" id="psInput">
         <input type="hidden" name="row_kd" id="rowKdInput">
@@ -148,7 +151,7 @@
             </div>
 
             <div class="fixed-bottom-bar">
-                <button type="submit" class="btn btn-primary">💾 Lưu phiếu</button>
+                <button type="submit" class="btn btn-primary" id="btnSave">💾 Lưu phiếu</button>
             </div>
         </div>
     </form>
@@ -159,36 +162,33 @@
         const psSelect = document.getElementById('psSelect');
         const rowsArea = document.getElementById('rowsArea');
         const rowsTableBody = document.querySelector('#rowsTable tbody');
-        const phieuForm = document.getElementById('phieuForm');
         const psInput = document.getElementById('psInput');
         const rowKdInput = document.getElementById('rowKdInput');
         const datInput = document.getElementById('datInput');
         const loiInput = document.getElementById('loiInput');
         const ghichuInput = document.getElementById('ghichuInput');
 
+        // Khi nhập/chọn PS
         psSelect.addEventListener('change', () => {
             const ps = psSelect.value.trim();
             psInput.value = ps;
             rowsTableBody.innerHTML = '';
-            if (!ps) {
-                rowsArea.style.display = 'none';
-                phieuForm.style.display = 'none';
-                return;
-            }
 
+            // Nếu nhập tay không có trong cache, vẫn cho phép nhập phiếu
             fetch(`/phieu-nhap/rows?ps=${encodeURIComponent(ps)}`)
                 .then(r => r.json())
                 .then(data => {
                     if (!data || data.length === 0) {
-                        rowsTableBody.innerHTML =
-                            '<tr><td colspan="10" class="text-center text-muted py-2">Không có dòng cần nhập.</td></tr>';
-                        rowsArea.style.display = 'block';
-                        phieuForm.style.display = 'none';
+                        rowsArea.style.display = 'none';
+                        rowKdInput.value = 0; // ✅ không cần dòng KD
+                        datInput.value = '';
+                        loiInput.value = '';
+                        ghichuInput.value = '';
                         return;
                     }
 
+                    // Có dữ liệu từ cache
                     rowsArea.style.display = 'block';
-                    phieuForm.style.display = 'block';
                     rowsTableBody.innerHTML = '';
 
                     data.forEach(item => {
@@ -209,6 +209,7 @@
                         rowsTableBody.appendChild(tr);
                     });
 
+                    // Khi chọn dòng
                     document.querySelectorAll('input[name="selectRow"]').forEach(radio => {
                         radio.addEventListener('change', e => {
                             const row = e.target.value;
@@ -236,62 +237,55 @@
                     }
 
                     let html = `
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered align-middle">
-                        <thead class="table-light text-center">
-                            <tr>
-                                <th>Ngày nhập</th>
-                                <th>P/S</th>
-                                <th>Dòng KD</th>
-                                <th>Ngày xuất</th>
-                                <th>Mã hàng</th>
-                                <th>Size</th>
-                                <th>Màu</th>
-                                <th>Logo</th>
-                                <th>Mặt</th>
-                                <th>SL đơn hàng</th>
-                                <th>SL thực tế</th>
-                                <th>Đạt</th>
-                                <th>Lỗi</th>
-                                <th>Ghi chú</th>
-                                <th>Trạng thái</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle">
+                                <thead class="table-light text-center">
+                                    <tr>
+                                        <th>Ngày nhập</th>
+                                        <th>P/S</th>
+                                        <th>Dòng KD</th>
+                                        <th>Ngày xuất</th>
+                                        <th>Mã hàng</th>
+                                        <th>Size</th>
+                                        <th>Màu</th>
+                                        <th>Logo</th>
+                                        <th>Mặt</th>
+                                        <th>SL đơn hàng</th>
+                                        <th>SL thực tế</th>
+                                        <th>Đạt</th>
+                                        <th>Lỗi</th>
+                                        <th>Ghi chú</th>
+                                        <th>Trạng thái</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
 
                     data.forEach(r => {
                         html += `
-                    <tr>
-                        <td>${r.ngaynhap || ''}</td>
-                        <td>${r.ps || ''}</td>
-                        <td>${r.row_kd || ''}</td>
-                        <td>${r.ngayxuat || ''}</td>
-                        
-                        <td>${r.mahang || ''}</td>
-                        <td>${r.size || ''}</td>
-                        <td>${r.mau || ''}</td>
-                        <td>${r.logo || ''}</td>
-                        <td>${r.mat || ''}</td>
-                        <td>${r.soluongdonhang || ''}</td>
-                        <td>${r.sl_thuc || ''}</td>
-                        <td>${r.dat || ''}</td>
-                        <td>${r.loi || ''}</td>
-                        <td>${r.ghichu || ''}</td>
-                        <td class="text-center">${r.trangthai || ''}</td>
-                    </tr>
-                `;
+                            <tr>
+                                <td>${r.ngaynhap || ''}</td>
+                                <td>${r.ps || ''}</td>
+                                <td>${r.row_kd || ''}</td>
+                                <td>${r.ngayxuat || ''}</td>
+                                <td>${r.mahang || ''}</td>
+                                <td>${r.size || ''}</td>
+                                <td>${r.mau || ''}</td>
+                                <td>${r.logo || ''}</td>
+                                <td>${r.mat || ''}</td>
+                                <td>${r.soluongdonhang || ''}</td>
+                                <td>${r.sl_thuc || ''}</td>
+                                <td>${r.dat || ''}</td>
+                                <td>${r.loi || ''}</td>
+                                <td>${r.ghichu || ''}</td>
+                                <td class="text-center">${r.trangthai || ''}</td>
+                            </tr>
+                        `;
                     });
 
-                    html += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
-
+                    html += `</tbody></table></div>`;
                     div.innerHTML = html;
 
-                    // Hiển thị modal kết quả
                     new bootstrap.Modal('#viewAllModal').show();
                 })
                 .catch(() => alert('❌ Lỗi tải danh sách phiếu.'));

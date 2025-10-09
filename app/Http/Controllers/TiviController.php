@@ -12,6 +12,49 @@ class TiviController extends Controller
     {
         return view('client.tivi');
     }
+        /** 🔹 Trang TV hiển thị sản xuất */
+    public function tiviSanxuat()
+    {
+        return view('client.tivisanxuat');
+    }
+    // API hiển thị dữ liệu Ma_ct = 'SX' trong ngày
+public function getSXData(Request $request)
+{
+    $today = now()->startOfDay();
+
+    // Lấy dữ liệu SX, đồng thời join để lấy So_ct từ chứng từ GO cùng So_dh
+    $data = DataKetoanData::with([
+        'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
+        'nhanVien:Ma_nv,Ten_nv',
+        'khachHang:Ma_kh,Ten_kh'
+    ])
+        ->select(
+            'DataKetoanData.So_dh',
+            'DataKetoanData.Ma_hh',
+            'DataKetoanData.Ma_ko',
+            'DataKetoanData.Ma_nv',
+            'DataKetoanData.Soluong',
+            'DataKetoanData.Ngay_ct',
+            'DataKetoanData.Ma_kh',
+            'DataKetoanData.Dgbanvnd',
+            'DataKetoanData.Tien_vnd',
+            
+            DB::raw('go.So_dh as So_ct_go'),
+            DB::raw('go.Soluong as Soluong_go')
+        )
+        ->leftJoin('DataKetoanData as go', function ($join) {
+            $join->on('go.So_ct', '=', 'DataKetoanData.So_dh')
+                 ->where('go.Ma_ct', '=', 'GO');
+        })
+        ->where('DataKetoanData.Ma_ct', '=', 'SX')
+        ->whereDate('DataKetoanData.Ngay_ct', '=', $today)
+        ->orderBy('DataKetoanData.So_dh')
+        ->get();
+    
+    return response()->json($data);
+}
+
+
 
     // API hiển thị Tivi
     public function getTiviData(Request $request)
