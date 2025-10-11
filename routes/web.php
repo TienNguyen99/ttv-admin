@@ -5,14 +5,13 @@ use App\Http\Controllers\DanhMucController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DonHangController;
-use App\Http\Controllers\HangHoaController;
 use App\Http\Controllers\PhieuNhapXuatKhoController;
 use App\Http\Controllers\PhieuXuatKhoController;
 use App\Http\Controllers\SanXuatController;
 use App\Http\Controllers\UnipaxController;
-use App\Http\Controllers\KeToanController;
 use App\Http\Controllers\TiviController;
 use App\Http\Controllers\PhieuUnipax;
+use App\Http\Controllers\QuyDoiMucController;
 
 
 
@@ -109,7 +108,9 @@ Route::post('/update-mahh', [DanhMucController::class, 'updateMaHH'])->name('upd
 Route::post('/update-manl', [DanhMucController::class, 'updateMaNL'])->name('updateMaNL');
 // 
 Route::get('/suggest-mahh', [DanhMucController::class, 'suggestMaHH'])->name('mahh.suggest');
-
+// Route for QuyDoiMuc
+Route::get('/quydoi-muc', [QuyDoiMucController::class, 'index'])->name('quydoimuc');
+Route::get('/get-khomuc', [QuyDoiMucController::class, 'getKhomuc'])->name('getKhomuc');
 
 
 

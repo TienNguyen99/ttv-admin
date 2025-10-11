@@ -25,6 +25,8 @@
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+            position: relative;
+            transition: opacity 0.4s ease-in-out;
         }
 
         thead th {
@@ -89,8 +91,30 @@
             z-index: 5;
         }
 
-        .refreshing {
-            opacity: 0.5;
+        /* ✅ Loading mượt khi refresh */
+        table.refreshing {
+            opacity: 0.4;
+        }
+
+        table.refreshing::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #93c5fd;
+            border-top-color: transparent;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            animation: spin 1s linear infinite;
+            z-index: 20;
+        }
+
+        @keyframes spin {
+            to {
+                transform: translate(-50%, -50%) rotate(360deg);
+            }
         }
 
         /* ✅ Ảnh trong modal phóng to */
@@ -124,7 +148,7 @@
 
 <body>
     <div class="container-fluid mt-4">
-        <h1 class="text-center mb-4">SẢN XUẤT HÔM NAY {{ now()->format('d/m/Y') }}</h1>
+        <h1 class="text-center mb-4">LỆNH ĐANG SẢN XUẤT NGÀY {{ now()->format('d/m/Y') }}</h1>
 
         <table class="table table-bordered table-striped text-center align-middle" id="sxTable">
             <thead>
@@ -232,7 +256,7 @@
 
                     const subtotalRow = `
             <tr class="subtotal-row">
-              <td colspan="6">TỔNG LỆNH: ${soct}</td>
+              <td colspan="6"> ${soct}</td>
               <td>${soluongGO.toLocaleString('vi-VN')}</td>
               <td>${tongSX.toLocaleString('vi-VN')}</td>
               <td colspan="2"></td>
@@ -266,6 +290,7 @@
             }
         });
 
+        // ✅ Gọi lần đầu & auto refresh mỗi 10s
         loadSXData();
         setInterval(loadSXData, 10000);
     </script>

@@ -27,19 +27,19 @@ class ClientHomeController extends Controller
 
     public function getData()
     {
-        $data = DataKetoanData::with(['khachHang', 'hangHoa'])
+        $data = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt'])
             ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
             ->where('Ma_ct', '=', 'GO')
             ->orderby('Ngay_ct', 'asc')
             ->get();
         // Chỉ show data Ma_ct = GO và Ma_kh = 'KHTN001024'
-        $dataunipax = DataKetoanData::with(['khachHang', 'hangHoa'])
+        $dataunipax = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt'])
             ->where('Ma_ct', '=', 'GO')
             ->where('Ma_kh', '=', 'KHTN001024')
             ->orderby('Ngay_ct', 'asc')
             ->get();
         // Chỉ show data MA_ct = GO và Loaisx = 'G'
-        $datagrs = DataKetoanData::with(['khachHang', 'hangHoa'])
+        $datagrs = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt'])
             ->where('Ma_ct', '=', 'GO')
             ->where('Loaisx', '=', 'G')
             ->orderby('Ngay_ct', 'asc')
