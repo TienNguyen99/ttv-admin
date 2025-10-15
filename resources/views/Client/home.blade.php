@@ -52,9 +52,15 @@
                 <thead class="table-light">
                     <tr>
                         <th>#</th>
+                        <th>Tìm số CT</th>
                         <th>Mã SP</th>
+                        <th>Mã nguyên liệu</th>
                         <th>Vụ việc</th>
-                        <th>Ngày chứng từ</th>
+                        <th>Tiêu hao nguyên liệu</th>
+                        <th>Số lượng nhập kho</th>
+                        <th>Định mức</th>
+                        <th>Ngày chỉnh sửa</th>
+                        <th>Ngày nhập kho</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -212,6 +218,9 @@
                                 <th>Số chứng từ</th>
                                 <th>Mã hàng</th>
                                 <th>Số lượng</th>
+                                <th>Đơn giá vốn</th>
+                                <th>Đơn giá bán</th>
+                                <th>Đơn giá $</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -315,15 +324,22 @@
                     } = response;
                     // Hiển thị mã kế toán thay đổi gần nhất
                     const tbodyLast = document.querySelector("#last-changes-table tbody");
+
                     if (lastChange && lastChange.length > 0) {
                         tbodyLast.innerHTML = lastChange.map((item, idx) => `
-        <tr>
-            <td>${idx + 1}</td>
-            <td>${item.Ma_sp}</td>
-            <td>${item.Ma_vv}</td>
-            <td>${new Date(item.UserNg0).toLocaleDateString("vi-VN")}</td>
-        </tr>
-    `).join("");
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td>${item.So_ct}</td>
+                            <td>${item.Ma_sp}</td>
+                            <td>${item.Ma_hh}</td>
+                            <td>${item.Ma_vv}</td>
+                            <td>${Number(item.Soluong).toFixed(2)}</td>
+                            <td>${Number(item.Noluong).toFixed(2)}</td>
+<td>${(item.Soluong / item.Noluong).toFixed(4)}</td>
+
+                            <td>${new Date(item.UserNg0).toLocaleDateString("vi-VN")}</td>
+                            <td>${new Date(item.Ngay_ct).toLocaleDateString("vi-VN")}</td>
+                        </tr>`).join("");
                     } else {
                         tbodyLast.innerHTML = `<tr><td colspan="4" class="text-center">Không có dữ liệu</td></tr>`;
                     }
@@ -610,7 +626,9 @@
                         <td>${d.So_ct}</td>
                         <td>${d.Ma_hh}</td>
                         <td>${Number(d.Soluong).toFixed(4)}</td>
-                        
+                        <td>${Number(d.Dgvonvnd).toLocaleString("vi-VN")}</td>
+                        <td>${Number(d.Dgbanvnd).toLocaleString("vi-VN")}</td>
+                        <td>${Number(d.Dgbannte).toLocaleString("en-US")}</td>
                       </tr>
                     `);
                         });

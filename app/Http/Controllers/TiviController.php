@@ -84,13 +84,20 @@ public function getSXData(Request $request)
         $data = $query->orderBy('Date', 'asc')->get();
 
         // 🔹 Xuất kho kế toán
-        $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
-            ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
-            ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
-            ->where('dk.Ma_ct', '=', 'XU')
-            ->groupBy('dk.Ma_vv', 'hh.Ma_so')
+        // $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
+        //     ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
+        //     ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
+        //     ->where('dk.Ma_ct', '=', 'XU')
+        //     ->groupBy('dk.Ma_vv', 'hh.Ma_so')
+        //     ->get()
+        //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_so);
+        //Dùng cái này khi lấy database ketoan
+        $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))
+            ->where('Ma_ct', '=', 'XU')
+            ->groupBy('Ma_vv', 'Ma_hh')
             ->get()
-            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_so);
+            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
 
         // 🔹 Nhập kho
         $nhapKho = DB::table('DataKetoan2025')
@@ -99,7 +106,20 @@ public function getSXData(Request $request)
             ->groupBy('So_dh', 'Ma_hh')
             ->get()
             ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
+        //Dùng cái này khi lấy database ketoan
+        //Nhập thành phẩm kế toán 
+        $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+            ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
+            ->where('Ma_ct', '=', 'NX')
+            ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
+            ->distinct();
 
+        $nhaptpketoan = DB::query()
+            ->fromSub($sub, 'sub')
+            ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
+            ->groupBy('Ma_vv', 'Ma_sp')
+            ->get()
+            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
         // 🔹 Lấy ảnh duy nhất theo Ma_so
         $hinhAnh = DB::table('CodeHangHoa')
             ->select('Ma_so', DB::raw('MIN(Pngpath) as Pngpath'))
@@ -121,7 +141,8 @@ public function getSXData(Request $request)
         return response()->json([
             'data' => $data,
             'xuatkhotheomavvketoan' => $xuatkhotheomavvketoan,
-            'nhapKho' => $nhapKho
+            'nhapKho' => $nhapKho,
+            'nhaptpketoan' => $nhaptpketoan
         ]);
     }
 }

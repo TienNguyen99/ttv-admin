@@ -75,10 +75,13 @@
                     window.allData = data;
                     const uniqueMaSP = [...new Set(data.map(item => item.Ma_sp))];
                     const select = document.getElementById('ma_sp');
-                    uniqueMaSP.forEach(sp => {
+
+                    uniqueMaSP.forEach(ma_sp => {
+                        const item = data.find(i => i.Ma_sp === ma_sp);
+                        const tenHienThi = item?.ten_sp || item?.hang_hoa?.Ten_hh || ma_sp;
                         const opt = document.createElement('option');
-                        opt.value = sp;
-                        opt.textContent = sp;
+                        opt.value = ma_sp;
+                        opt.textContent = `${tenHienThi} (${ma_sp})`;
                         select.appendChild(opt);
                     });
                 });

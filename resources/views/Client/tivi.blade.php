@@ -149,14 +149,16 @@
                     const {
                         data,
                         nhapKho,
-                        xuatkhotheomavvketoan
+                        xuatkhotheomavvketoan,
+                        nhaptpketoan
                     } = response;
 
                     const rows = data.map((row, index) => {
                         const key = `${row.So_ct}|${row.Ma_hh}`;
                         const keyketoan2 = `${row.So_dh}|${row.hang_hoa?.Ma_so}`;
                         const xuat = Math.round(xuatkhotheomavvketoan[keyketoan2]?.xuatkhotheomavv_ketoan ?? 0);
-                        const nhap = Math.round(nhapKho[key]?.total_nhap ?? 0);
+                        // const nhap = Math.round(nhapKho[key]?.total_nhap ?? 0);
+                        const nhap = Math.round(nhaptpketoan[keyketoan2]?.total_nhaptpketoan ?? 0);
 
                         // Tình trạng
                         let statusLabel = '';

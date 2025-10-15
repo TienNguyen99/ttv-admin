@@ -27,19 +27,21 @@ class ClientHomeController extends Controller
 
     public function getData()
     {
-        $data = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt'])
+        $data = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
             ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
             ->where('Ma_ct', '=', 'GO')
             ->orderby('Ngay_ct', 'asc')
             ->get();
         // Chỉ show data Ma_ct = GO và Ma_kh = 'KHTN001024'
-        $dataunipax = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt'])
+        $dataunipax = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
+            ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
             ->where('Ma_ct', '=', 'GO')
             ->where('Ma_kh', '=', 'KHTN001024')
             ->orderby('Ngay_ct', 'asc')
             ->get();
         // Chỉ show data MA_ct = GO và Loaisx = 'G'
-        $datagrs = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt'])
+        $datagrs = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
+            ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
             ->where('Ma_ct', '=', 'GO')
             ->where('Loaisx', '=', 'G')
             ->orderby('Ngay_ct', 'asc')
@@ -121,7 +123,7 @@ class ClientHomeController extends Controller
             ->get()
             ->keyBy('Ma_hh');
 
-        // $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025 as dk')
+        // dùng cái này khi database sản xuất
         $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
             ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
             ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
@@ -130,13 +132,12 @@ class ClientHomeController extends Controller
             ->get()
             ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_so);
             //Dùng cái này khi đổi database Kế toán
-            //         $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025 as dk')
-            // ->join('TSoft_NhanTG_kt_new.dbo.CodeHanghoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
-            // ->select('dk.Ma_vv', 'hh.Ma_hh', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
-            // ->where('dk.Ma_ct', '=', 'XU')
-            // ->groupBy('dk.Ma_vv', 'hh.Ma_hh')
-            // ->get()
-            // ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
+        // $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        // ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))
+        //     ->where('Ma_ct', '=', 'XU')
+        //     ->groupBy('Ma_vv', 'Ma_hh')
+        //     ->get()
+        //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
         // Chi tiết xuất kho API
 
 
@@ -177,7 +178,8 @@ class ClientHomeController extends Controller
         }
         // Mã hh thay đổi gần nhất
         $lastChange = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
-            ->select('Ma_vv', 'Ma_sp', 'UserNg0') // giả sử có cột updated_at
+            
+            ->select('Ma_vv', 'Ma_sp', 'UserNg0','Ma_hh','Noluong','Ngay_ct','Soluong','So_ct') // giả sử có cột updated_at
             ->where('Ma_ct', '=', 'NX')
             ->orderBy('UserNg0', 'desc')
             ->take(10)
@@ -236,7 +238,7 @@ class ClientHomeController extends Controller
         $ma_hh = urldecode($request->query('ma_hh'));
 
         $details = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
-            ->select('Ngay_ct', 'So_ct', 'Ma_hh', 'Soluong')
+            ->select('Ngay_ct', 'So_ct', 'Ma_hh', 'Soluong', 'Dgvonvnd', 'Dgbanvnd','Dgbannte')
             ->where('Ma_ct', '=', 'XU')
             ->where('Ma_hh', $ma_hh)
             ->orderBy('Ngay_ct')
