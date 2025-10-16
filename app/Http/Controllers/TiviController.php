@@ -84,20 +84,20 @@ public function getSXData(Request $request)
         $data = $query->orderBy('Date', 'asc')->get();
 
         // 🔹 Xuất kho kế toán
-        // $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
-        //     ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
-        //     ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
-        //     ->where('dk.Ma_ct', '=', 'XU')
-        //     ->groupBy('dk.Ma_vv', 'hh.Ma_so')
-        //     ->get()
-        //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_so);
-        //Dùng cái này khi lấy database ketoan
-        $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
-        ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))
-            ->where('Ma_ct', '=', 'XU')
-            ->groupBy('Ma_vv', 'Ma_hh')
+        $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
+            ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
+            ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
+            ->where('dk.Ma_ct', '=', 'XU')
+            ->groupBy('dk.Ma_vv', 'hh.Ma_so')
             ->get()
-            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
+            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_so);
+        //Dùng cái này khi lấy database ketoan
+        // $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        // ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))
+        //     ->where('Ma_ct', '=', 'XU')
+        //     ->groupBy('Ma_vv', 'Ma_hh')
+        //     ->get()
+        //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
 
         // 🔹 Nhập kho
         $nhapKho = DB::table('DataKetoan2025')

@@ -319,7 +319,7 @@
                         tongnhapkhoketoan,
                         tongxuatkhoketoan,
                         xuatkhotheomavvketoan,
-                        xuatKho,
+
                         lastChange
                     } = response;
                     // Hiển thị mã kế toán thay đổi gần nhất
@@ -360,7 +360,7 @@
                         const sum = Math.round(sumSoLuong[row.So_ct] ?? 0);
                         const nhap = Math.round(nhapKho[key]?.total_nhap ?? 0);
                         const nhaptp = Math.round(nhaptpketoan[keyketoan2]?.total_nhaptpketoan ?? 0);
-                        const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
+                        // const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
                         // Xuất kho kế toán theo Ma_vv và Ma_hh
                         const xuatkhomavvkt = Math.round(xuatkhotheomavvketoan[keyketoan2]
                             ?.xuatkhotheomavv_ketoan ?? 0);
@@ -386,7 +386,7 @@
                             const thieu = Math.round(row.Dgbannte) - xuatkhomavvkt;
                             statusLabel =
                                 `<span class="text-danger">📦 Xuất kho chưa đủ đơn hàng (Thiếu: ${thieu})</span>`;
-                        } else if (nhap >= sum && xuat === 0) {
+                        } else if (nhap >= sum && xuatkhomavvkt === 0) {
                             statusLabel = '<span class="text-primary">📦 Chưa xuất kho</span>';
                         } else if (nhap === 0) {
                             statusLabel = '<span class="text-danger">⛔ Chưa nhập kho</span>';

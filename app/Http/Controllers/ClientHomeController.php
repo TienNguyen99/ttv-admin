@@ -95,8 +95,21 @@ class ClientHomeController extends Controller
         //     ->get()
         //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
         //Phan ke toan
-        //Nhập thành phẩm kế toán 
-        $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        //Nhập thành phẩm kế toán ( DÙNG CÁI NÀY KHI LẤY DATABASE KẾ TOÁN)
+        // $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        //     ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
+        //     ->where('Ma_ct', '=', 'NX')
+        //     ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
+        //     ->distinct();
+
+        // $nhaptpketoan = DB::query()
+        //     ->fromSub($sub, 'sub')
+        //     ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
+        //     ->groupBy('Ma_vv', 'Ma_sp')
+        //     ->get()
+        //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
+        // DÙNG CÁI NÀY KHI LẤY DATABASE SẢN XUẤT CHÚ Ý PHẢI ĐỔI CẢ API CÁI NÀY
+                $sub = DB::table('TSoft_NhanTG_SX.dbo.DataKetoan2025')
             ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
             ->where('Ma_ct', '=', 'NX')
             ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
@@ -140,16 +153,6 @@ class ClientHomeController extends Controller
         //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
         // Chi tiết xuất kho API
 
-
-
-
-        // Get Ma_sp from DataKetoan2025 Ketoan
-        // $datamahhketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
-        //     ->select('Ma_vv', 'Ma_sp')
-        //     ->where('Ma_ct', '=', 'NX')
-        //     ->distinct()
-        //     ->get()
-        //     ->keyBy('Ma_vv');
         // Lấy mã HH kế toán chỗ nhập thành phẩm
         $rawData = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->select('Ma_vv', 'Ma_sp')
@@ -186,12 +189,12 @@ class ClientHomeController extends Controller
             ->get();
 
         // XUAT KHO DATA KETOAN
-        $xuatKho = DB::table('TSoft_NhanTG_kt_test.dbo.DataKetoan2024')
-            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_xuat'))
-            ->where('Ma_ct', '=', 'XU')
-            ->groupBy('So_dh', 'Ma_hh')
-            ->get()
-            ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
+        // $xuatKho = DB::table('TSoft_NhanTG_kt_test.dbo.DataKetoan2024')
+        //     ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_xuat'))
+        //     ->where('Ma_ct', '=', 'XU')
+        //     ->groupBy('So_dh', 'Ma_hh')
+        //     ->get()
+        //     ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
 
 
         return response()->json([
@@ -210,7 +213,7 @@ class ClientHomeController extends Controller
             'tongnhapkhoketoan' => $tongnhapkhoketoan,
             'tongxuatkhoketoan' => $tongxuatkhoketoan,
             'xuatkhotheomavvketoan' => $xuatkhotheomavvketoan,
-            'xuatKho' => $xuatKho,
+            
             'lastChange' => $lastChange,
             'dataunipax' => $dataunipax,
             'datagrs' => $datagrs,
@@ -236,7 +239,7 @@ class ClientHomeController extends Controller
     public function getXuatKhoKeToanDetail(Request $request)
     {
         $ma_hh = urldecode($request->query('ma_hh'));
-
+        
         $details = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->select('Ngay_ct', 'So_ct', 'Ma_hh', 'Soluong', 'Dgvonvnd', 'Dgbanvnd','Dgbannte')
             ->where('Ma_ct', '=', 'XU')

@@ -12,8 +12,8 @@ use App\Http\Controllers\UnipaxController;
 use App\Http\Controllers\TiviController;
 use App\Http\Controllers\PhieuUnipax;
 use App\Http\Controllers\QuyDoiMucController;
-
-
+use App\Http\Controllers\OrderController;
+use Google\Service\Dfareporting\Order;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,9 +26,6 @@ use App\Http\Controllers\QuyDoiMucController;
 |
 */
 
-/*Route::get('/', function () {
-    return view('welcome');
-});*/
 
 Route::get('/', [DashboardController::class, 'index']);
 Route::get('/lenh/{so_ct}', [DashboardController::class, 'showDetail']);
@@ -42,13 +39,10 @@ Route::get('/pxkunipax/export/{so_ct}', [PhieuXuatKhoController::class, 'unipaxe
 //Route::get('/suggest-mahh', [HangHoaController::class, 'suggestMaHH'])->name('mahh.suggest');
 // Route for Unipax
 Route::get('/unipax', [UnipaxController::class, 'index'])->name('unipax');
-//Route for DonHang
-Route::get('/ordertolsx', [DonHangController::class, 'ordertolsx'])->name('ordertolsx');
-Route::get('/donhang', [DonHangController::class, 'index'])->name('donhang');
-Route::post('/gui-po', [DonHangController::class, 'guiPO'])->name('gui.po');
+
 //Tắt mở
-Route::post('/mahh/update', [DonHangController::class, 'updateMaHH'])->name('mahh.update');
-Route::get('/suggest-mahh', [DonHangController::class, 'suggestMaHH'])->name('mahh.suggest');
+// Route::post('/mahh/update', [DonHangController::class, 'updateMaHH'])->name('mahh.update');
+// Route::get('/suggest-mahh', [DonHangController::class, 'suggestMaHH'])->name('mahh.suggest');
 //Route for NhapXuatKho
 
 Route::get('/kho', [PhieuNhapXuatKhoController::class, 'index'])->name('kho');
@@ -77,6 +71,9 @@ Route::get('/client/sanxuat', [SanXuatController::class, 'index']);
 Route::get('/api/sanxuat', [SanXuatController::class, 'getData']);
 Route::put('/api/sanxuat/{SttRecN}', [SanXuatController::class, 'update']);
 Route::delete('/api/sanxuat/{SttRecN}', [SanXuatController::class, 'destroy']);
+// Route for Don Hang
+Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
+Route::get('/orders/data', [OrderController::class, 'getData'])->name('orders.data');
 ////////////////////////////////////////////////////////////////////////
 
 

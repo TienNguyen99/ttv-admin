@@ -22,6 +22,10 @@ class DataKetoanOder extends Model
     {
         return $this->belongsTo(CodeHangHoa::class, 'Ma_hh', 'Ma_hh');
     }
+    public function nhanVien()
+    {
+        return $this->belongsTo(CodeNhanVien::class, 'Ma_nv', 'Ma_nv');
+    }
     public function lenhSanxuat()
     {
         return $this->belongsTo(DataKetoanData::class, 'So_ct', 'So_hd');
