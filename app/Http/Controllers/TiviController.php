@@ -38,7 +38,6 @@ public function getSXData(Request $request)
             'DataKetoanData.Ma_kh',
             'DataKetoanData.Dgbanvnd',
             'DataKetoanData.Tien_vnd',
-            
             DB::raw('go.So_dh as So_ct_go'),
             DB::raw('go.Soluong as Soluong_go')
         )
@@ -47,12 +46,25 @@ public function getSXData(Request $request)
                  ->where('go.Ma_ct', '=', 'GO');
         })
         ->where('DataKetoanData.Ma_ct', '=', 'SX')
-        ->whereDate('DataKetoanData.Ngay_ct', '=', $today)
+        // ->whereDate('DataKetoanData.Ngay_ct', '=', $today)
         ->orderBy('DataKetoanData.So_dh')
         ->get();
-    
-    return response()->json($data);
+
+//Tính tổng đơn đã sản xuất
+$totalBySoct = DB::table('DataKetoanData')
+    ->select('So_dh', DB::raw('SUM(Soluong) as total_sx'))
+    ->where('Ma_ct', '=', 'SX')
+    ->groupBy('So_dh')
+    ->pluck('total_sx', 'So_dh');
+
+
+    // ✅ Trả về cả dữ liệu và tổng theo lệnh
+    return response()->json([
+        'data' => $data,
+        'totalBySoct' => $totalBySoct
+    ]);
 }
+
 
 
 
@@ -62,9 +74,11 @@ public function getSXData(Request $request)
         $range = $request->get('range', 7);
         $today = now()->startOfDay(); // reset về 00:00:00
 
-        $query = DataKetoanData::with(['khachHang', 'hangHoa'])
+        $query = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so'])
+        ->select('So_dh', 'Ma_hh', 'Soseri', 'Soluong', 'Ma_kh', 'Date','Ngay_ct')
             ->where('Ma_ct', '=', 'GO')
             ->where('Loaisx', '!=', 'M');
+            
 
         if ($range === 'overdue') {
             // 🔹 Quá hạn tất cả
@@ -120,23 +134,8 @@ public function getSXData(Request $request)
             ->groupBy('Ma_vv', 'Ma_sp')
             ->get()
             ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
-        // 🔹 Lấy ảnh duy nhất theo Ma_so
-        $hinhAnh = DB::table('CodeHangHoa')
-            ->select('Ma_so', DB::raw('MIN(Pngpath) as Pngpath'))
-            ->groupBy('Ma_so')
-            ->get()
-            ->keyBy('Ma_so');
-
-        // 🔹 Gán ảnh vào kết quả
-        $data->transform(function ($item) use ($hinhAnh) {
-            if ($item->hangHoa && $item->hangHoa->Ma_so) {
-                $maSo = $item->hangHoa->Ma_so;
-                $item->hangHoa->Pngpath_fixed = $hinhAnh[$maSo]->Pngpath ?? null;
-            } else {
-                $item->hangHoa->Pngpath_fixed = null;
-            }
-            return $item;
-        });
+        
+        
 
         return response()->json([
             'data' => $data,

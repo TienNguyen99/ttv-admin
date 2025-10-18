@@ -353,7 +353,7 @@
                         for (let i = 3; i >= 0; i--) {
                             if (cdSteps[i][key]) {
                                 step = Math.round(cdSteps[i][key].total);
-                                label = `CĐ${i + 1} - ${step}`;
+                                label = `Công đoạn${i + 1} - ${step}`;
                                 break;
                             }
                         }

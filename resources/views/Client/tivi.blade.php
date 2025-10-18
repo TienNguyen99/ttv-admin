@@ -180,12 +180,14 @@
                             else if (diffDays <= 7) deadlineLabel = `⚠️ Còn ${diffDays} ngày`;
                         }
 
-                        // Hình ảnh
-                        const imageHtml = (row.hang_hoa?.Ma_so && row.hang_hoa?.Pngpath_fixed) ?
-                            `<img src="http://192.168.1.13:8888/hinh_hh/HH_${row.hang_hoa.Ma_so}/${row.hang_hoa.Pngpath_fixed}" 
-                                alt="Hình ảnh" class="clickable-image"
-                                onerror="this.style.display='none'">` :
-                            '';
+
+                        const imageHtml = `
+    <img data-src="http://192.168.1.13:8888/hinh_hh/HH_${row.hang_hoa.Ma_so}/${row.hang_hoa.Pngpath}"
+         alt="${row.hang_hoa.Ten_hh}" 
+         class="clickable-image lazy-image"
+         src="https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg">
+`;
+
 
                         return [
                             index + 1,
@@ -241,7 +243,7 @@
         loadTable(currentMode);
 
         // tự refresh
-        setInterval(() => loadTable(currentMode), 10000);
+        setInterval(() => loadTable(currentMode), 30000);
 
         // bắt phím trái/phải để đổi mode (PC)
         document.addEventListener("keydown", function(e) {
@@ -284,6 +286,17 @@
             currentMode = (currentMode === "overdue14") ? "7" : "overdue14";
             loadTable(currentMode);
         }
+        // Lazy load ảnh khi scroll
+        $(window).on('scroll', function() {
+            $('.lazy-image').each(function() {
+                const img = $(this);
+                if (img.attr('data-src') && img.offset().top < $(window).scrollTop() + $(window).height() +
+                    200) {
+                    img.attr('src', img.attr('data-src'));
+                    img.removeAttr('data-src');
+                }
+            });
+        });
     </script>
 </body>
 

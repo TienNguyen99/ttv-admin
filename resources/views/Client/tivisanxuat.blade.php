@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tivi Sản Xuất - Lệnh SX Hôm Nay</title>
+    <title>Tivi Sản Xuất - Lệnh SX 24h qua</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
@@ -36,24 +36,7 @@
             text-transform: uppercase;
             font-size: 15px;
             border-bottom: 2px solid #d0d7e2;
-            border-top: none;
-            border-left: none;
-            border-right: none;
-            letter-spacing: 0.3px;
             padding: 12px 8px;
-        }
-
-        thead {
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            background: #f8fafc;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        td,
-        th {
-            vertical-align: middle !important;
         }
 
         .progress {
@@ -73,10 +56,6 @@
             font-weight: 600;
         }
 
-        .subtotal-row td {
-            border-top: 3px solid #ffffff;
-        }
-
         .clickable-image {
             transition: transform 0.2s ease, box-shadow 0.2s ease;
             cursor: zoom-in;
@@ -91,7 +70,6 @@
             z-index: 5;
         }
 
-        /* ✅ Loading mượt khi refresh */
         table.refreshing {
             opacity: 0.4;
         }
@@ -117,13 +95,11 @@
             }
         }
 
-        /* ✅ Ảnh trong modal phóng to */
         #modalImage {
             max-height: 90vh;
             object-fit: contain;
             background-color: rgba(0, 0, 0, 0.85);
             border-radius: 10px;
-            transition: transform 0.3s ease, opacity 0.3s ease;
         }
 
         .modal-content {
@@ -131,24 +107,16 @@
             border: none;
             box-shadow: none;
         }
-
-        /* Hiệu ứng mượt khi hiện modal */
-        .modal.fade .modal-dialog {
-            transform: scale(0.95);
-            opacity: 0;
-            transition: all 0.25s ease-out;
-        }
-
-        .modal.show .modal-dialog {
-            transform: scale(1);
-            opacity: 1;
-        }
     </style>
 </head>
 
 <body>
     <div class="container-fluid mt-4">
-        <h1 class="text-center mb-4">LỆNH ĐANG SẢN XUẤT NGÀY {{ now()->format('d/m/Y') }}</h1>
+        <h1 class="text-center mb-3">LỆNH ĐANG SẢN XUẤT TRONG 24 GIỜ QUA</h1>
+
+        <div class="text-center mb-3">
+            <button class="btn btn-primary" onclick="loadSXData()">🔄 Làm mới</button>
+        </div>
 
         <table class="table table-bordered table-striped text-center align-middle" id="sxTable">
             <thead>
@@ -161,6 +129,7 @@
                     <th>Tên NV</th>
                     <th>Số lượng đơn</th>
                     <th>Sản xuất</th>
+                    <th>Tổng SX</th>
                     <th>Lỗi</th>
                     <th>ĐVT</th>
                     <th>%</th>
@@ -168,13 +137,13 @@
             </thead>
             <tbody>
                 <tr>
-                    <td colspan="11">Đang tải dữ liệu...</td>
+                    <td colspan="12">Đang tải dữ liệu...</td>
                 </tr>
             </tbody>
         </table>
     </div>
 
-    <!-- ✅ Modal xem ảnh to -->
+    <!-- Modal ảnh -->
     <div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content bg-transparent border-0 shadow-none position-relative">
@@ -186,7 +155,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
     <script>
         async function loadSXData() {
             const table = document.querySelector('#sxTable');
@@ -195,18 +163,29 @@
 
             try {
                 const res = await fetch('http://192.168.1.13:8888/api/tivi/sx-data');
-                const data = await res.json();
+                const {
+                    data,
+                    totalBySoct
+                } = await res.json();
+
+                // ✅ Lọc dữ liệu trong vòng 24h qua
+                const now = new Date();
+                const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                const filteredData = data.filter(item => {
+                    const ngay = new Date(item.Ngay_ct);
+                    return ngay >= cutoff && ngay <= now;
+                });
 
                 tbody.innerHTML = '';
 
-                if (!data || data.length === 0) {
+                if (filteredData.length === 0) {
                     tbody.innerHTML =
-                        `<tr><td colspan="11" class="text-center text-warning">Không có lệnh SX hôm nay</td></tr>`;
+                        `<tr><td colspan="12" class="text-center text-warning">Không có lệnh SX trong 24h qua</td></tr>`;
                     return;
                 }
 
                 const groups = {};
-                data.forEach(item => {
+                filteredData.forEach(item => {
                     const key = item.So_ct_go ?? 'Chưa có lệnh';
                     if (!groups[key]) groups[key] = [];
                     groups[key].push(item);
@@ -223,31 +202,33 @@
                             'bg-danger';
 
                         const imageHtml = `
-              <img src="http://192.168.1.13:8888/hinh_hh/HH_${item.hang_hoa.Ma_so}/${item.hang_hoa.Pngpath}" 
-                   alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
-            `;
+                            <img src="http://192.168.1.13:8888/hinh_hh/HH_${item.hang_hoa.Ma_so}/${item.hang_hoa.Pngpath}" 
+                                 alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
+                        `;
 
                         const row = `
-              <tr>
-                <td>${item.So_ct_go ?? ''}</td>
-                <td>${item.Ma_hh ?? ''}</td>
-                <td>${imageHtml}</td>
-                <td>${item.hang_hoa?.Ten_hh ?? ''}</td>
-                <td>${item.Ma_ko ?? ''}</td>
-                <td>${item.nhan_vien?.Ten_nv ?? ''}</td>
-                <td>${soluongGO.toLocaleString('vi-VN')}</td>
-                <td>${Number(item.Soluong ?? 0).toLocaleString('vi-VN')}</td>
-                <td>${Math.round(item.Tien_vnd ?? 0)}</td>
-                <td>${item.hang_hoa?.Dvt ?? ''}</td>
-                <td>
-                  <div class="progress">
-                    <div class="progress-bar ${barColor}" style="width:${Math.min(pct, 100)}%">
-                      ${pct}%
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            `;
+                            <tr>
+                                <td>${item.So_ct_go ?? ''}</td>
+                                <td>${item.Ma_hh ?? ''}</td>
+                                <td>${imageHtml}</td>
+                                <td>${item.hang_hoa?.Ten_hh ?? ''}</td>
+                                <td>${item.Ma_ko ?? ''}</td>
+                                <td>${item.nhan_vien?.Ten_nv ?? ''}</td>
+                                <td>${soluongGO.toLocaleString('vi-VN')}</td>
+                                <td>${Number(item.Soluong ?? 0).toLocaleString('vi-VN')}</td>
+                                <td>${Number(totalBySoct?.[item.So_dh] ?? 0).toLocaleString('vi-VN')}</td>
+
+                                <td>${Math.round(item.Tien_vnd ?? 0)}</td>
+                                <td>${item.hang_hoa?.Dvt ?? ''}</td>
+                                <td>
+                                    <div class="progress">
+                                        <div class="progress-bar ${barColor}" style="width:${Math.min(pct, 100)}%">
+                                            ${pct}%
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
                         tbody.insertAdjacentHTML('beforeend', row);
                     });
 
@@ -255,32 +236,31 @@
                     const barColor = pctTong >= 90 ? 'bg-success' : pctTong >= 60 ? 'bg-warning' : 'bg-danger';
 
                     const subtotalRow = `
-            <tr class="subtotal-row">
-              <td colspan="6"> ${soct}</td>
-              <td>${soluongGO.toLocaleString('vi-VN')}</td>
-              <td>${tongSX.toLocaleString('vi-VN')}</td>
-              <td colspan="2"></td>
-              <td>
-                <div class="progress">
-                  <div class="progress-bar ${barColor}" style="width:${Math.min(pctTong, 100)}%">
-                    ${pctTong}%
-                  </div>
-                </div>
-              </td>
-            </tr>
-          `;
+                        <tr class="subtotal-row">
+                            <td colspan="7">${soct}</td>
+                            <td colspan="1">${tongSX.toLocaleString('vi-VN')}</td>
+                            <td colspan="2"></td>
+                            <td>
+                                <div class="progress">
+                                    <div class="progress-bar ${barColor}" style="width:${Math.min(pctTong, 100)}%">
+                                        ${pctTong}%
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
                     tbody.insertAdjacentHTML('beforeend', subtotalRow);
                 });
 
             } catch (error) {
                 console.error(error);
-                tbody.innerHTML = `<tr><td colspan="11" class="text-danger text-center">Lỗi tải dữ liệu!</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="12" class="text-danger text-center">Lỗi tải dữ liệu!</td></tr>`;
             } finally {
                 table.classList.remove('refreshing');
             }
         }
 
-        // ✅ Click ảnh để mở modal phóng to
+        // Click ảnh để phóng to
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('clickable-image')) {
                 const modalImg = document.getElementById('modalImage');
@@ -290,7 +270,7 @@
             }
         });
 
-        // ✅ Gọi lần đầu & auto refresh mỗi 10s
+        // Gọi lần đầu & auto refresh mỗi 10s
         loadSXData();
         setInterval(loadSXData, 10000);
     </script>

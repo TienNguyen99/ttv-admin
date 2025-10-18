@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>THEO DÕI LỆNH GRS</title>
+    <title>THEO DÕI LỆNH SẢN XUẤT TAGTIME</title>
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -44,8 +44,28 @@
 
 <body>
     <div class="container-fluid mt-4">
-        <h3 class="mb-4">📋 THEO DÕI LỆNH GRS</h3>
-
+        <h3 class="mb-4">📋 BẢNG THEO DÕI LỆNH SẢN XUẤT TAGTIME</h3>
+        <!-- ✅ Danh sách 10 thay đổi gần nhất -->
+        <div class="mb-3">
+            <label class="form-label">Mã kế toán thay đổi gần nhất:</label>
+            <table class="table table-sm table-bordered" id="last-changes-table" style="max-width:600px;">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Tìm số CT</th>
+                        <th>Mã SP</th>
+                        <th>Mã nguyên liệu</th>
+                        <th>Vụ việc</th>
+                        <th>Tiêu hao nguyên liệu</th>
+                        <th>Số lượng nhập kho</th>
+                        <th>Định mức</th>
+                        <th>Ngày chỉnh sửa</th>
+                        <th>Ngày nhập kho</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
         <!-- 🔍 Bộ lọc -->
         <div class="row mb-3">
             <div class="col-md-3">
@@ -198,6 +218,9 @@
                                 <th>Số chứng từ</th>
                                 <th>Mã hàng</th>
                                 <th>Số lượng</th>
+                                <th>Đơn giá vốn</th>
+                                <th>Đơn giá bán</th>
+                                <th>Đơn giá $</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -296,10 +319,30 @@
                         tongnhapkhoketoan,
                         tongxuatkhoketoan,
                         xuatkhotheomavvketoan,
-                        xuatKho,
+
                         lastChange
                     } = response;
+                    // Hiển thị mã kế toán thay đổi gần nhất
+                    const tbodyLast = document.querySelector("#last-changes-table tbody");
 
+                    if (lastChange && lastChange.length > 0) {
+                        tbodyLast.innerHTML = lastChange.map((item, idx) => `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td>${item.So_ct}</td>
+                            <td>${item.Ma_sp}</td>
+                            <td>${item.Ma_hh}</td>
+                            <td>${item.Ma_vv}</td>
+                            <td>${Number(item.Soluong).toFixed(2)}</td>
+                            <td>${Number(item.Noluong).toFixed(2)}</td>
+<td>${(item.Soluong / item.Noluong).toFixed(4)}</td>
+
+                            <td>${new Date(item.UserNg0).toLocaleDateString("vi-VN")}</td>
+                            <td>${new Date(item.Ngay_ct).toLocaleDateString("vi-VN")}</td>
+                        </tr>`).join("");
+                    } else {
+                        tbodyLast.innerHTML = `<tr><td colspan="4" class="text-center">Không có dữ liệu</td></tr>`;
+                    }
                     const rows = datagrs.map((row, index) => {
                         const key = `${row.So_ct}|${row.Ma_hh}`;
                         const keyketoan = `${row.So_dh}|${row.Ma_hh}`;
@@ -317,7 +360,7 @@
                         const sum = Math.round(sumSoLuong[row.So_ct] ?? 0);
                         const nhap = Math.round(nhapKho[key]?.total_nhap ?? 0);
                         const nhaptp = Math.round(nhaptpketoan[keyketoan2]?.total_nhaptpketoan ?? 0);
-                        const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
+                        // const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
                         // Xuất kho kế toán theo Ma_vv và Ma_hh
                         const xuatkhomavvkt = Math.round(xuatkhotheomavvketoan[keyketoan2]
                             ?.xuatkhotheomavv_ketoan ?? 0);
@@ -343,7 +386,7 @@
                             const thieu = Math.round(row.Dgbannte) - xuatkhomavvkt;
                             statusLabel =
                                 `<span class="text-danger">📦 Xuất kho chưa đủ đơn hàng (Thiếu: ${thieu})</span>`;
-                        } else if (nhap >= sum && xuat === 0) {
+                        } else if (nhap >= sum && xuatkhomavvkt === 0) {
                             statusLabel = '<span class="text-primary">📦 Chưa xuất kho</span>';
                         } else if (nhap === 0) {
                             statusLabel = '<span class="text-danger">⛔ Chưa nhập kho</span>';
@@ -583,7 +626,9 @@
                         <td>${d.So_ct}</td>
                         <td>${d.Ma_hh}</td>
                         <td>${Number(d.Soluong).toFixed(4)}</td>
-                        
+                        <td>${Number(d.Dgvonvnd).toLocaleString("vi-VN")}</td>
+                        <td>${Number(d.Dgbanvnd).toLocaleString("vi-VN")}</td>
+                        <td>${Number(d.Dgbannte).toLocaleString("en-US")}</td>
                       </tr>
                     `);
                         });
