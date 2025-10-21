@@ -430,9 +430,6 @@
                     if (!dataTable) {
                         dataTable = $('#productionTable').DataTable({
                             data: rows,
-                            // columns: Array(25).fill().map((_, i) => ({
-                            //     title: $('thead th').eq(i).text()
-                            // })),
                             pageLength: 25,
                             language: {
                                 search: "Tìm kiếm:",
@@ -693,7 +690,7 @@
                             <td>${d.DgiaiV}</td>
                             <td>${d.Ma_sp}</td>
                             <td>${d.Ma_hh}</td>
-                            <td>${Math.round(d.Soluong)}</td>
+                            <td>${Number(d.Soluong).toFixed(4)}</td>
                             <td>${Math.round(d.Noluong)}</td>
                             <td>${dinhmuc}</td>
                         </tr>

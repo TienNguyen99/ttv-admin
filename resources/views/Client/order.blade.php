@@ -47,6 +47,7 @@
                 <th>Mã KD</th>
                 <th>PO</th>
                 <th>Khách hàng</th>
+                <th>Mã hàng hóa</th>
                 <th>Hàng hóa</th>
                 <th>Màu</th>
                 <th>Size</th>
@@ -54,6 +55,7 @@
                 <th>ĐVT</th>
                 <th>Số lượng</th>
                 <th>Lệnh</th>
+                <th>Số CT LSX</th>
             </tr>
         </thead>
         <tbody></tbody>
@@ -63,10 +65,10 @@
         $(function() {
             const fields = [
                 'Ngay_ct', 'So_ct', 'Soseri', 'DgiaiV',
-                'khach_hang.Ten_kh', 'hang_hoa.Ten_hh',
+                'khach_hang.Ten_kh', 'Ma_hh', 'hang_hoa.Ten_hh',
                 'Ma_ch',
                 'Msize', 'Ma_so', 'hang_hoa.Dvt',
-                'Soluong', 'lenh_sanxuat.So_dh'
+                'Soluong', 'lenh_sanxuat.So_dh', 'lenh_sanxuat.So_ct'
             ];
 
             $('#ordersTable').DataTable({

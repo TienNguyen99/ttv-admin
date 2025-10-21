@@ -182,10 +182,10 @@
 
 
                         const imageHtml = `
-    <img data-src="http://192.168.1.13:8888/hinh_hh/HH_${row.hang_hoa.Ma_so}/${row.hang_hoa.Pngpath}"
+    <img src="http://192.168.1.13:8888/hinh_hh/HH_${row.hang_hoa.Ma_so}/${row.hang_hoa.Pngpath}"
          alt="${row.hang_hoa.Ten_hh}" 
-         class="clickable-image lazy-image"
-         src="https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg">
+         class="clickable-image"
+         onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg'">
 `;
 
 
@@ -286,17 +286,6 @@
             currentMode = (currentMode === "overdue14") ? "7" : "overdue14";
             loadTable(currentMode);
         }
-        // Lazy load ảnh khi scroll
-        $(window).on('scroll', function() {
-            $('.lazy-image').each(function() {
-                const img = $(this);
-                if (img.attr('data-src') && img.offset().top < $(window).scrollTop() + $(window).height() +
-                    200) {
-                    img.attr('src', img.attr('data-src'));
-                    img.removeAttr('data-src');
-                }
-            });
-        });
     </script>
 </body>
 
