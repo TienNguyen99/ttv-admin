@@ -20,7 +20,7 @@ class TiviController extends Controller
     // API hiển thị dữ liệu Ma_ct = 'SX' trong ngày
 public function getSXData(Request $request)
 {
-    $today = now()->startOfDay();
+    
 
     // Lấy dữ liệu SX, đồng thời join để lấy So_ct từ chứng từ GO cùng So_dh
     $data = DataKetoanData::with([
