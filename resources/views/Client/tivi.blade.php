@@ -182,8 +182,8 @@
 
 
                         const imageHtml = `
-    <img src="http://192.168.1.13:8888/hinh_hh/HH_${row.hang_hoa.Ma_so}/${row.hang_hoa.Pngpath}"
-         alt="${row.hang_hoa.Ten_hh}" 
+    <img src="http://192.168.1.13:8888/hinh_hh/HH_${row.hang_hoa?.Ma_so}/${row.hang_hoa?.Pngpath}"
+         alt="${row.hang_hoa?.Ten_hh}" 
          class="clickable-image"
          onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg'">
 `;

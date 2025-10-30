@@ -4,17 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tivi Sản Xuất - Lệnh SX 24h qua</title>
+    <title>Tivi Sản Xuất - Lệnh SX 24h qua & Trạng thái Máy</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
+        /* CSS gốc giữ nguyên */
         body {
             background-color: #f9fafc;
             color: #1e293b;
             font-size: 18px;
         }
 
-        h1 {
+        h1,
+        h2 {
             color: #1e293b;
             font-weight: 700;
             letter-spacing: 0.5px;
@@ -27,6 +29,7 @@
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
             position: relative;
             transition: opacity 0.4s ease-in-out;
+            margin-bottom: 25px;
         }
 
         thead th {
@@ -107,6 +110,40 @@
             border: none;
             box-shadow: none;
         }
+
+        /* CSS MỚI CHO SƠ ĐỒ & TRẠNG THÁI MÁY */
+        .floor-section {
+            padding: 20px;
+            margin-top: 30px;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        .status-active {
+            color: #15803d;
+            /* Xanh lá đậm */
+            font-weight: 600;
+        }
+
+        .status-inactive {
+            color: #b91c1c;
+            /* Đỏ đậm */
+            font-weight: 600;
+        }
+
+        .floor-map-placeholder {
+            min-height: 200px;
+            background-color: #e2e8f0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            font-style: italic;
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 
@@ -133,17 +170,65 @@
                     <th>Lỗi</th>
                     <th>ĐVT</th>
                     <th>%</th>
+                    <th>Bộ phận</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td colspan="12">Đang tải dữ liệu...</td>
+                    <td colspan="13">Đang tải dữ liệu...</td>
                 </tr>
             </tbody>
         </table>
+
+        <div id="machineStatusSection" class="floor-section">
+            <h2 class="text-center mb-4">SƠ ĐỒ & TRẠNG THÁI MÁY MÓC</h2>
+
+            <div class="row">
+                <div class="col-lg-6">
+                    <h3 class="h4 mb-3 text-primary">Tầng 1 - Máy Đang Hoạt Động</h3>
+                    <div class="floor-map-placeholder">
+                        <p>Placeholder: Sơ đồ tầng 1 (Máy)</p>
+                    </div>
+                    <table class="table table-bordered table-hover text-center align-middle" id="floor1Table">
+                        <thead>
+                            <tr>
+                                <th>Tên Máy</th>
+                                <th>Lệnh SX</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="3">Chờ dữ liệu sản xuất...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="col-lg-6">
+                    <h3 class="h4 mb-3 text-primary">Tầng 2 - Máy Đang Hoạt Động</h3>
+                    <div class="floor-map-placeholder">
+                        <p>Placeholder: Sơ đồ tầng 2 (Máy)</p>
+                    </div>
+                    <table class="table table-bordered table-hover text-center align-middle" id="floor2Table">
+                        <thead>
+                            <tr>
+                                <th>Tên Máy</th>
+                                <th>Lệnh SX</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="3">Chờ dữ liệu sản xuất...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Modal ảnh -->
     <div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content bg-transparent border-0 shadow-none position-relative">
@@ -156,10 +241,104 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        /**
+         * Ánh xạ mã Bộ phận (DgiaiV) sang Tên Máy
+         * Tạm thời giả định tất cả máy đều ở Tầng 1 cho dễ quản lý
+         */
+        const MACHINE_MAP = {
+            'DET': {
+                name: 'Máy Dệt',
+                floor: 1
+            },
+            'BANGTAI': {
+                name: 'Máy Băng Tải',
+                floor: 2
+            },
+            'BANIN1': {
+                name: 'Bàn In 1',
+                floor: 1
+            },
+            'BANIN2': {
+                name: 'Bàn In 2',
+                floor: 2 // Ví dụ máy này ở Tầng 2
+            },
+            // Thêm các ánh xạ khác tại đây
+        };
+
+        /**
+         * HÀM MỚI: Tổng hợp trạng thái máy từ dữ liệu sản xuất (SX)
+         * @param {Array} filteredData - Dữ liệu SX đã lọc trong 24h qua
+         */
+        function deriveMachineStatusFromSXData(filteredData) {
+            const table1 = document.querySelector('#floor1Table tbody');
+            const table2 = document.querySelector('#floor2Table tbody');
+
+            // Xóa nội dung cũ
+            table1.innerHTML = '';
+            table2.innerHTML = '';
+
+            const activeMachines = {};
+
+            filteredData.forEach(item => {
+                const maBoPhan = item.DgiaiV?.toUpperCase();
+
+                if (maBoPhan && MACHINE_MAP[maBoPhan]) {
+                    const machine = MACHINE_MAP[maBoPhan];
+                    const machineKey = `${machine.name}_${machine.floor}`;
+
+                    // Giả định máy đang hoạt động nếu có lệnh SX trong 24h qua
+                    if (!activeMachines[machineKey]) {
+                        activeMachines[machineKey] = {
+                            Ten_may: machine.name,
+                            Lenh_sx: item.So_ct_go ?? 'N/A',
+                            Trang_thai: 'Hoạt động',
+                            Tang: machine.floor
+                        };
+                    } else {
+                        // Nếu cùng một máy có nhiều lệnh trong 24h, hiển thị lệnh cuối cùng hoặc ghi đè
+                        activeMachines[machineKey].Lenh_sx = item.So_ct_go ?? 'N/A';
+                    }
+                }
+            });
+
+            const floor1Data = Object.values(activeMachines).filter(m => m.Tang === 1);
+            const floor2Data = Object.values(activeMachines).filter(m => m.Tang === 2);
+
+            // Hàm render bảng trạng thái máy
+            function renderMachineTable(tbodyElement, data, floor) {
+                if (data.length === 0) {
+                    tbodyElement.innerHTML =
+                        `<tr><td colspan="3" class="text-muted">Tầng ${floor}: Không có máy nào đang chạy lệnh SX trong 24h.</td></tr>`;
+                    return;
+                }
+
+                data.forEach(machine => {
+                    const statusClass = 'status-active'; // Vì chỉ hiển thị máy đang hoạt động
+                    const statusText = 'ĐANG CHẠY';
+
+                    const row = `
+                        <tr>
+                            <td>${machine.Ten_may}</td>
+                            <td>${machine.Lenh_sx}</td>
+                            <td class="${statusClass}">${statusText}</td>
+                        </tr>
+                    `;
+                    tbodyElement.insertAdjacentHTML('beforeend', row);
+                });
+            }
+
+            renderMachineTable(table1, floor1Data, 1);
+            renderMachineTable(table2, floor2Data, 2);
+        }
+
+        /**
+         * HÀM GỐC: Tải dữ liệu sản xuất
+         */
         async function loadSXData() {
             const table = document.querySelector('#sxTable');
             const tbody = table.querySelector('tbody');
             table.classList.add('refreshing');
+            let filteredData = []; // Khai báo biến để lưu dữ liệu đã lọc
 
             try {
                 const res = await fetch('http://192.168.1.13:8888/api/tivi/sx-data');
@@ -168,10 +347,10 @@
                     totalBySoct
                 } = await res.json();
 
-                // ✅ Lọc dữ liệu trong vòng 24h qua
+                // 1. Lọc dữ liệu trong vòng 24h qua
                 const now = new Date();
                 const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                const filteredData = data.filter(item => {
+                filteredData = data.filter(item => { // Gán vào biến filteredData
                     const ngay = new Date(item.Ngay_ct);
                     return ngay >= cutoff && ngay <= now;
                 });
@@ -180,10 +359,13 @@
 
                 if (filteredData.length === 0) {
                     tbody.innerHTML =
-                        `<tr><td colspan="12" class="text-center text-warning">Không có lệnh SX trong 24h qua</td></tr>`;
+                        `<tr><td colspan="13" class="text-center text-warning">Không có lệnh SX trong 24h qua</td></tr>`;
+                    // Dù không có lệnh, vẫn chạy hàm status để hiển thị thông báo
+                    deriveMachineStatusFromSXData(filteredData);
                     return;
                 }
 
+                // 2. Render bảng sản xuất
                 const groups = {};
                 filteredData.forEach(item => {
                     const key = item.So_ct_go ?? 'Chưa có lệnh';
@@ -196,14 +378,15 @@
                     const soluongGO = Number(rows[0]?.Soluong_go ?? 0);
 
                     rows.forEach(item => {
-                        tongSX += Number(item.Soluong ?? 0);
+                        // tongSX += Number(item.Soluong ?? 0);
+                        tongSX = Number(totalBySoct?.[item.So_dh] ?? 0);
                         const pct = soluongGO > 0 ? (item.Soluong / soluongGO * 100).toFixed(1) : 0;
                         const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ? 'bg-warning' :
                             'bg-danger';
 
                         const imageHtml = `
                             <img src="http://192.168.1.13:8888/hinh_hh/HH_${item.hang_hoa.Ma_so}/${item.hang_hoa.Pngpath}" 
-                                 alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
+                                alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
                         `;
 
                         const row = `
@@ -216,7 +399,7 @@
                                 <td>${item.nhan_vien?.Ten_nv ?? ''}</td>
                                 <td>${soluongGO.toLocaleString('vi-VN')}</td>
                                 <td>${Number(item.Soluong ?? 0).toLocaleString('vi-VN')}</td>
-                                <td>${Number(totalBySoct?.[item.So_dh] ?? 0).toLocaleString('vi-VN')}</td>
+                                <td>${Number(tongSX ?? 0).toLocaleString('vi-VN')}</td>
 
                                 <td>${Math.round(item.Tien_vnd ?? 0)}</td>
                                 <td>${item.hang_hoa?.Dvt ?? ''}</td>
@@ -227,6 +410,7 @@
                                         </div>
                                     </div>
                                 </td>
+                                <td>${item.DgiaiV ?? ''}</td>
                             </tr>
                         `;
                         tbody.insertAdjacentHTML('beforeend', row);
@@ -239,7 +423,7 @@
                         <tr class="subtotal-row">
                             <td colspan="7">${soct}</td>
                             <td colspan="1">${tongSX.toLocaleString('vi-VN')}</td>
-                            <td colspan="2"></td>
+                            <td colspan="3"></td>
                             <td>
                                 <div class="progress">
                                     <div class="progress-bar ${barColor}" style="width:${Math.min(pctTong, 100)}%">
@@ -247,20 +431,26 @@
                                     </div>
                                 </div>
                             </td>
+                            <td></td>
                         </tr>
                     `;
                     tbody.insertAdjacentHTML('beforeend', subtotalRow);
                 });
 
+                // 3. Gọi hàm cập nhật trạng thái máy sau khi có dữ liệu SX
+                deriveMachineStatusFromSXData(filteredData);
+
             } catch (error) {
-                console.error(error);
-                tbody.innerHTML = `<tr><td colspan="12" class="text-danger text-center">Lỗi tải dữ liệu!</td></tr>`;
+                console.error("Lỗi tải dữ liệu SX:", error);
+                tbody.innerHTML = `<tr><td colspan="13" class="text-danger text-center">Lỗi tải dữ liệu SX!</td></tr>`;
+                // Nếu lỗi, vẫn gọi hàm status với dữ liệu rỗng để cập nhật bảng máy
+                deriveMachineStatusFromSXData([]);
             } finally {
                 table.classList.remove('refreshing');
             }
         }
 
-        // Click ảnh để phóng to
+        // Click ảnh để phóng to (Giữ nguyên)
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('clickable-image')) {
                 const modalImg = document.getElementById('modalImage');

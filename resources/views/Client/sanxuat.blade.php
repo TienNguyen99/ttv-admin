@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Danh sách Sản Xuất</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
     <style>
         body {
@@ -22,6 +23,8 @@
         input[type="text"] {
             width: 100%;
             box-sizing: border-box;
+            padding: 5px;
+            border: 1px solid #ccc;
         }
 
         button {
@@ -62,22 +65,26 @@
 
     <script>
         $(document).ready(function() {
-            axios.get('http://192.168.1.13:8888/api/sanxuat')
+            axios.defaults.headers.common['X-CSRF-TOKEN'] = $('meta[name="csrf-token"]').attr('content');
+            const API_BASE_URL = 'http://192.168.1.13:8888/api/sanxuat';
+
+            axios.get(API_BASE_URL)
                 .then(response => {
                     let data = response.data;
                     let tableBody = $('#sanxuat-table tbody');
 
+                    // --- Tạo hàng dữ liệu ---
                     data.forEach(item => {
                         tableBody.append(`
                             <tr data-id="${item.SttRecN}">
-                                <td class="editable">${item.Ngay_ct ?? ''}</td>
-                                <td class="editable">${item.So_ct ?? ''}</td>
-                                <td class="editable">${item.Ma_nv ?? ''}</td>
-                                <td class="editable">${item.Ma_ko ?? ''}</td>
-                                <td class="editable">${item.Ma_hh ?? ''}</td>
-                                <td class="editable">${item.Soluong ?? ''}</td>
-                                <td class="editable">${item.Tien_vnd ?? ''}</td>
-                                <td class="editable">${item.So_dh ?? ''}</td>
+                                <td class="editable" data-field="Ngay_ct">${item.Ngay_ct ?? ''}</td>
+                                <td class="editable" data-field="So_ct">${item.So_ct ?? ''}</td>
+                                <td class="editable" data-field="Ma_nv">${item.Ma_nv ?? ''}</td>
+                                <td class="editable" data-field="Ma_ko">${item.Ma_ko ?? ''}</td>
+                                <td class="editable" data-field="Ma_hh">${item.Ma_hh ?? ''}</td>
+                                <td class="editable" data-field="Soluong">${item.Soluong ?? ''}</td>
+                                <td class="editable" data-field="Tien_vnd">${item.Tien_vnd ?? ''}</td>
+                                <td class="editable" data-field="So_dh">${item.So_dh ?? ''}</td>
                                 <td>${item.khach_hang ? item.khach_hang.Ten_kh : ''}</td>
                                 <td>${item.hang_hoa ? item.hang_hoa.Ten_hh : ''}</td>
                                 <td>
@@ -96,66 +103,69 @@
                         }
                     });
 
-                    // Click Sửa
+                    // --- Sửa ---
                     $('#sanxuat-table').on('click', '.edit-btn', function() {
                         let row = $(this).closest('tr');
                         row.find('.editable').each(function() {
-                            let val = $(this).text();
+                            let val = $(this).text().trim();
                             $(this).html(`<input type="text" value="${val}" />`);
                         });
                         row.find('.edit-btn').hide();
                         row.find('.save-btn').show();
                     });
 
-                    // Click Lưu
+                    // --- Lưu (Cách 1: chỉ gửi các ô được sửa) ---
                     $('#sanxuat-table').on('click', '.save-btn', function() {
-                        let row = $(this).closest('tr');
+                        let button = $(this);
+                        let row = button.closest('tr');
                         let SttRecN = row.data('id');
+                        let updateData = {};
 
-                        let Ngay_ct = row.find('td:eq(0) input').val();
-                        let So_ct = row.find('td:eq(1) input').val();
-                        let Ma_nv = row.find('td:eq(2) input').val();
-                        let Ma_ko = row.find('td:eq(3) input').val();
-                        let Ma_hh = row.find('td:eq(4) input').val();
-                        let Soluong = row.find('td:eq(5) input').val();
-                        let Tien_vnd = row.find('td:eq(6) input').val();
-                        let So_dh = row.find('td:eq(7) input').val();
-
-                        axios.put(`http://192.168.1.13:8888/api/sanxuat/${SttRecN}`, {
-                            Ngay_ct,
-                            So_ct,
-                            Ma_nv,
-                            Ma_ko,
-                            Ma_hh,
-                            Soluong,
-                            Tien_vnd,
-                            So_dh
-                        }).then(res => {
-                            alert("Cập nhật thành công!");
-                            row.find('td:eq(0)').text(Ngay_ct);
-                            row.find('td:eq(1)').text(So_ct);
-                            row.find('td:eq(2)').text(Ma_nv);
-                            row.find('td:eq(3)').text(Ma_ko);
-                            row.find('td:eq(4)').text(Ma_hh);
-                            row.find('td:eq(5)').text(Soluong);
-                            row.find('td:eq(6)').text(Tien_vnd);
-                            row.find('td:eq(7)').text(So_dh);
-
-                            row.find('.save-btn').hide();
-                            row.find('.edit-btn').show();
-                        }).catch(err => {
-                            console.error(err);
-                            alert("Lỗi khi cập nhật!");
+                        // chỉ lấy các field có input (nghĩa là user đang sửa)
+                        row.find('td.editable').each(function() {
+                            let field = $(this).data('field');
+                            let input = $(this).find('input');
+                            if (input.length) {
+                                updateData[field] = input.val();
+                            }
                         });
+
+                        if (Object.keys(updateData).length === 0) {
+                            alert("Không có dữ liệu nào thay đổi!");
+                            return;
+                        }
+
+                        axios.put(`${API_BASE_URL}/${SttRecN}`, updateData)
+                            .then(res => {
+                                alert("Cập nhật thành công!");
+                                // render lại giá trị
+                                row.find('.editable').each(function() {
+                                    let field = $(this).data('field');
+                                    if (updateData[field] !== undefined) {
+                                        $(this).text(updateData[field]);
+                                    } else {
+                                        $(this).text($(this).find('input').val() || $(this)
+                                            .text());
+                                    }
+                                });
+
+                                row.find('.save-btn').hide();
+                                row.find('.edit-btn').show();
+                            })
+                            .catch(err => {
+                                console.error(err);
+                                alert("Lỗi khi cập nhật!");
+                            });
                     });
 
-                    // Click Xóa
+                    // --- Xóa ---
                     $('#sanxuat-table').on('click', '.delete-btn', function() {
                         if (!confirm("Bạn có chắc muốn xóa dòng này?")) return;
+
                         let row = $(this).closest('tr');
                         let SttRecN = row.data('id');
 
-                        axios.delete(`http://192.168.1.13:8888/api/sanxuat/${SttRecN}`)
+                        axios.delete(`${API_BASE_URL}/${SttRecN}`)
                             .then(res => {
                                 alert("Xóa thành công!");
                                 table.row(row).remove().draw();

@@ -38,6 +38,7 @@ public function getSXData(Request $request)
             'DataKetoanData.Ma_kh',
             'DataKetoanData.Dgbanvnd',
             'DataKetoanData.Tien_vnd',
+            'DataKetoanData.DgiaiV',
             DB::raw('go.So_dh as So_ct_go'),
             DB::raw('go.Soluong as Soluong_go')
         )
