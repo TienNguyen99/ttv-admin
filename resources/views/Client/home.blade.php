@@ -300,7 +300,7 @@
         let dataTable;
 
         function fetchData() {
-            fetch("http://192.168.1.13:8888/api/production-orders")
+            fetch("/api/production-orders")
                 .then(res => res.json())
                 .then(response => {
                     const {
@@ -537,7 +537,7 @@
             const [so_dh, ma_hh] = key.split("|");
 
             fetch(
-                    `http://192.168.1.13:8888/api/nhapkho-chi-tiet?so_dh=${encodeURIComponent(so_dh)}&ma_hh=${encodeURIComponent(ma_hh)}`
+                    `/api/nhapkho-chi-tiet?so_dh=${encodeURIComponent(so_dh)}&ma_hh=${encodeURIComponent(ma_hh)}`
                 )
                 .then(res => res.json())
                 .then(details => {
@@ -570,7 +570,7 @@
             const so_dh = decodeURIComponent($(this).data("so-dh"));
 
             fetch(
-                    `http://192.168.1.13:8888/api/xuat-vat-tu?so_dh=${encodeURIComponent(so_dh)}`
+                    `/api/xuat-vat-tu?so_dh=${encodeURIComponent(so_dh)}`
                 )
                 .then(res => res.json())
                 .then(vat_tu => {
@@ -607,7 +607,7 @@
         $(document).on("click", ".show-xuatketoan", function() {
             const ma_hh = $(this).data("ma-hh");
 
-            fetch(`http://192.168.1.13:8888/api/xuatkhoketoan-chi-tiet?ma_hh=${encodeURIComponent(ma_hh)}`)
+            fetch(`/api/xuatkhoketoan-chi-tiet?ma_hh=${encodeURIComponent(ma_hh)}`)
                 .then(res => res.json())
                 .then(details => {
                     const tbody = $("#xuatKhoDetailTable tbody");
@@ -639,7 +639,7 @@
             const so_dh = decodeURIComponent($(this).data("so-dh"));
 
             fetch(
-                    `http://192.168.1.13:8888/api/phan-tich?so_dh=${encodeURIComponent(so_dh)}`
+                    `/api/phan-tich?so_dh=${encodeURIComponent(so_dh)}`
                 )
                 .then(res => res.json())
                 .then(phantich => {
@@ -670,7 +670,7 @@
         $(document).on("click", ".show-vattuketoan", function() {
             const ma_vv = $(this).data("ma-vv");
 
-            fetch(`http://192.168.1.13:8888/api/vat-tu-thanh-pham-ketoan?ma_vv=${encodeURIComponent(ma_vv)}`)
+            fetch(`/api/vat-tu-thanh-pham-ketoan?ma_vv=${encodeURIComponent(ma_vv)}`)
                 .then(res => res.json())
                 .then(vattu => {
                     const tbody = $("#vatTuKeToanDetailTable tbody");

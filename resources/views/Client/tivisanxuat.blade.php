@@ -341,7 +341,7 @@
             let filteredData = []; // Khai báo biến để lưu dữ liệu đã lọc
 
             try {
-                const res = await fetch('http://192.168.1.13:8888/api/tivi/sx-data');
+                const res = await fetch('/api/tivi/sx-data');
                 const {
                     data,
                     totalBySoct
@@ -385,7 +385,7 @@
                             'bg-danger';
 
                         const imageHtml = `
-                            <img src="http://192.168.1.13:8888/hinh_hh/HH_${item.hang_hoa.Ma_so}/${item.hang_hoa.Pngpath}" 
+                            <img src="/hinh_hh/HH_${item.hang_hoa.Ma_so}/${item.hang_hoa.Pngpath}" 
                                 alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
                         `;
 

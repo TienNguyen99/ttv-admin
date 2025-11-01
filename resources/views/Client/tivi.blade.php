@@ -143,7 +143,7 @@
         let currentMode = "overdue14"; // mặc định: trễ trong 2 tuần
 
         function loadTable(range) {
-            return fetch(`http://192.168.1.13:8888/api/tivi?range=${range}`)
+            return fetch(`/api/tivi?range=${range}`)
                 .then(res => res.json())
                 .then(response => {
                     const {
@@ -182,7 +182,7 @@
 
 
                         const imageHtml = `
-    <img src="http://192.168.1.13:8888/hinh_hh/HH_${row.hang_hoa?.Ma_so}/${row.hang_hoa?.Pngpath}"
+    <img src="/hinh_hh/HH_${row.hang_hoa?.Ma_so}/${row.hang_hoa?.Pngpath}"
          alt="${row.hang_hoa?.Ten_hh}" 
          class="clickable-image"
          onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg'">

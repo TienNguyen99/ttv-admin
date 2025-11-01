@@ -34,7 +34,7 @@
         <div class="mb-3">
             <label for="filter-month" class="form-label">Chọn Tháng:</label>
             <select id="filter-month" class="form-select" style="width:160px;">
-                <option value="">-- Tất cả --</option>
+                <option value="" selected>-- Tất cả --</option>
                 <option value="1">Tháng 1</option>
                 <option value="2">Tháng 2</option>
                 <option value="3">Tháng 3</option>
@@ -43,7 +43,7 @@
                 <option value="6">Tháng 6</option>
                 <option value="7">Tháng 7</option>
                 <option value="8">Tháng 8</option>
-                <option value="9" selected>Tháng 9</option>
+                <option value="9">Tháng 9</option>
                 <option value="10">Tháng 10</option>
                 <option value="11">Tháng 11</option>
                 <option value="12">Tháng 12</option>
@@ -112,7 +112,7 @@
         });
 
         function loadData() {
-            fetch("http://192.168.1.13:8888/api/ketoan-today")
+            fetch("/api/ketoan-today")
                 .then(response => response.json())
                 .then(result => {
                     const raw = result.data || [];
