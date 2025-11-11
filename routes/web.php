@@ -60,6 +60,8 @@ Route::get('/client/tivisanxuat', [TiviController::class, 'tiviSanxuat']);
 // API hiển thị dữ liệu Tivi
 Route::get('/api/tivi', [TiviController::class, 'getTiviData']);
 Route::get('/api/tivi/sx-data', [TiviController::class, 'getSXData']);
+
+
 // Route for Unipax only
 Route::get('/client/unipax', [ClientHomeController::class, 'indexUnipax']);
 // Route for GRS only

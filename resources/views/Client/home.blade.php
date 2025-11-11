@@ -89,7 +89,7 @@
             </div>
             <div class="col-md-3">
                 <label for="filterNgayRaLenh" class="form-label">Ngày ra lệnh</label>
-                <input type="month" class="form-control" id="filterNgayRaLenh">
+                <input type="date" class="form-control" id="filterNgayRaLenh">
             </div>
             <div class="col-md-3">
                 <label for="filterNgayGiao" class="form-label">Tháng giao</label>
@@ -448,7 +448,8 @@
                                 text: '📤 Xuất Excel',
                                 className: 'btn btn-success',
                                 exportOptions: {
-                                    columns: [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23, 24]
+                                    // columns: [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23, 24] // In
+                                    columns: [3, 4, 5, 7, 8, 9, 10, 13, 14, 15, 18, 19, 23, 24] //Để in báo cáo
                                 },
                                 title: 'Bang_Lenh_San_Xuat',
                             }]
@@ -506,10 +507,22 @@
                                 const tableMonth = `${year}-${month.padStart(2, '0')}`;
                                 if (!tableMonth.startsWith(ngayGiao)) return false;
                             }
+
                             if (ngayRaLenh) {
+                                // Chuyển ngày trong bảng thành đối tượng Date
                                 const [day, month, year] = ngayRaLenhCol.split('/');
-                                const tableMonth = `${year}-${month.padStart(2, '0')}`;
-                                if (!tableMonth.startsWith(ngayRaLenh)) return false;
+                                const tableDate = new Date(`${year}-${month}-${day}`);
+
+                                // Ngày người dùng chọn
+                                const filterDate = new Date(ngayRaLenh);
+
+                                // Ngày hiện tại
+                                const currentDate = new Date();
+
+                                // Giữ lại các dòng có ngày >= ngày chọn và <= hiện tại
+                                if (tableDate < filterDate || tableDate > currentDate) {
+                                    return false;
+                                }
                             }
 
 

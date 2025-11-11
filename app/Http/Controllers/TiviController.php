@@ -69,80 +69,60 @@ $totalBySoct = DB::table('DataKetoanData')
 
 
 
+
+
     // API hiển thị Tivi
-    public function getTiviData(Request $request)
-    {
-        $range = $request->get('range', 7);
-        $today = now()->startOfDay(); // reset về 00:00:00
+public function getTiviData(Request $request){
+    $range = $request->get('range','7');
+    $today = now()->startOfDay();
+    $query = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh','hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so'])
+        ->select('So_dh','Ma_hh','Soseri','Soluong','Ma_kh','Date','Ngay_ct');
 
-        $query = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so'])
-        ->select('So_dh', 'Ma_hh', 'Soseri', 'Soluong', 'Ma_kh', 'Date','Ngay_ct')
-            ->where('Ma_ct', '=', 'GO')
-            ->where('Loaisx', '!=', 'M');
-            
-
-        if ($range === 'overdue') {
-            // 🔹 Quá hạn tất cả
-            $query->whereDate('Date', '<', $today);
-
-        } elseif ($range === 'overdue14') {
-            // 🔹 Quá hạn trong vòng 14 ngày
+    if($range==='sxmonth'){
+        $start = now()->startOfMonth();
+        $end = now()->endOfMonth();
+        $query->where('Ma_ct','GO')->whereBetween('Date',[$start,$end]);
+    } else {
+        $query->where('Ma_ct','GO')->where('Loaisx','!=','M');
+        if($range==='overdue14'){
             $twoWeeksAgo = $today->copy()->subDays(14);
-            $query->whereBetween('Date', [$twoWeeksAgo, $today->copy()->subDay()]);
-
+            $query->whereBetween('Date',[$twoWeeksAgo,$today->copy()->subDay()]);
         } else {
-            // 🔹 Đơn sắp đến hạn (today → today + range)
             $upcoming = $today->copy()->addDays((int)$range);
-            $query->whereBetween('Date', [$today, $upcoming]);
+            $query->whereBetween('Date',[$today,$upcoming]);
         }
-
-        $data = $query->orderBy('Date', 'asc')->get();
-
-        // 🔹 Xuất kho kế toán
-        $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
-            ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
-            ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
-            ->where('dk.Ma_ct', '=', 'XU')
-            ->groupBy('dk.Ma_vv', 'hh.Ma_so')
-            ->get()
-            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_so);
-        //Dùng cái này khi lấy database ketoan
-        // $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
-        // ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))
-        //     ->where('Ma_ct', '=', 'XU')
-        //     ->groupBy('Ma_vv', 'Ma_hh')
-        //     ->get()
-        //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_hh);
-
-        // 🔹 Nhập kho
-        $nhapKho = DB::table('DataKetoan2025')
-            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_nhap'))
-            ->where('Ma_ct', '=', 'NV')
-            ->groupBy('So_dh', 'Ma_hh')
-            ->get()
-            ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
-        //Dùng cái này khi lấy database ketoan
-        //Nhập thành phẩm kế toán 
-        $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
-            ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
-            ->where('Ma_ct', '=', 'NX')
-            ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
-            ->distinct();
-
-        $nhaptpketoan = DB::query()
-            ->fromSub($sub, 'sub')
-            ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
-            ->groupBy('Ma_vv', 'Ma_sp')
-            ->get()
-            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
-        
-        
-
-        return response()->json([
-            'data' => $data,
-            'xuatkhotheomavvketoan' => $xuatkhotheomavvketoan,
-            'nhapKho' => $nhapKho,
-            'nhaptpketoan' => $nhaptpketoan
-        ]);
     }
+
+    $data = $query->orderBy('Date','asc')->get();
+
+    // Xuất kho
+    $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
+        ->join('CodeHangHoa as hh','dk.Ma_hh','=','hh.Ma_hh')
+        ->select('dk.Ma_vv','hh.Ma_so',DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
+        ->where('dk.Ma_ct','XU')->groupBy('dk.Ma_vv','hh.Ma_so')
+        ->get()->keyBy(fn($i)=>$i->Ma_vv.'|'.$i->Ma_so);
+
+    // Nhập kho
+    $nhapKho = DB::table('DataKetoan2025')
+        ->select('So_dh','Ma_hh',DB::raw('SUM(Soluong) as total_nhap'))
+        ->where('Ma_ct','NV')->groupBy('So_dh','Ma_hh')
+        ->get()->keyBy(fn($i)=>$i->So_dh.'|'.$i->Ma_hh);
+
+    // Nhập TP kế toán
+    $sub = DB::table('DataKetoan2025')->select('Ma_vv','Ma_sp','Noluong','SttRecN')
+        ->where('Ma_ct','NX')->where('Ma3ko','KTPHAM')->distinct();
+
+    $nhaptpketoan = DB::query()->fromSub($sub,'sub')
+        ->select('Ma_vv','Ma_sp',DB::raw('SUM(Noluong) as total_nhaptpketoan'))
+        ->groupBy('Ma_vv','Ma_sp')
+        ->get()->keyBy(fn($i)=>$i->Ma_vv.'|'.$i->Ma_sp);
+
+    return response()->json([
+        'data'=>$data,
+        'xuatkhotheomavvketoan'=>$xuatkhotheomavvketoan,
+        'nhapKho'=>$nhapKho,
+        'nhaptpketoan'=>$nhaptpketoan
+    ]);
+}
+
 }
