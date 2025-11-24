@@ -13,7 +13,9 @@ use App\Http\Controllers\TiviController;
 use App\Http\Controllers\PhieuUnipax;
 use App\Http\Controllers\QuyDoiMucController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\Tool;
 use Google\Service\Dfareporting\Order;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -25,7 +27,7 @@ use Google\Service\Dfareporting\Order;
 | contains the "web" middleware group. Now create something great!
 |
 */
-
+Route::get('/tool', [Tool::class, 'index'])->name('tool');
 
 Route::get('/', [DashboardController::class, 'index']);
 Route::get('/lenh/{so_ct}', [DashboardController::class, 'showDetail']);

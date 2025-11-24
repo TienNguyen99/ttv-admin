@@ -1,22 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Happy Birthday Jonas</title>
-
-<!-- Import font -->
+<title>Happy Birthday Mỹ Tiên</title>
 <link href="https://fonts.googleapis.com/css2?family=Dancing+Script&display=swap" rel="stylesheet">
-
 <style>
-html,
-body {
+html, body {
   width: 100%;
   height: 100%;
-}
-
-body {
-  background: #ee9ca7;
+  margin: 0;
+  overflow: hidden;
+  background: #d0a896;
+  touch-action: none;
 }
 
 #cake {
@@ -25,7 +21,7 @@ body {
   margin: -10em auto 0 auto;
 }
 
-/* ============================================== Candle */
+/* Candle + Fire giữ nguyên */
 .velas {
   background: #ffffff;
   border-radius: 10px;
@@ -37,7 +33,6 @@ body {
   width: 5px;
   height: 35px;
   transform: translateY(-300px);
-  backface-visibility: hidden;
   animation: in 500ms 6s ease-out forwards;
 }
 .velas:after,
@@ -48,16 +43,9 @@ body {
   width: 100%;
   height: 2.22222222px;
 }
-.velas:after {
-  top: 25%;
-  left: 0;
-}
-.velas:before {
-  top: 45%;
-  left: 0;
-}
+.velas:after { top: 25%; left: 0; }
+.velas:before { top: 45%; left: 0; }
 
-/* ============================================== Fire */
 .fuego {
   border-radius: 100%;
   position: absolute;
@@ -67,53 +55,59 @@ body {
   width: 6.66666667px;
   height: 18px;
 }
-.fuego:nth-child(1) {
-  animation: fuego 2s 6.5s infinite;
-}
-.fuego:nth-child(2) {
-  animation: fuego 1.5s 6.5s infinite;
-}
-.fuego:nth-child(3) {
-  animation: fuego 1s 6.5s infinite;
-}
-.fuego:nth-child(4) {
-  animation: fuego 0.5s 6.5s infinite;
-}
-.fuego:nth-child(5) {
-  animation: fuego 0.2s 6.5s infinite;
-}
+.fuego:nth-child(1){ animation: fuego 2s 6.5s infinite; }
+.fuego:nth-child(2){ animation: fuego 1.5s 6.5s infinite; }
+.fuego:nth-child(3){ animation: fuego 1s 6.5s infinite; }
+.fuego:nth-child(4){ animation: fuego 0.5s 6.5s infinite; }
+.fuego:nth-child(5){ animation: fuego 0.2s 6.5s infinite; }
 
-/* ============================================== Animation Fire */
 @keyframes fuego {
-  0%, 100% {
-    background: rgba(254, 248, 97, 0.5);
-    box-shadow: 0 0 40px 10px rgba(248, 233, 209, 0.2);
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    background: rgba(255, 50, 0, 0.1);
-    box-shadow: 0 0 40px 20px rgba(248, 233, 209, 0.2);
-    transform: translateY(-20px) scale(0);
-  }
+  0%, 100% { background: rgba(254, 248, 97, 0.5); transform: translateY(0) scale(1); }
+  50% { background: rgba(255, 50, 0, 0.1); transform: translateY(-20px) scale(0); }
 }
+@keyframes in { to { transform: translateY(0); } }
 
-@keyframes in {
-  to {
-    transform: translateY(0);
-  }
-}
-
-/* ============================================== Text */
 .text {
   color: #8b6a60;
   font-family: 'Dancing Script', cursive;
   text-align: center;
 }
-.text h1 {
-  font-size: 2em;
+.text h1 { font-size: 2em; }
+.text p { font-size: 3em; }
+
+#surpriseBtn {
+  position: absolute;
+  top: 90%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #8b6a60;
+  color: white;
+  border: none;
+  padding: 10px 25px;
+  border-radius: 20px;
+  font-family: 'Dancing Script', cursive;
+  font-size: 1.5em;
+  cursor: pointer;
+  transition: 0.3s;
 }
-.text p {
-  font-size: 3em;
+#surpriseBtn:hover { background: #a88679; }
+
+/* Ảnh surprise */
+#fallingImage {
+  position: absolute;
+  top: -200px;
+  left: 70%;
+  width: 120px;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+#fallingImage.fall {
+  opacity: 1;
+  animation: dropDown 1.5s ease-out forwards;
+}
+@keyframes dropDown {
+  from { top: -200px; transform: rotate(0deg); }
+  to { top: 60%; transform: rotate(10deg); }
 }
 </style>
 </head>
@@ -127,6 +121,7 @@ body {
   <div class="fuego"></div>
 </div>
 
+<!-- Giữ nguyên SVG bánh sinh nhật ở đây -->
 <svg id="cake" version="1.1" x="0px" y="0px" width="200px" height="500px" viewBox="0 0 200 500" enable-background="new 0 0 200 500" xml:space="preserve">
     <path fill="#a88679" d="M173.667-13.94c-49.298,0-102.782,0-147.334,0c-3.999,0-4-16.002,0-16.002
 		c44.697,0,96.586,0,147.334,0C177.667-29.942,177.668-13.94,173.667-13.94z">
@@ -275,11 +270,100 @@ body {
     </path>
     <rect x="10" y="475.571" fill="#fefae9" width="180" height="4" />
 </svg>
-
 <div class="text">
   <h1>CHÚC MỪNG SINH NHẬT</h1>
-  <p>CHỊ TIÊN</p>
+  <p>MỸ TIÊN</p>
 </div>
+
+<button id="surpriseBtn">🎁</button>
+
+<img id="fallingImage" src="https://sf-static.upanhlaylink.com/img/image_20251112d6ce8f41aba479e3fd02778fa05af931.jpg" alt="Surprise">
+
+<script>
+const btn = document.getElementById('surpriseBtn');
+const img = document.getElementById('fallingImage');
+
+let vx = 0, vy = 0; 
+let x = window.innerWidth * 0.7;
+let y = window.innerHeight * 0.6;
+let gravityX = 0, gravityY = 0;
+let lastTime = null;
+let running = false;
+
+btn.addEventListener('click', () => {
+  if (img.classList.contains('fall')) return;
+  img.classList.add('fall');
+
+  setTimeout(() => {
+    img.style.opacity = 1;
+    startGravity();
+  }, 1500);
+});
+
+function startGravity() {
+  if (running) return;
+  running = true;
+
+  // iOS Safari cần xin phép
+  if (typeof DeviceMotionEvent !== 'undefined' && 
+      typeof DeviceMotionEvent.requestPermission === 'function') {
+    DeviceMotionEvent.requestPermission()
+      .then(state => {
+        if (state === 'granted') {
+          enableGravity();
+        } else {
+          alert('Vui lòng cho phép quyền cảm biến để ảnh có thể rơi theo hướng nhé 💫');
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert('Không thể truy cập cảm biến: ' + err);
+      });
+  } else {
+    // Android Chrome hoặc trình duyệt khác
+    enableGravity();
+  }
+}
+
+function enableGravity() {
+  window.addEventListener("deviceorientation", updateGravity);
+  requestAnimationFrame(updatePosition);
+}
+
+function updateGravity(e) {
+  // e.beta (nghiêng trước/sau), e.gamma (trái/phải)
+  gravityX = Math.min(Math.max(e.gamma / 90, -1), 1);
+  gravityY = Math.min(Math.max(e.beta / 90, -1), 1);
+}
+
+function updatePosition(timestamp) {
+  if (!lastTime) lastTime = timestamp;
+  const dt = (timestamp - lastTime) / 1000;
+  lastTime = timestamp;
+
+  vx += gravityX * 400 * dt;
+  vy += gravityY * 400 * dt;
+
+  x += vx * dt;
+  y += vy * dt;
+
+  // giới hạn biên màn hình
+  const maxX = window.innerWidth - img.offsetWidth;
+  const maxY = window.innerHeight - img.offsetHeight;
+
+  if (x < 0) { x = 0; vx *= -0.5; }
+  if (x > maxX) { x = maxX; vx *= -0.5; }
+  if (y < 0) { y = 0; vy *= -0.5; }
+  if (y > maxY) { y = maxY; vy *= -0.5; }
+
+  img.style.left = `${x}px`;
+  img.style.top = `${y}px`;
+  img.style.transform = `rotate(${vx * 0.1}deg)`;
+
+  requestAnimationFrame(updatePosition);
+}
+</script>
+
 
 </body>
 </html>

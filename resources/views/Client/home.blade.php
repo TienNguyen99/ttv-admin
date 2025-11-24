@@ -148,7 +148,7 @@
         </table>
     </div>
 
-    <!-- Modal Chi tiết nhập kho -->
+    <!-- Modal Chi tiết nhập kho chị nghiêm ( phiếu nhập kho )-->
     <div class="modal fade" id="nhapModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -266,6 +266,7 @@
                     <table class="table table-bordered" id="vatTuKeToanDetailTable">
                         <thead>
                             <tr>
+                                <th>Ngày nhập</th>
                                 <th>Diễn giải</th>
                                 <th>Mã sản phẩm</th>
                                 <th>Mã vật tư</th>
@@ -448,8 +449,8 @@
                                 text: '📤 Xuất Excel',
                                 className: 'btn btn-success',
                                 exportOptions: {
-                                    // columns: [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23, 24] // In
-                                    columns: [3, 4, 5, 7, 8, 9, 10, 13, 14, 15, 18, 19, 23, 24] //Để in báo cáo
+                                     columns: [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23, 24] // In
+                                    //columns: [3, 4, 5, 7, 8, 9, 10, 13, 14, 15, 18, 19, 23, 24] //Để in báo cáo
                                 },
                                 title: 'Bang_Lenh_San_Xuat',
                             }]
@@ -679,7 +680,7 @@
                     new bootstrap.Modal(document.getElementById("phanTichModal")).show();
                 });
         });
-        // Xem chi tiết vật tư thành phẩm kế toán
+        // Xem chi tiết nhập vật tư thành phẩm kế toán
         $(document).on("click", ".show-vattuketoan", function() {
             const ma_vv = $(this).data("ma-vv");
 
@@ -700,6 +701,7 @@
 
                             tbody.append(`
                         <tr>
+                            <td>${new Date(d.Ngay_ct).toLocaleDateString("vi-VN")}</td>
                             <td>${d.DgiaiV}</td>
                             <td>${d.Ma_sp}</td>
                             <td>${d.Ma_hh}</td>

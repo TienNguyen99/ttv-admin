@@ -79,14 +79,14 @@ class ClientHomeController extends Controller
             ->pluck('So_dh')
             ->toArray();
         //Nhập kho data
-        // Lấy tổng nhập kho theo Ma_hh và So_dh
+        // Lấy tổng nhập kho theo Ma_hh và So_dh ( phiếu nhập kho chị nghiêm)
         $nhapKho = DB::table('DataKetoan2025')
             ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_nhap'))
             ->where('Ma_ct', '=', 'NV')
             ->groupBy('So_dh', 'Ma_hh')
             ->get()
             ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
-        //Hiển thị So  tạo nên tổng nhập kho Theo ma_hh và So_dh
+
 
 
         // $nhaptpketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
@@ -132,7 +132,7 @@ class ClientHomeController extends Controller
         $tongxuatkhoketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
             ->select('Ma_hh', DB::raw('SUM(Soluong) as totalxuatkho_ketoan'))
             ->where('Ma_ct', '=', 'XU')
-            ->where('Ma_ko', '=', 'KTPHAM') // kHO THÀNH PHẨM
+            // ->where('Ma_ko', '=', 'KTPHAM') // kHO THÀNH PHẨM
             ->groupBy('Ma_hh')
             ->get()
             ->keyBy('Ma_hh');
@@ -256,7 +256,7 @@ class ClientHomeController extends Controller
         $ma_vv = urldecode($request->query('ma_vv'));
         //DATABASE KẾ TOÁN
         $vattu = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
-            ->select('Ma_vv', 'Ma_sp', 'Ma_hh', 'Soluong', 'DgiaiV', 'Noluong')
+            ->select('Ma_vv', 'Ma_sp', 'Ma_hh', 'Soluong', 'DgiaiV', 'Noluong', 'Ngay_ct')
             ->where('Ma_ct', '=', 'NX')
             ->where('Ma_vv', $ma_vv)         // lọc theo số đơn hàng
             ->orderBy('Ma_sp')

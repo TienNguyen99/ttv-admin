@@ -81,7 +81,7 @@ public function getTiviData(Request $request){
     if($range==='sxmonth'){
         $start = now()->startOfMonth();
         $end = now()->endOfMonth();
-        $query->where('Ma_ct','GO')->whereBetween('Date',[$start,$end]);
+        $query->where('Ma_ct','GO')->where('Loaisx','!=','M')->whereBetween('Date',[$start,$end]);
     } else {
         $query->where('Ma_ct','GO')->where('Loaisx','!=','M');
         if($range==='overdue14'){
