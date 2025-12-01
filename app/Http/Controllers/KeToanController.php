@@ -24,6 +24,8 @@ class KeToanController extends Controller
             
             ->select(
                 'd.Ngay_ct',
+                'd.So_ct',
+                'd.Chungtu',
                 'd.Ma_ct',
                 'd.So_hd',
                 'd.Ma_hh',

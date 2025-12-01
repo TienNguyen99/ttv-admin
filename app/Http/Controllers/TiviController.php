@@ -22,35 +22,64 @@ public function getSXData(Request $request)
 {
     
 
-    // Lấy dữ liệu SX, đồng thời join để lấy So_ct từ chứng từ GO cùng So_dh
-    $data = DataKetoanData::with([
-        'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
-        'nhanVien:Ma_nv,Ten_nv',
-        'khachHang:Ma_kh,Ten_kh'
-    ])
-        ->select(
-            'DataKetoanData.So_dh',
-            'DataKetoanData.Ma_hh',
-            'DataKetoanData.Ma_ko',
-            'DataKetoanData.Ma_nv',
-            'DataKetoanData.Soluong',
-            'DataKetoanData.Ngay_ct',
-            'DataKetoanData.Ma_kh',
-            'DataKetoanData.Dgbanvnd',
-            'DataKetoanData.Tien_vnd',
-            'DataKetoanData.DgiaiV',
-            DB::raw('go.So_dh as So_ct_go'),
-            DB::raw('go.Soluong as Soluong_go')
-        )
-        ->leftJoin('DataKetoanData as go', function ($join) {
-            $join->on('go.So_ct', '=', 'DataKetoanData.So_dh')
-                 ->where('go.Ma_ct', '=', 'GO');
-        })
-        ->where('DataKetoanData.Ma_ct', '=', 'SX')
-        // ->whereDate('DataKetoanData.Ngay_ct', '=', $today)
-        ->orderBy('DataKetoanData.So_dh')
-        ->get();
-
+    // // Lấy dữ liệu SX, đồng thời join để lấy So_ct từ chứng từ GO cùng So_dh
+    // $data = DataKetoanData::with([
+    //     'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
+    //     'nhanVien:Ma_nv,Ten_nv',
+    //     'khachHang:Ma_kh,Ten_kh'
+    // ])
+    //     ->select(
+    //         'DataKetoanData.So_dh',
+    //         'DataKetoanData.Ma_hh',
+    //         'DataKetoanData.Ma_ko',
+    //         'DataKetoanData.Ma_nv',
+    //         'DataKetoanData.Soluong',
+    //         'DataKetoanData.UserNgE',
+    //         'DataKetoanData.Ma_kh',
+    //         'DataKetoanData.Dgbanvnd',
+    //         'DataKetoanData.Tien_vnd',
+    //         'DataKetoanData.DgiaiV',
+    //         DB::raw('go.So_dh as So_ct_go'),
+    //         DB::raw('go.Soluong as Soluong_go')
+    //     )
+    //     ->leftJoin('DataKetoanData as go', function ($join) {
+    //         $join->on('go.So_ct', '=', 'DataKetoanData.So_dh')
+    //              ->where('go.Ma_ct', '=', 'GO');
+    //     })  
+    //     ->where('DataKetoanData.Ma_ct', '=', 'SX')
+    //     ->orderBy('DataKetoanData.So_dh')
+    //     ->get();
+//Test
+$data = DataKetoanData::with([
+    'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
+    'nhanVien:Ma_nv,Ten_nv',
+    'khachHang:Ma_kh,Ten_kh'
+])
+->select(
+    'DataKetoanData.So_dh',
+    'DataKetoanData.Ma_hh',
+    'DataKetoanData.Ma_ko',
+    'DataKetoanData.Ma_nv',
+    'DataKetoanData.Soluong',
+    'DataKetoanData.UserNgE',
+    'DataKetoanData.Ma_kh',
+    'DataKetoanData.Dgbanvnd',
+    'DataKetoanData.Tien_vnd',
+    'DataKetoanData.DgiaiV',
+    DB::raw('go.So_dh as So_ct_go'),
+    DB::raw('go.Soluong_go as Soluong_go')
+)
+->leftJoin(DB::raw("
+    (
+        SELECT So_ct, So_dh, SUM(Soluong) AS Soluong_go
+        FROM DataKetoanData
+        WHERE Ma_ct = 'GO'
+        GROUP BY So_ct, So_dh
+    ) AS go
+"), 'go.So_ct', '=', 'DataKetoanData.So_dh')
+->where('DataKetoanData.Ma_ct', '=', 'SX')
+->orderBy('DataKetoanData.So_dh')
+->get();
 //Tính tổng đơn đã sản xuất
 $totalBySoct = DB::table('DataKetoanData')
     ->select('So_dh', DB::raw('SUM(Soluong) as total_sx'))

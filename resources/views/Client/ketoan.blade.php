@@ -65,14 +65,16 @@
                     <th>Loại hàng</th>
                     <th>Lệnh sản xuất ( Vụ việc )</th>
                     <th>Ghi chú</th>
+                    <th>Chứng từ</th>
                     <th>Đơn giá bán</th>
                     <th>Thành tiền</th>
+                    <th>Số ct</th>
                 </tr>
             </thead>
             <tbody></tbody>
             <tfoot>
                 <tr>
-                    <th colspan="13" class="text-end">Tổng Thành tiền:</th>
+                    <th colspan="14" class="text-end">Tổng Thành tiền:</th>
                     <th id="total-thanh-tien">0</th>
                 </tr>
             </tfoot>
@@ -131,8 +133,10 @@
                         const dgiaiE = row.DgiaiE ?? '';
                         const ma_vv = row.Ma_vv ?? '';
                         const ghichu = row.Ghichu ?? '';
+                        const chungtu = row.Chungtu ?? '';
                         const dgbanvnd = Math.round(row.Dgbanvnd ?? 0);
                         const tien_vnd = Math.round(row.Tien_vnd ?? 0);
+                        const so_ct = row.So_ct ?? '';
 
                         return [
                             stt,
@@ -147,8 +151,10 @@
                             dgiaiE,
                             ma_vv,
                             ghichu,
+                            chungtu,
                             dgbanvnd,
-                            tien_vnd
+                            tien_vnd,
+                            so_ct
                         ];
                     });
 
@@ -183,7 +189,7 @@
                                     search: 'applied'
                                 }).data().each(function(rowData) {
                                     const ngay = rowData[1] || '';
-                                    const tien = parseFloat(rowData[13]) || 0;
+                                    const tien = parseFloat(rowData[14]) || 0;
                                     // nếu có filter tháng, ext.search đã lọc rồi, nhưng để an toàn: nếu muốn tính theo tháng đã chọn, có thể kiểm tra thêm
                                     total += tien;
                                 });

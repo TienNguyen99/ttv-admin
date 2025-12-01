@@ -80,13 +80,25 @@ class ClientHomeController extends Controller
             ->toArray();
         //Nhập kho data
         // Lấy tổng nhập kho theo Ma_hh và So_dh ( phiếu nhập kho chị nghiêm)
-        $nhapKho = DB::table('DataKetoan2025')
-            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_nhap'))
-            ->where('Ma_ct', '=', 'NV')
-            ->groupBy('So_dh', 'Ma_hh')
-            ->get()
-            ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
+        // $nhapKho = DB::table('DataKetoan2025')
+        //     ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_nhap'))
+        //     ->where('Ma_ct', '=', 'NV')
+        //     ->groupBy('So_dh', 'Ma_hh')
+        //     ->get()
+        //     ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
+        //Nhập thành phẩm sản xuất ( DÙNG CÁI NÀY KHI LẤY DATABASE SẢN XUẤT)
+                $sub = DB::table('TSoft_NhanTG_SX.dbo.DataKetoan2025')
+            ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN','So_dh')
+            ->where('Ma_ct', '=', 'NX')
+            ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
+            ->distinct();
 
+        $nhapKho = DB::query()
+            ->fromSub($sub, 'sub')
+            ->select('So_dh', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhap'))
+            ->groupBy('So_dh', 'Ma_sp')
+            ->get()
+            ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_sp);        
 
 
         // $nhaptpketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')

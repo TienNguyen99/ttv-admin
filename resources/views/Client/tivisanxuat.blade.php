@@ -351,7 +351,7 @@
                 const now = new Date();
                 const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
                 filteredData = data.filter(item => { // Gán vào biến filteredData
-                    const ngay = new Date(item.Ngay_ct);
+                    const ngay = new Date(item.UserNgE);
                     return ngay >= cutoff && ngay <= now;
                 });
 
@@ -385,7 +385,7 @@
                             'bg-danger';
 
                         const imageHtml = `
-                            <img src="/hinh_hh/HH_${item.hang_hoa.Ma_so}/${item.hang_hoa.Pngpath}" 
+                            <img src="/hinh_hh/HH_${item.hang_hoa.Ma_hh}/${item.hang_hoa.Pngpath}" 
                                 alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
                         `;
 
