@@ -111,7 +111,7 @@ class DanhMucController extends Controller
             CodeDanhMuc::where('Codeid1', $old)->update(['Codeid1' => $new]);
             DataCdLO2025::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
             DataKetoan2025::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
-            // CodeHangHoa::where('Ma_so', $old)->update(['Ma_so' => $new]);
+            CodeHangHoa::where('Ma_so', $old)->update(['Ma_so' => $new]);
         }
 
         return redirect()->route('danhmuc')->with('success', 'Cập nhật Mã HH thành công!');

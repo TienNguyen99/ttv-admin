@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tivi Sản Xuất - Lệnh SX 24h qua & Trạng thái Máy</title>
+    <title>CÁC LỆNH SẢN XUẤT 24 GIỜ QUA</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
@@ -151,31 +151,34 @@
     <div class="container-fluid mt-4">
         <h1 class="text-center mb-3">LỆNH ĐANG SẢN XUẤT TRONG 24 GIỜ QUA</h1>
 
-        <div class="text-center mb-3">
+        {{-- <div class="text-center mb-3">
             <button class="btn btn-primary" onclick="loadSXData()">🔄 Làm mới</button>
-        </div>
+        </div> --}}
 
         <table class="table table-bordered table-striped text-center align-middle" id="sxTable">
             <thead>
                 <tr>
+                    <th>STT</th>
+                    <th>Ngày nhập phiếu</th>
                     <th>Lệnh</th>
                     <th>Mã HH</th>
                     <th>Hình ảnh</th>
                     <th>Tên Hàng</th>
                     <th>Công đoạn</th>
-                    <th>Tên NV</th>
+                    <th>Tên công nhân</th>
                     <th>Số lượng đơn</th>
+                    <th>Số lượng đơn vị khác(mm,g)</th>
                     <th>Sản xuất</th>
                     <th>Tổng SX</th>
                     <th>Lỗi</th>
                     <th>ĐVT</th>
                     <th>%</th>
-                    <th>Bộ phận</th>
+                    <th>Ghi chú</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td colspan="13">Đang tải dữ liệu...</td>
+                    <td colspan="16">Đang tải dữ liệu...</td>
                 </tr>
             </tbody>
         </table>
@@ -359,7 +362,7 @@
 
                 if (filteredData.length === 0) {
                     tbody.innerHTML =
-                        `<tr><td colspan="13" class="text-center text-warning">Không có lệnh SX trong 24h qua</td></tr>`;
+                        `<tr><td colspan="16" class="text-center text-warning">Không có lệnh SX trong 24h qua</td></tr>`;
                     // Dù không có lệnh, vẫn chạy hàm status để hiển thị thông báo
                     deriveMachineStatusFromSXData(filteredData);
                     return;
@@ -377,12 +380,13 @@
                     let tongSX = 0;
                     const soluongGO = Number(rows[0]?.Soluong_go ?? 0);
 
-                    rows.forEach(item => {
+                    rows.forEach((item, index) => {
                         // tongSX += Number(item.Soluong ?? 0);
                         tongSX = Number(totalBySoct?.[item.So_dh] ?? 0);
                         const pct = soluongGO > 0 ? (item.Soluong / soluongGO * 100).toFixed(1) : 0;
                         const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ? 'bg-warning' :
                             'bg-danger';
+
 
                         const imageHtml = `
                             <img src="/hinh_hh/HH_${item.hang_hoa.Ma_hh}/${item.hang_hoa.Pngpath}" 
@@ -391,6 +395,9 @@
 
                         const row = `
                             <tr>
+                                
+                                <td>${index+1}</td>
+                                <td>${item.UserNgE ? new Date(item.UserNgE).toLocaleDateString('vi-VN') : ''}</td>
                                 <td>${item.So_ct_go ?? ''}</td>
                                 <td>${item.Ma_hh ?? ''}</td>
                                 <td>${imageHtml}</td>
@@ -398,6 +405,7 @@
                                 <td>${item.Ma_ko ?? ''}</td>
                                 <td>${item.nhan_vien?.Ten_nv ?? ''}</td>
                                 <td>${soluongGO.toLocaleString('vi-VN')}</td>
+                                <td>${Number(item.Dgbanvnd ?? 0).toLocaleString('vi-VN')}</td>
                                 <td>${Number(item.Soluong ?? 0).toLocaleString('vi-VN')}</td>
                                 <td>${Number(tongSX ?? 0).toLocaleString('vi-VN')}</td>
 
@@ -418,19 +426,21 @@
 
                     const pctTong = soluongGO > 0 ? (tongSX / soluongGO * 100).toFixed(1) : 0;
                     const barColor = pctTong >= 90 ? 'bg-success' : pctTong >= 60 ? 'bg-warning' : 'bg-danger';
-
+                    const soThieu = soluongGO - tongSX;
+                    // <td colspan="1">${tongSX.toLocaleString('vi-VN')}</td>
+                    //                     <td colspan="1"></td>
+                    // <td>
+                    //     <div class="progress">
+                    //         <div class="progress-bar ${barColor}" style="width:${Math.min(pctTong, 100)}%">
+                    //             ${pctTong}%
+                    //         </div>
+                    //     </div>
+                    // </td>
                     const subtotalRow = `
                         <tr class="subtotal-row">
-                            <td colspan="7">${soct}</td>
-                            <td colspan="1">${tongSX.toLocaleString('vi-VN')}</td>
-                            <td colspan="3"></td>
-                            <td>
-                                <div class="progress">
-                                    <div class="progress-bar ${barColor}" style="width:${Math.min(pctTong, 100)}%">
-                                        ${pctTong}%
-                                    </div>
-                                </div>
-                            </td>
+                            <td colspan="16">LỆNH ${soct} ĐÃ SẢN XUẤT ĐƯỢC ${tongSX.toLocaleString('vi-VN')} CÒN THIẾU ${soThieu.toLocaleString('vi-VN')} </td>
+                            
+
                             <td></td>
                         </tr>
                     `;
@@ -442,7 +452,7 @@
 
             } catch (error) {
                 console.error("Lỗi tải dữ liệu SX:", error);
-                tbody.innerHTML = `<tr><td colspan="13" class="text-danger text-center">Lỗi tải dữ liệu SX!</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="16" class="text-danger text-center">Lỗi tải dữ liệu SX!</td></tr>`;
                 // Nếu lỗi, vẫn gọi hàm status với dữ liệu rỗng để cập nhật bảng máy
                 deriveMachineStatusFromSXData([]);
             } finally {
