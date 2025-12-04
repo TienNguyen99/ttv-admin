@@ -334,6 +334,21 @@
             renderMachineTable(table2, floor2Data, 2);
         }
 
+        function tvFetch(url, callback) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", url, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    try {
+                        const json = JSON.parse(xhr.responseText);
+                        callback(json);
+                    } catch (e) {
+                        console.error("TV JSON parse error:", e);
+                    }
+                }
+            };
+            xhr.send();
+        }
         /**
          * HÀM GỐC: Tải dữ liệu sản xuất
          */
@@ -341,124 +356,107 @@
             const table = document.querySelector('#sxTable');
             const tbody = table.querySelector('tbody');
             table.classList.add('refreshing');
-            let filteredData = []; // Khai báo biến để lưu dữ liệu đã lọc
+
+            let filteredData = [];
 
             try {
-                const res = await fetch('/api/tivi/sx-data');
-                const {
-                    data,
-                    totalBySoct
-                } = await res.json();
+                tvFetch("/api/tivi/sx-data", function(response) {
 
-                // 1. Lọc dữ liệu trong vòng 24h qua
-                const now = new Date();
-                const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                filteredData = data.filter(item => { // Gán vào biến filteredData
-                    const ngay = new Date(item.UserNgE);
-                    return ngay >= cutoff && ngay <= now;
-                });
+                    const data = response.data || [];
+                    const totalBySoct = response.totalBySoct || {};
 
-                tbody.innerHTML = '';
-
-                if (filteredData.length === 0) {
-                    tbody.innerHTML =
-                        `<tr><td colspan="16" class="text-center text-warning">Không có lệnh SX trong 24h qua</td></tr>`;
-                    // Dù không có lệnh, vẫn chạy hàm status để hiển thị thông báo
-                    deriveMachineStatusFromSXData(filteredData);
-                    return;
-                }
-
-                // 2. Render bảng sản xuất
-                const groups = {};
-                filteredData.forEach(item => {
-                    const key = item.So_ct_go ?? 'Chưa có lệnh';
-                    if (!groups[key]) groups[key] = [];
-                    groups[key].push(item);
-                });
-
-                Object.entries(groups).forEach(([soct, rows]) => {
-                    let tongSX = 0;
-                    const soluongGO = Number(rows[0]?.Soluong_go ?? 0);
-
-                    rows.forEach((item, index) => {
-                        // tongSX += Number(item.Soluong ?? 0);
-                        tongSX = Number(totalBySoct?.[item.So_dh] ?? 0);
-                        const pct = soluongGO > 0 ? (item.Soluong / soluongGO * 100).toFixed(1) : 0;
-                        const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ? 'bg-warning' :
-                            'bg-danger';
-
-
-                        const imageHtml = `
-                            <img src="/hinh_hh/HH_${item.hang_hoa.Ma_hh}/${item.hang_hoa.Pngpath}" 
-                                alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
-                        `;
-
-                        const row = `
-                            <tr>
-                                
-                                <td>${index+1}</td>
-                                <td>${item.UserNgE ? new Date(item.UserNgE).toLocaleDateString('vi-VN') : ''}</td>
-                                <td>${item.So_ct_go ?? ''}</td>
-                                <td>${item.Ma_hh ?? ''}</td>
-                                <td>${imageHtml}</td>
-                                <td>${item.hang_hoa?.Ten_hh ?? ''}</td>
-                                <td>${item.Ma_ko ?? ''}</td>
-                                <td>${item.nhan_vien?.Ten_nv ?? ''}</td>
-                                <td>${soluongGO.toLocaleString('vi-VN')}</td>
-                                <td>${Number(item.Dgbanvnd ?? 0).toLocaleString('vi-VN')}</td>
-                                <td>${Number(item.Soluong ?? 0).toLocaleString('vi-VN')}</td>
-                                <td>${Number(tongSX ?? 0).toLocaleString('vi-VN')}</td>
-
-                                <td>${Math.round(item.Tien_vnd ?? 0)}</td>
-                                <td>${item.hang_hoa?.Dvt ?? ''}</td>
-                                <td>
-                                    <div class="progress">
-                                        <div class="progress-bar ${barColor}" style="width:${Math.min(pct, 100)}%">
-                                            ${pct}%
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>${item.DgiaiV ?? ''}</td>
-                            </tr>
-                        `;
-                        tbody.insertAdjacentHTML('beforeend', row);
+                    const now = new Date();
+                    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                    filteredData = data.filter(item => {
+                        const ngay = new Date(item.UserNgE);
+                        return ngay >= cutoff && ngay <= now;
                     });
 
-                    const pctTong = soluongGO > 0 ? (tongSX / soluongGO * 100).toFixed(1) : 0;
-                    const barColor = pctTong >= 90 ? 'bg-success' : pctTong >= 60 ? 'bg-warning' : 'bg-danger';
-                    const soThieu = soluongGO - tongSX;
-                    // <td colspan="1">${tongSX.toLocaleString('vi-VN')}</td>
-                    //                     <td colspan="1"></td>
-                    // <td>
-                    //     <div class="progress">
-                    //         <div class="progress-bar ${barColor}" style="width:${Math.min(pctTong, 100)}%">
-                    //             ${pctTong}%
-                    //         </div>
-                    //     </div>
-                    // </td>
-                    const subtotalRow = `
-                        <tr class="subtotal-row">
-                            <td colspan="16">LỆNH ${soct} ĐÃ SẢN XUẤT ĐƯỢC ${tongSX.toLocaleString('vi-VN')} CÒN THIẾU ${soThieu.toLocaleString('vi-VN')} </td>
-                            
+                    tbody.innerHTML = "";
 
-                            <td></td>
+                    if (filteredData.length === 0) {
+                        tbody.innerHTML =
+                            `<tr><td colspan="16" class="text-center text-warning">Không có lệnh SX trong 24h qua</td></tr>`;
+                        deriveMachineStatusFromSXData(filteredData);
+                        return;
+                    }
+
+                    const groups = {};
+                    filteredData.forEach(item => {
+                        const key = item.So_ct_go ?? 'Chưa có lệnh';
+                        if (!groups[key]) groups[key] = [];
+                        groups[key].push(item);
+                    });
+
+                    Object.entries(groups).forEach(([soct, rows]) => {
+
+                        let tongSX = 0;
+                        const soluongGO = Number(rows[0]?.Soluong_go ?? 0);
+
+                        rows.forEach((item, index) => {
+                            tongSX = Number(totalBySoct?.[item.So_dh] ?? 0);
+                            const pct = soluongGO > 0 ? (item.Soluong / soluongGO * 100)
+                                .toFixed(1) : 0;
+                            const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ?
+                                'bg-warning' : 'bg-danger';
+
+                            const imageHtml = `
+                        <img src="/hinh_hh/HH_${item.hang_hoa.Ma_hh}/${item.hang_hoa.Pngpath}" 
+                             alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
+                    `;
+
+                            const row = `
+                        <tr>
+                            <td>${index+1}</td>
+                            <td>${item.UserNgE ? new Date(item.UserNgE).toLocaleDateString('vi-VN') : ''}</td>
+                            <td>${item.So_ct_go ?? ''}</td>
+                            <td>${item.Ma_hh ?? ''}</td>
+                            <td>${imageHtml}</td>
+                            <td>${item.hang_hoa?.Ten_hh ?? ''}</td>
+                            <td>${item.Ma_ko ?? ''}</td>
+                            <td>${item.nhan_vien?.Ten_nv ?? ''}</td>
+                            <td>${soluongGO.toLocaleString('vi-VN')}</td>
+                            <td>${Number(item.Dgbanvnd ?? 0).toLocaleString('vi-VN')}</td>
+                            <td>${Number(item.Soluong ?? 0).toLocaleString('vi-VN')}</td>
+                            <td>${Number(tongSX ?? 0).toLocaleString('vi-VN')}</td>
+                            <td>${Math.round(item.Tien_vnd ?? 0)}</td>
+                            <td>${item.hang_hoa?.Dvt ?? ''}</td>
+                            <td>
+                                <div class="progress">
+                                    <div class="progress-bar ${barColor}" style="width:${Math.min(pct, 100)}%">
+                                        ${pct}%
+                                    </div>
+                                </div>
+                            </td>
+                            <td>${item.DgiaiV ?? ''}</td>
                         </tr>
                     `;
-                    tbody.insertAdjacentHTML('beforeend', subtotalRow);
+                            tbody.insertAdjacentHTML('beforeend', row);
+                        });
+
+                        const pctTong = soluongGO > 0 ? (tongSX / soluongGO * 100).toFixed(1) : 0;
+                        const soThieu = soluongGO - tongSX;
+
+                        const subtotalRow = `
+                    <tr class="subtotal-row">
+                        <td colspan="16">LỆNH ${soct} ĐÃ SẢN XUẤT ĐƯỢC ${tongSX.toLocaleString('vi-VN')} CÒN THIẾU ${soThieu.toLocaleString('vi-VN')}</td>
+                    </tr>
+                `;
+                        tbody.insertAdjacentHTML('beforeend', subtotalRow);
+                    });
+
+                    deriveMachineStatusFromSXData(filteredData);
                 });
 
-                // 3. Gọi hàm cập nhật trạng thái máy sau khi có dữ liệu SX
-                deriveMachineStatusFromSXData(filteredData);
-
-            } catch (error) {
-                console.error("Lỗi tải dữ liệu SX:", error);
+            } catch (err) {
+                console.error("Lỗi tải dữ liệu SX:", err);
                 tbody.innerHTML = `<tr><td colspan="16" class="text-danger text-center">Lỗi tải dữ liệu SX!</td></tr>`;
-                // Nếu lỗi, vẫn gọi hàm status với dữ liệu rỗng để cập nhật bảng máy
                 deriveMachineStatusFromSXData([]);
             } finally {
                 table.classList.remove('refreshing');
             }
         }
+
 
         // Click ảnh để phóng to (Giữ nguyên)
         document.addEventListener('click', function(e) {
