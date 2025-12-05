@@ -6,154 +6,171 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CÁC LỆNH SẢN XUẤT 24 GIỜ QUA</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
     <style>
-        /* CSS gốc giữ nguyên */
         body {
-            background-color: #f9fafc;
-            color: #1e293b;
-            font-size: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
-        h1,
-        h2 {
-            color: #1e293b;
-            font-weight: 700;
-            letter-spacing: 0.5px;
+        .container-fluid {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
         }
 
-        table {
-            background-color: #ffffff;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-            position: relative;
-            transition: opacity 0.4s ease-in-out;
-            margin-bottom: 25px;
+        h1 {
+            color: #667eea;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
         }
 
-        thead th {
-            background: #f4f7fb;
-            color: #2c3e50;
+        .table {
+            font-size: 14px;
+        }
+
+        .table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .table thead th {
+            vertical-align: middle;
             font-weight: 600;
-            text-transform: uppercase;
-            font-size: 15px;
-            border-bottom: 2px solid #d0d7e2;
-            padding: 12px 8px;
+            border: none;
+        }
+
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: rgba(102, 126, 234, 0.05);
+        }
+
+        .clickable-image {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            border: 2px solid #ddd;
+        }
+
+        .clickable-image:hover {
+            transform: scale(1.1);
+            border-color: #667eea;
+        }
+
+        .clickable-lenh {
+            color: #667eea;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: underline;
+            transition: color 0.3s ease;
+        }
+
+        .clickable-lenh:hover {
+            color: #764ba2;
         }
 
         .progress {
-            background-color: #e9ecef;
-            height: 22px;
+            height: 25px;
             border-radius: 10px;
+            overflow: hidden;
         }
 
         .progress-bar {
             font-weight: bold;
-            font-size: 14px;
+            line-height: 25px;
         }
 
         .subtotal-row {
-            background-color: #dbeafe !important;
-            color: #1e3a8a;
-            font-weight: 600;
+            background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
+            color: white;
+            font-weight: bold;
+            font-size: 15px;
         }
 
-        .clickable-image {
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            cursor: zoom-in;
-            border-radius: 8px;
-            max-width: 70px;
-            max-height: 70px;
-        }
-
-        .clickable-image:hover {
-            transform: scale(1.4);
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-            z-index: 5;
-        }
-
-        table.refreshing {
-            opacity: 0.4;
-        }
-
-        table.refreshing::after {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 40px;
-            height: 40px;
-            border: 4px solid #93c5fd;
-            border-top-color: transparent;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            animation: spin 1s linear infinite;
-            z-index: 20;
-        }
-
-        @keyframes spin {
-            to {
-                transform: translate(-50%, -50%) rotate(360deg);
-            }
-        }
-
-        #modalImage {
-            max-height: 90vh;
-            object-fit: contain;
-            background-color: rgba(0, 0, 0, 0.85);
-            border-radius: 10px;
+        .subtotal-row td {
+            padding: 15px !important;
+            text-align: center;
         }
 
         .modal-content {
-            background: transparent;
-            border: none;
-            box-shadow: none;
+            border-radius: 15px;
         }
 
-        /* CSS MỚI CHO SƠ ĐỒ & TRẠNG THÁI MÁY */
-        .floor-section {
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px 15px 0 0;
+        }
+
+        .summary-card {
+            background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
             padding: 20px;
-            margin-top: 30px;
-            background-color: #ffffff;
-            border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-        }
-
-        .status-active {
-            color: #15803d;
-            /* Xanh lá đậm */
-            font-weight: 600;
-        }
-
-        .status-inactive {
-            color: #b91c1c;
-            /* Đỏ đậm */
-            font-weight: 600;
-        }
-
-        .floor-map-placeholder {
-            min-height: 200px;
-            background-color: #e2e8f0;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #64748b;
-            font-style: italic;
-            font-size: 1.2em;
+            border-radius: 10px;
             margin-bottom: 20px;
+        }
+
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .summary-item:last-child {
+            border-bottom: none;
+        }
+
+        .congdoan-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            display: inline-block;
+        }
+
+        .detail-table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .refreshing {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .refresh-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(102, 126, 234, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            z-index: 9999;
+            display: none;
+        }
+
+        .refresh-indicator.active {
+            display: block;
         }
     </style>
 </head>
 
 <body>
+    <div class="refresh-indicator" id="refreshIndicator">
+        Đang cập nhật...
+    </div>
+
     <div class="container-fluid mt-4">
         <h1 class="text-center mb-3">LỆNH ĐANG SẢN XUẤT TRONG 24 GIỜ QUA</h1>
-
-        {{-- <div class="text-center mb-3">
-            <button class="btn btn-primary" onclick="loadSXData()">🔄 Làm mới</button>
-        </div> --}}
+        <p class="text-center text-muted">
+            <small>Tự động cập nhật mỗi 10 giây | Lần cập nhật cuối: <span id="lastUpdate">---</span></small>
+        </p>
 
         <table class="table table-bordered table-striped text-center align-middle" id="sxTable">
             <thead>
@@ -182,56 +199,9 @@
                 </tr>
             </tbody>
         </table>
-
-        <div id="machineStatusSection" class="floor-section">
-            <h2 class="text-center mb-4">SƠ ĐỒ & TRẠNG THÁI MÁY MÓC</h2>
-
-            <div class="row">
-                <div class="col-lg-6">
-                    <h3 class="h4 mb-3 text-primary">Tầng 1 - Máy Đang Hoạt Động</h3>
-                    <div class="floor-map-placeholder">
-                        <p>Placeholder: Sơ đồ tầng 1 (Máy)</p>
-                    </div>
-                    <table class="table table-bordered table-hover text-center align-middle" id="floor1Table">
-                        <thead>
-                            <tr>
-                                <th>Tên Máy</th>
-                                <th>Lệnh SX</th>
-                                <th>Trạng thái</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td colspan="3">Chờ dữ liệu sản xuất...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="col-lg-6">
-                    <h3 class="h4 mb-3 text-primary">Tầng 2 - Máy Đang Hoạt Động</h3>
-                    <div class="floor-map-placeholder">
-                        <p>Placeholder: Sơ đồ tầng 2 (Máy)</p>
-                    </div>
-                    <table class="table table-bordered table-hover text-center align-middle" id="floor2Table">
-                        <thead>
-                            <tr>
-                                <th>Tên Máy</th>
-                                <th>Lệnh SX</th>
-                                <th>Trạng thái</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td colspan="3">Chờ dữ liệu sản xuất...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
     </div>
 
+    <!-- Modal Phóng to ảnh -->
     <div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content bg-transparent border-0 shadow-none position-relative">
@@ -242,132 +212,256 @@
         </div>
     </div>
 
+    <!-- Modal Chi Tiết Lệnh -->
+    <div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="detailModalTitle">Chi Tiết Lệnh Sản Xuất</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="detailModalBody">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Đang tải...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        /**
-         * Ánh xạ mã Bộ phận (DgiaiV) sang Tên Máy
-         * Tạm thời giả định tất cả máy đều ở Tầng 1 cho dễ quản lý
-         */
-        const MACHINE_MAP = {
-            'DET': {
-                name: 'Máy Dệt',
-                floor: 1
-            },
-            'BANGTAI': {
-                name: 'Máy Băng Tải',
-                floor: 2
-            },
-            'BANIN1': {
-                name: 'Bàn In 1',
-                floor: 1
-            },
-            'BANIN2': {
-                name: 'Bàn In 2',
-                floor: 2 // Ví dụ máy này ở Tầng 2
-            },
-            // Thêm các ánh xạ khác tại đây
-        };
-
-        /**
-         * HÀM MỚI: Tổng hợp trạng thái máy từ dữ liệu sản xuất (SX)
-         * @param {Array} filteredData - Dữ liệu SX đã lọc trong 24h qua
-         */
-        function deriveMachineStatusFromSXData(filteredData) {
-            const table1 = document.querySelector('#floor1Table tbody');
-            const table2 = document.querySelector('#floor2Table tbody');
-
-            // Xóa nội dung cũ
-            table1.innerHTML = '';
-            table2.innerHTML = '';
-
-            const activeMachines = {};
-
-            filteredData.forEach(item => {
-                const maBoPhan = item.DgiaiV?.toUpperCase();
-
-                if (maBoPhan && MACHINE_MAP[maBoPhan]) {
-                    const machine = MACHINE_MAP[maBoPhan];
-                    const machineKey = `${machine.name}_${machine.floor}`;
-
-                    // Giả định máy đang hoạt động nếu có lệnh SX trong 24h qua
-                    if (!activeMachines[machineKey]) {
-                        activeMachines[machineKey] = {
-                            Ten_may: machine.name,
-                            Lenh_sx: item.So_ct_go ?? 'N/A',
-                            Trang_thai: 'Hoạt động',
-                            Tang: machine.floor
-                        };
-                    } else {
-                        // Nếu cùng một máy có nhiều lệnh trong 24h, hiển thị lệnh cuối cùng hoặc ghi đè
-                        activeMachines[machineKey].Lenh_sx = item.So_ct_go ?? 'N/A';
-                    }
-                }
-            });
-
-            const floor1Data = Object.values(activeMachines).filter(m => m.Tang === 1);
-            const floor2Data = Object.values(activeMachines).filter(m => m.Tang === 2);
-
-            // Hàm render bảng trạng thái máy
-            function renderMachineTable(tbodyElement, data, floor) {
-                if (data.length === 0) {
-                    tbodyElement.innerHTML =
-                        `<tr><td colspan="3" class="text-muted">Tầng ${floor}: Không có máy nào đang chạy lệnh SX trong 24h.</td></tr>`;
-                    return;
-                }
-
-                data.forEach(machine => {
-                    const statusClass = 'status-active'; // Vì chỉ hiển thị máy đang hoạt động
-                    const statusText = 'ĐANG CHẠY';
-
-                    const row = `
-                        <tr>
-                            <td>${machine.Ten_may}</td>
-                            <td>${machine.Lenh_sx}</td>
-                            <td class="${statusClass}">${statusText}</td>
-                        </tr>
-                    `;
-                    tbodyElement.insertAdjacentHTML('beforeend', row);
-                });
-            }
-
-            renderMachineTable(table1, floor1Data, 1);
-            renderMachineTable(table2, floor2Data, 2);
-        }
+        let isRefreshing = false;
+        let refreshInterval = null;
 
         function tvFetch(url, callback) {
             const xhr = new XMLHttpRequest();
             xhr.open("GET", url, true);
+            xhr.timeout = 8000; // 8 giây timeout
+
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
-                    try {
-                        const json = JSON.parse(xhr.responseText);
-                        callback(json);
-                    } catch (e) {
-                        console.error("TV JSON parse error:", e);
+                    if (xhr.status === 200) {
+                        try {
+                            const json = JSON.parse(xhr.responseText);
+                            callback(json, null);
+                        } catch (e) {
+                            console.error("TV JSON parse error:", e);
+                            callback(null, e);
+                        }
+                    } else {
+                        callback(null, new Error(`HTTP ${xhr.status}`));
                     }
                 }
             };
+
+            xhr.onerror = function() {
+                callback(null, new Error('Network error'));
+            };
+
+            xhr.ontimeout = function() {
+                callback(null, new Error('Request timeout'));
+            };
+
             xhr.send();
         }
+
         /**
-         * HÀM GỐC: Tải dữ liệu sản xuất
+         * Hàm cập nhật thời gian refresh
          */
-        async function loadSXData() {
+        function updateLastRefreshTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('vi-VN');
+            document.getElementById('lastUpdate').textContent = timeStr;
+        }
+
+        /**
+         * Hàm tải chi tiết lệnh sản xuất
+         */
+        function loadDetailLenh(soCt) {
+            const modal = new bootstrap.Modal(document.getElementById('detailModal'));
+            const modalBody = document.getElementById('detailModalBody');
+            const modalTitle = document.getElementById('detailModalTitle');
+
+            modalTitle.textContent = `Chi Tiết Lệnh: ${soCt}`;
+            modalBody.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Đang tải...</span>
+                    </div>
+                </div>
+            `;
+
+            modal.show();
+
+            tvFetch(`/api/tivi/sx-detail/${soCt}`, function(response, error) {
+                if (error || !response || !response.success) {
+                    modalBody.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i> ${error?.message || response?.message || 'Không thể tải dữ liệu'}
+                        </div>
+                    `;
+                    return;
+                }
+
+                const {
+                    orderInfo,
+                    sxDetails,
+                    summary
+                } = response.data;
+
+                // Render summary card
+                let summaryHtml = `
+                    <div class="summary-card">
+                        <h5 class="mb-3">Tổng Quan Lệnh ${soCt}</h5>
+                        <div class="summary-item">
+                            <span>Khách hàng:</span>
+                            <strong>${orderInfo.khach_hang?.Ten_kh || 'N/A'}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span>Sản phẩm:</span>
+                            <strong>${orderInfo.hang_hoa?.Ten_hh || 'N/A'}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span>Số lượng đơn:</span>
+                            <strong>${summary.so_luong_don.toLocaleString('vi-VN')} ${orderInfo.hang_hoa?.Dvt || ''}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span>Đã sản xuất:</span>
+                            <strong class="text-success">${summary.total_sx.toLocaleString('vi-VN')}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span>Còn thiếu:</span>
+                            <strong class="text-warning">${summary.con_thieu.toLocaleString('vi-VN')}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span>Tổng lỗi:</span>
+                            <strong class="text-danger">${Math.round(summary.total_loi)}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span>📈 Tiến độ:</span>
+                            <strong>${summary.percent_complete}%</strong>
+                        </div>
+                    </div>
+                `;
+
+                // Render summary by công đoạn
+                if (summary.by_cong_doan && summary.by_cong_doan.length > 0) {
+                    summaryHtml += `
+                        <div class="mb-4">
+                            <h6 class="mb-3">Tổng Hợp Theo Công Đoạn</h6>
+                            <div class="row">
+                    `;
+
+                    summary.by_cong_doan.forEach(cd => {
+                        summaryHtml += `
+                            <div class="col-md-4 mb-2">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <span class="congdoan-badge">${cd.Ma_ko}</span>
+                                        <div class="mt-2">
+                                            <small>Số lượng:</small> <strong>${cd.total_sx.toLocaleString('vi-VN')}</strong><br>
+                                            <small>Lỗi:</small> <strong class="text-danger">${Math.round(cd.total_loi)}</strong><br>
+                                            <small>Số lần SX:</small> <strong>${cd.count}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    summaryHtml += `
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Render detail table
+                let detailTableHtml = `
+                    <h6 class="mb-3">Chi Tiết Sản Xuất (${sxDetails.length} bản ghi)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover detail-table">
+                            <thead>
+                                <tr>
+                                    <th>STT</th>
+                                    <th>Ngày nhập</th>
+                                    <th>Mã HH</th>
+                                    <th>Tên hàng</th>
+                                    <th>Công đoạn</th>
+                                    <th>Công nhân</th>
+                                    <th>Số lượng</th>
+                                    <th>Lỗi</th>
+                                    <th>ĐVT</th>
+                                    <th>Ghi chú</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                sxDetails.forEach((item, idx) => {
+                    detailTableHtml += `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td>${item.UserNgE ? new Date(item.UserNgE).toLocaleString('vi-VN') : ''}</td>
+                            <td>${item.Ma_hh || ''}</td>
+                            <td>${item.hang_hoa?.Ten_hh || ''}</td>
+                            <td><span class="congdoan-badge">${item.Ma_ko || ''}</span></td>
+                            <td>${item.nhan_vien?.Ten_nv || ''}</td>
+                            <td><strong>${Number(item.Soluong || 0).toLocaleString('vi-VN')}</strong></td>
+                            <td class="text-danger">${Math.round(item.Tien_vnd || 0)}</td>
+                            <td>${item.hang_hoa?.Dvt || ''}</td>
+                            <td>${item.DgiaiV || ''}</td>
+                        </tr>
+                    `;
+                });
+
+                detailTableHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                modalBody.innerHTML = summaryHtml + detailTableHtml;
+            });
+        }
+
+        /**
+         * Hàm tải dữ liệu sản xuất
+         */
+        function loadSXData() {
+            // Tránh gọi API nếu lần trước chưa xong
+            if (isRefreshing) {
+                console.log('⏳ Đang refresh, bỏ qua lần này...');
+                return;
+            }
+
+            console.log('🔄 Bắt đầu refresh lúc:', new Date().toLocaleTimeString('vi-VN'));
+            isRefreshing = true;
+
             const table = document.querySelector('#sxTable');
             const tbody = table.querySelector('tbody');
+            const refreshIndicator = document.getElementById('refreshIndicator');
+
             table.classList.add('refreshing');
+            refreshIndicator.classList.add('active');
 
-            let filteredData = [];
-
-            try {
-                tvFetch("/api/tivi/sx-data", function(response) {
+            tvFetch("/api/tivi/sx-data", function(response, error) {
+                try {
+                    if (error || !response) {
+                        console.error("Lỗi tải dữ liệu:", error);
+                        tbody.innerHTML =
+                            `<tr><td colspan="16" class="text-danger text-center">Lỗi tải dữ liệu: ${error?.message || 'Unknown error'}</td></tr>`;
+                        return;
+                    }
 
                     const data = response.data || [];
                     const totalBySoct = response.totalBySoct || {};
 
                     const now = new Date();
                     const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                    filteredData = data.filter(item => {
+                    const filteredData = data.filter(item => {
                         const ngay = new Date(item.UserNgE);
                         return ngay >= cutoff && ngay <= now;
                     });
@@ -377,7 +471,6 @@
                     if (filteredData.length === 0) {
                         tbody.innerHTML =
                             `<tr><td colspan="16" class="text-center text-warning">Không có lệnh SX trong 24h qua</td></tr>`;
-                        deriveMachineStatusFromSXData(filteredData);
                         return;
                     }
 
@@ -389,48 +482,50 @@
                     });
 
                     Object.entries(groups).forEach(([soct, rows]) => {
-
                         let tongSX = 0;
                         const soluongGO = Number(rows[0]?.Soluong_go ?? 0);
 
                         rows.forEach((item, index) => {
                             tongSX = Number(totalBySoct?.[item.So_dh] ?? 0);
-                            const pct = soluongGO > 0 ? (item.Soluong / soluongGO * 100)
-                                .toFixed(1) : 0;
-                            const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ?
-                                'bg-warning' : 'bg-danger';
+                            const pct = soluongGO > 0 ? (item.Soluong / soluongGO * 100).toFixed(
+                                1) : 0;
+                            const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ? 'bg-warning' :
+                                'bg-danger';
 
                             const imageHtml = `
-                        <img src="/hinh_hh/HH_${item.hang_hoa.Ma_hh}/${item.hang_hoa.Pngpath}" 
-                             alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
-                    `;
+                                <img src="/hinh_hh/HH_${item.hang_hoa.Ma_hh}/${item.hang_hoa.Pngpath}" 
+                                     alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
+                            `;
+
+                            const lenhHtml =
+                                `<span class="clickable-lenh" onclick="loadDetailLenh('${item.So_dh}')">${item.So_ct_go ?? ''}</span>`;
 
                             const row = `
-                        <tr>
-                            <td>${index+1}</td>
-                            <td>${item.UserNgE ? new Date(item.UserNgE).toLocaleDateString('vi-VN') : ''}</td>
-                            <td>${item.So_ct_go ?? ''}</td>
-                            <td>${item.Ma_hh ?? ''}</td>
-                            <td>${imageHtml}</td>
-                            <td>${item.hang_hoa?.Ten_hh ?? ''}</td>
-                            <td>${item.Ma_ko ?? ''}</td>
-                            <td>${item.nhan_vien?.Ten_nv ?? ''}</td>
-                            <td>${soluongGO.toLocaleString('vi-VN')}</td>
-                            <td>${Number(item.Dgbanvnd ?? 0).toLocaleString('vi-VN')}</td>
-                            <td>${Number(item.Soluong ?? 0).toLocaleString('vi-VN')}</td>
-                            <td>${Number(tongSX ?? 0).toLocaleString('vi-VN')}</td>
-                            <td>${Math.round(item.Tien_vnd ?? 0)}</td>
-                            <td>${item.hang_hoa?.Dvt ?? ''}</td>
-                            <td>
-                                <div class="progress">
-                                    <div class="progress-bar ${barColor}" style="width:${Math.min(pct, 100)}%">
-                                        ${pct}%
-                                    </div>
-                                </div>
-                            </td>
-                            <td>${item.DgiaiV ?? ''}</td>
-                        </tr>
-                    `;
+                                <tr>
+                                    <td>${index + 1}</td>
+                                    <td>${item.UserNgE ? new Date(item.UserNgE).toLocaleDateString('vi-VN') : ''}</td>
+                                    <td>${lenhHtml}</td>
+                                    <td>${item.Ma_hh ?? ''}</td>
+                                    <td>${imageHtml}</td>
+                                    <td>${item.hang_hoa?.Ten_hh ?? ''}</td>
+                                    <td>${item.Ma_ko ?? ''}</td>
+                                    <td>${item.nhan_vien?.Ten_nv ?? ''}</td>
+                                    <td>${soluongGO.toLocaleString('vi-VN')}</td>
+                                    <td>${Number(item.Dgbanvnd ?? 0).toLocaleString('vi-VN')}</td>
+                                    <td>${Number(item.Soluong ?? 0).toLocaleString('vi-VN')}</td>
+                                    <td>${Number(tongSX ?? 0).toLocaleString('vi-VN')}</td>
+                                    <td>${Math.round(item.Tien_vnd ?? 0)}</td>
+                                    <td>${item.hang_hoa?.Dvt ?? ''}</td>
+                                    <td>
+                                        <div class="progress">
+                                            <div class="progress-bar ${barColor}" style="width:${Math.min(pct, 100)}%">
+                                                ${pct}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>${item.DgiaiV ?? ''}</td>
+                                </tr>
+                            `;
                             tbody.insertAdjacentHTML('beforeend', row);
                         });
 
@@ -438,27 +533,32 @@
                         const soThieu = soluongGO - tongSX;
 
                         const subtotalRow = `
-                    <tr class="subtotal-row">
-                        <td colspan="16">LỆNH ${soct} ĐÃ SẢN XUẤT ĐƯỢC ${tongSX.toLocaleString('vi-VN')} CÒN THIẾU ${soThieu.toLocaleString('vi-VN')}</td>
-                    </tr>
-                `;
+                            <tr class="subtotal-row">
+                                <td colspan="16">
+                                    LỆNH <span class="clickable-lenh" onclick="loadDetailLenh('${soct}')">${soct}</span> 
+                                    ĐÃ SẢN XUẤT ĐƯỢC ${tongSX.toLocaleString('vi-VN')} CÒN THIẾU ${soThieu.toLocaleString('vi-VN')}
+                                </td>
+                            </tr>
+                        `;
                         tbody.insertAdjacentHTML('beforeend', subtotalRow);
                     });
 
-                    deriveMachineStatusFromSXData(filteredData);
-                });
+                    console.log('Refresh thành công, tải được', filteredData.length, 'bản ghi');
+                    updateLastRefreshTime();
 
-            } catch (err) {
-                console.error("Lỗi tải dữ liệu SX:", err);
-                tbody.innerHTML = `<tr><td colspan="16" class="text-danger text-center">Lỗi tải dữ liệu SX!</td></tr>`;
-                deriveMachineStatusFromSXData([]);
-            } finally {
-                table.classList.remove('refreshing');
-            }
+                } catch (err) {
+                    console.error("Lỗi xử lý dữ liệu:", err);
+                    tbody.innerHTML =
+                        `<tr><td colspan="16" class="text-danger text-center">Lỗi xử lý dữ liệu!</td></tr>`;
+                } finally {
+                    table.classList.remove('refreshing');
+                    refreshIndicator.classList.remove('active');
+                    isRefreshing = false;
+                }
+            });
         }
 
-
-        // Click ảnh để phóng to (Giữ nguyên)
+        // Click ảnh để phóng to
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('clickable-image')) {
                 const modalImg = document.getElementById('modalImage');
@@ -468,9 +568,22 @@
             }
         });
 
-        // Gọi lần đầu & auto refresh mỗi 10s
+        // Khởi động
+        console.log('🚀 Khởi động dashboard sản xuất...');
         loadSXData();
-        setInterval(loadSXData, 10000);
+
+        // Set interval và lưu reference để có thể clear nếu cần
+        refreshInterval = setInterval(function() {
+
+            loadSXData();
+        }, 10000);
+
+        // Cleanup khi đóng trang
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
     </script>
 </body>
 
