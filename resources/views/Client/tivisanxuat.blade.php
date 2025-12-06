@@ -6,159 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CÁC LỆNH SẢN XUẤT 24 GIỜ QUA</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
+    <link href="{{ asset('css/tivicss.css') }}" rel="stylesheet">
 
-        .container-fluid {
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-        }
-
-        h1 {
-            color: #667eea;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .table {
-            font-size: 14px;
-        }
-
-        .table thead {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .table thead th {
-            vertical-align: middle;
-            font-weight: 600;
-            border: none;
-        }
-
-        .table-striped tbody tr:nth-of-type(odd) {
-            background-color: rgba(102, 126, 234, 0.05);
-        }
-
-        .clickable-image {
-            width: 60px;
-            height: 60px;
-            object-fit: cover;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.3s ease;
-            border: 2px solid #ddd;
-        }
-
-        .clickable-image:hover {
-            transform: scale(1.1);
-            border-color: #667eea;
-        }
-
-        .clickable-lenh {
-            color: #667eea;
-            font-weight: bold;
-            cursor: pointer;
-            text-decoration: underline;
-            transition: color 0.3s ease;
-        }
-
-        .clickable-lenh:hover {
-            color: #764ba2;
-        }
-
-        .progress {
-            height: 25px;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-
-        .progress-bar {
-            font-weight: bold;
-            line-height: 25px;
-        }
-
-        .subtotal-row {
-            background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
-            color: white;
-            font-weight: bold;
-            font-size: 15px;
-        }
-
-        .subtotal-row td {
-            padding: 15px !important;
-            text-align: center;
-        }
-
-        .modal-content {
-            border-radius: 15px;
-        }
-
-        .modal-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px 15px 0 0;
-        }
-
-        .summary-card {
-            background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-
-        .summary-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-        }
-
-        .summary-item:last-child {
-            border-bottom: none;
-        }
-
-        .congdoan-badge {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-weight: bold;
-            display: inline-block;
-        }
-
-        .detail-table thead {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .refreshing {
-            opacity: 0.6;
-            pointer-events: none;
-        }
-
-        .refresh-indicator {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(102, 126, 234, 0.9);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 25px;
-            font-weight: bold;
-            z-index: 9999;
-            display: none;
-        }
-
-        .refresh-indicator.active {
-            display: block;
-        }
-    </style>
 </head>
 
 <body>
@@ -309,7 +158,10 @@
                 const {
                     orderInfo,
                     sxDetails,
-                    summary
+                    summary,
+                    nxDetails,
+                    ckDetails
+
                 } = response.data;
 
                 // Render summary card
@@ -326,19 +178,19 @@
                         </div>
                         <div class="summary-item">
                             <span>Số lượng đơn:</span>
-                            <strong>${summary.so_luong_don.toLocaleString('vi-VN')} ${orderInfo.hang_hoa?.Dvt || ''}</strong>
+                            <strong>${Number(summary.so_luong_don).toLocaleString('vi-VN')} ${orderInfo.hang_hoa?.Dvt || ''}</strong>
                         </div>
                         <div class="summary-item">
                             <span>Đã sản xuất:</span>
-                            <strong class="text-success">${summary.total_sx.toLocaleString('vi-VN')}</strong>
+                            <strong class="text-success">${Number(summary.total_sx).toLocaleString('vi-VN')}</strong>
                         </div>
                         <div class="summary-item">
                             <span>Còn thiếu:</span>
-                            <strong class="text-warning">${summary.con_thieu.toLocaleString('vi-VN')}</strong>
+                            <strong class="text-warning">${Number(summary.con_thieu).toLocaleString('vi-VN')}</strong>
                         </div>
                         <div class="summary-item">
                             <span>Tổng lỗi:</span>
-                            <strong class="text-danger">${Math.round(summary.total_loi)}</strong>
+                            <strong class="text-danger">${Number(summary.total_loi).toLocaleString('vi-VN')}</strong>
                         </div>
                         <div class="summary-item">
                             <span>📈 Tiến độ:</span>
@@ -362,9 +214,10 @@
                                     <div class="card-body">
                                         <span class="congdoan-badge">${cd.Ma_ko}</span>
                                         <div class="mt-2">
-                                            <small>Số lượng:</small> <strong>${cd.total_sx.toLocaleString('vi-VN')}</strong><br>
-                                            <small>Lỗi:</small> <strong class="text-danger">${Math.round(cd.total_loi)}</strong><br>
-                                            <small>Số lần SX:</small> <strong>${cd.count}</strong>
+                                            <small>Số lượng:</small> <strong>${Number(cd.total_sx).toLocaleString('vi-VN')}</strong><br>
+                                            <small>Số lượng khác (mm,g):</small> <strong>${Number(cd.total_soluongkhac).toLocaleString('vi-VN')}</strong><br>
+                                            <small>Lỗi:</small> <strong class="text-danger">${Number(cd.total_loi).toLocaleString('vi-VN')}</strong><br>
+                                            <small>Số ca SX:</small> <strong>${cd.count}</strong>
                                         </div>
                                     </div>
                                 </div>
@@ -377,6 +230,136 @@
                         </div>
                     `;
                 }
+                // Render NX details gồm STT,Ma_ko,Ma_hh,Ma_sp,Soluong
+                // Thay thế phần render NX details trong function loadDetailLenh
+
+                // Lấy số lượng đơn từ summary
+                const soLuongDon = Number(summary.so_luong_don || 0);
+
+                // Tạo map xuất kho theo Ma_hh (không cần Ma_ko) để tra cứu nhanh
+                const ckMap = {};
+                ckDetails.forEach(ck => {
+                    const key = ck.Ma_hh;
+                    if (!ckMap[key]) {
+                        ckMap[key] = {
+                            total: 0,
+                            items: []
+                        };
+                    }
+                    ckMap[key].total += Number(ck.Soluong || 0);
+                    ckMap[key].items.push(ck);
+                });
+
+                // Tạo map định mức để check sau
+                const nxMap = {};
+                nxDetails.forEach(nx => {
+                    const key = nx.Ma_hh;
+                    nxMap[key] = nx;
+                });
+
+                // Render NX + CK details với cột dư/thiếu
+                let nxDetailsHtml = `
+    <h6 class="mb-3">Chi Tiết Nhập Xuất (${nxDetails.length} định mức, ${ckDetails.length} xuất kho)</h6>
+    <div class="alert alert-secondary mb-3">
+        <strong>Số lượng đơn:</strong> ${soLuongDon.toLocaleString('vi-VN')} 
+        <span class="text-muted">(Định mức đơn vị sẽ được nhân với số lượng đơn để ra số đề xuất)</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover detail-table">
+            <thead>
+                <tr>
+                    <th>STT</th>
+                    <th>Ngày</th>
+                    <th>Mã HH</th>
+                    <th>Tên hàng</th>
+                    <th>Công đoạn</th>
+                    <th>Số đề xuất</th>
+                    <th>Đã xuất</th>
+                    <th>Dư/Thiếu</th>
+                    <th>ĐVT</th>
+                </tr>
+            </thead>
+            <tbody>
+`;
+
+                // Hiển thị từng dòng định mức và so sánh với xuất kho
+                nxDetails.forEach((item, idx) => {
+                    const dinhMucDonVi = Number(item.Soluong || 0);
+                    const dinhMucDeXuat = dinhMucDonVi * soLuongDon; // Định mức * Số lượng đơn
+                    const key = item.Ma_hh;
+                    const daXuat = ckMap[key]?.total || 0;
+                    const duThieu = daXuat - dinhMucDeXuat;
+
+                    // Xác định class cho cột dư/thiếu
+                    let duThieuClass = '';
+                    let duThieuText = '';
+                    if (duThieu > 0) {
+                        duThieuClass = 'text-success fw-bold';
+                        duThieuText = `+${duThieu.toLocaleString('vi-VN')}`;
+                    } else if (duThieu < 0) {
+                        duThieuClass = 'text-danger fw-bold';
+                        duThieuText = duThieu.toLocaleString('vi-VN');
+                    } else {
+                        duThieuClass = 'text-muted';
+                        duThieuText = '0';
+                    }
+
+                    nxDetailsHtml += `
+        <tr>
+            <td>${idx + 1}</td>
+            <td>${item.UserNgE ? new Date(item.UserNgE).toLocaleString('vi-VN') : ''}</td>
+            <td>${item.Ma_hh}</td>
+            <td>${item.hang_hoa?.Ten_hh || ''}</td>
+            <td><span class="congdoan-badge">${item.Ma_ko || ''}</span></td>
+            <td>
+                ${dinhMucDonVi.toLocaleString('vi-VN')} 
+                <small class="text-muted">× ${soLuongDon.toLocaleString('vi-VN')}</small>
+                <br>
+                <strong class="text-primary">= ${dinhMucDeXuat.toLocaleString('vi-VN')}</strong>
+            </td>
+            <td>
+                <strong class="text-success">${daXuat.toLocaleString('vi-VN')}</strong>
+                ${daXuat === 0 ? '<br><small class="text-muted">(chưa xuất)</small>' : ''}
+            </td>
+            <td class="${duThieuClass}">${duThieuText}</td>
+            <td>${item.hang_hoa?.Dvt || ''}</td>
+        </tr>
+    `;
+                });
+
+                // Thêm các dòng xuất kho không có trong định mức (nếu có)
+                Object.entries(ckMap).forEach(([key, data], idx) => {
+                    if (!nxMap[key]) {
+                        const firstCK = data.items[0];
+                        const soLuong = data.total;
+                        nxDetailsHtml += `
+            <tr class="table-warning">
+                <td>${nxDetails.length + idx + 1}</td>
+                <td>${firstCK.UserNgE ? new Date(firstCK.UserNgE).toLocaleString('vi-VN') : ''}</td>
+                <td>${firstCK.Ma_hh}</td>
+                <td>${firstCK.hang_hoa?.Ten_hh || ''}</td>
+                <td><span class="congdoan-badge">${firstCK.Ma_ko || ''}</span></td>
+                <td class="text-muted">
+                    <small>(không có định mức)</small><br>
+                    <strong>0</strong>
+                </td>
+                <td>
+                    <strong class="text-success">${soLuong.toLocaleString('vi-VN')}</strong>
+                    <br><small class="text-warning">(xuất thêm)</small>
+                </td>
+                <td class="text-warning fw-bold">+${soLuong.toLocaleString('vi-VN')}</td>
+                <td>${firstCK.hang_hoa?.Dvt || ''}</td>
+            </tr>
+        `;
+                    }
+                });
+
+                nxDetailsHtml += `
+            </tbody>
+        </table>
+    </div>
+
+`;
 
                 // Render detail table
                 let detailTableHtml = `
@@ -392,6 +375,7 @@
                                     <th>Công đoạn</th>
                                     <th>Công nhân</th>
                                     <th>Số lượng</th>
+                                    <th>Số lượng khác (mm,g)</th>
                                     <th>Lỗi</th>
                                     <th>ĐVT</th>
                                     <th>Ghi chú</th>
@@ -399,7 +383,6 @@
                             </thead>
                             <tbody>
                 `;
-
                 sxDetails.forEach((item, idx) => {
                     detailTableHtml += `
                         <tr>
@@ -410,6 +393,7 @@
                             <td><span class="congdoan-badge">${item.Ma_ko || ''}</span></td>
                             <td>${item.nhan_vien?.Ten_nv || ''}</td>
                             <td><strong>${Number(item.Soluong || 0).toLocaleString('vi-VN')}</strong></td>
+                            <td><strong>${Number(item.Dgbanvnd || 0).toLocaleString('vi-VN')}</strong></td>
                             <td class="text-danger">${Math.round(item.Tien_vnd || 0)}</td>
                             <td>${item.hang_hoa?.Dvt || ''}</td>
                             <td>${item.DgiaiV || ''}</td>
@@ -423,7 +407,7 @@
                     </div>
                 `;
 
-                modalBody.innerHTML = summaryHtml + detailTableHtml;
+                modalBody.innerHTML = summaryHtml + nxDetailsHtml + detailTableHtml;
             });
         }
 
@@ -433,7 +417,6 @@
         function loadSXData() {
             // Tránh gọi API nếu lần trước chưa xong
             if (isRefreshing) {
-                console.log('⏳ Đang refresh, bỏ qua lần này...');
                 return;
             }
 
@@ -569,9 +552,7 @@
         });
 
         // Khởi động
-        console.log('🚀 Khởi động dashboard sản xuất...');
         loadSXData();
-
         // Set interval và lưu reference để có thể clear nếu cần
         refreshInterval = setInterval(function() {
 

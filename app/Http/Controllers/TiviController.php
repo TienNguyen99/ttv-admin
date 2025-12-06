@@ -46,7 +46,6 @@ class TiviController extends Controller
             ->select('DataKetoanData.*')
             ->where('DataKetoanData.Ma_ct', 'NX')
             ->where('DataKetoanData.So_dh', $soCt)
-            ->orderBy('DataKetoanData.UserNgE', 'desc')
             ->get();
             // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = CK nhưng table DataKetoan2025
             $ckDetails = DataKetoan2025::with([
@@ -56,7 +55,7 @@ class TiviController extends Controller
             ->select('DataKetoan2025.*')
             ->where('DataKetoan2025.Ma_ct', 'CK')
             ->where('DataKetoan2025.So_dh', $soCt)
-            ->orderBy('DataKetoan2025.UserNgE', 'desc')
+
             ->get();
             // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = SX
             $sxDetails = DataKetoanData::with([
@@ -66,7 +65,6 @@ class TiviController extends Controller
             ->select('DataKetoanData.*')
             ->where('DataKetoanData.Ma_ct', 'SX')
             ->where('DataKetoanData.So_dh', $soCt)
-            // ->orderBy('DataKetoanData.UserNgE', 'desc')
             ->get();
 
             // Tính tổng sản xuất theo công đoạn
@@ -75,6 +73,7 @@ class TiviController extends Controller
                     'Ma_ko' => $items->first()->Ma_ko,
                     'total_sx' => $items->sum('Soluong'),
                     'total_loi' => $items->sum('Tien_vnd'),
+                    'total_soluongkhac' => $items->sum('Dgbanvnd'),
                     'count' => $items->count()
                 ];
             })->values();
@@ -103,10 +102,13 @@ class TiviController extends Controller
                         'so_luong_don' => $soluongDon,
                         'total_sx' => $totalSX,
                         'total_loi' => $totalLoi,
+                        
                         'con_thieu' => $soluongDon - $totalSX,
                         'percent_complete' => $percentComplete,
                         'by_cong_doan' => $summaryByCongDoan
-                    ]
+                    ],
+                    'nxDetails' => $nxDetails,
+                    'ckDetails' => $ckDetails
                 ]
             ]);
 
