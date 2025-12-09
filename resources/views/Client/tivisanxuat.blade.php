@@ -160,7 +160,8 @@
                     sxDetails,
                     summary,
                     nxDetails,
-                    ckDetails
+                    ckDetails,
+                    nxDetails2025
 
                 } = response.data;
 
@@ -256,25 +257,32 @@
                     const key = nx.Ma_hh;
                     nxMap[key] = nx;
                 });
+                // ← THÊM ĐOẠN CODE NÀY
+                // Tạo map đã sử dụng từ nxDetails2025
+                const daSuDungMap = {};
+                nxDetails2025.forEach(nx => {
+                    const key = nx.Ma_hh;
+                    if (!daSuDungMap[key]) {
+                        daSuDungMap[key] = 0;
+                    }
+                    daSuDungMap[key] += Number(nx.Soluong || 0);
+                });
 
-                // Render NX + CK details với cột dư/thiếu
+                // ===== BƯỚC 3: Cập nhật header table (dòng ~240) =====
                 let nxDetailsHtml = `
-    <h6 class="mb-3">Chi Tiết Nhập Xuất (${nxDetails.length} định mức, ${ckDetails.length} xuất kho)</h6>
-    <div class="alert alert-secondary mb-3">
-        <strong>Số lượng đơn:</strong> ${soLuongDon.toLocaleString('vi-VN')} 
-        <span class="text-muted">(Định mức đơn vị sẽ được nhân với số lượng đơn để ra số đề xuất)</span>
-    </div>
+    <h6 class="mb-3">Chi Tiết Nhập Xuất (${nxDetails.length} định mức, ${ckDetails.length} xuất kho, ${nxDetails2025.length} đã sử dụng)</h6>
+    
     <div class="table-responsive">
         <table class="table table-bordered table-hover detail-table">
             <thead>
                 <tr>
                     <th>STT</th>
-                    <th>Ngày</th>
                     <th>Mã HH</th>
                     <th>Tên hàng</th>
                     <th>Công đoạn</th>
                     <th>Số đề xuất</th>
                     <th>Đã xuất</th>
+                    <th>Đã sử dụng</th>  <!-- ← THÊM CỘT NÀY -->
                     <th>Dư/Thiếu</th>
                     <th>ĐVT</th>
                 </tr>
@@ -282,12 +290,13 @@
             <tbody>
 `;
 
-                // Hiển thị từng dòng định mức và so sánh với xuất kho
+                // ===== BƯỚC 4: Thêm cột "Đã sử dụng" trong vòng lặp nxDetails (dòng ~260) =====
                 nxDetails.forEach((item, idx) => {
                     const dinhMucDonVi = Number(item.Soluong || 0);
-                    const dinhMucDeXuat = dinhMucDonVi * soLuongDon; // Định mức * Số lượng đơn
+                    const dinhMucDeXuat = dinhMucDonVi * soLuongDon;
                     const key = item.Ma_hh;
                     const daXuat = ckMap[key]?.total || 0;
+                    const daSuDung = daSuDungMap[key] || 0; // ← THÊM DÒNG NÀY
                     const duThieu = daXuat - dinhMucDeXuat;
 
                     // Xác định class cho cột dư/thiếu
@@ -307,7 +316,6 @@
                     nxDetailsHtml += `
         <tr>
             <td>${idx + 1}</td>
-            <td>${item.UserNgE ? new Date(item.UserNgE).toLocaleString('vi-VN') : ''}</td>
             <td>${item.Ma_hh}</td>
             <td>${item.hang_hoa?.Ten_hh || ''}</td>
             <td><span class="congdoan-badge">${item.Ma_ko || ''}</span></td>
@@ -321,21 +329,27 @@
                 <strong class="text-success">${daXuat.toLocaleString('vi-VN')}</strong>
                 ${daXuat === 0 ? '<br><small class="text-muted">(chưa xuất)</small>' : ''}
             </td>
+            <!-- ← THÊM CELL NÀY -->
+            <td>
+                <strong class="text-info">${daSuDung.toLocaleString('vi-VN')}</strong>
+                ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
+            </td>
             <td class="${duThieuClass}">${duThieuText}</td>
             <td>${item.hang_hoa?.Dvt || ''}</td>
         </tr>
     `;
                 });
 
-                // Thêm các dòng xuất kho không có trong định mức (nếu có)
+                // ===== BƯỚC 5: Thêm cột cho dòng xuất thêm (dòng ~300) =====
                 Object.entries(ckMap).forEach(([key, data], idx) => {
                     if (!nxMap[key]) {
                         const firstCK = data.items[0];
                         const soLuong = data.total;
+                        const daSuDung = daSuDungMap[key] || 0; // ← THÊM DÒNG NÀY
+
                         nxDetailsHtml += `
             <tr class="table-warning">
                 <td>${nxDetails.length + idx + 1}</td>
-                <td>${firstCK.UserNgE ? new Date(firstCK.UserNgE).toLocaleString('vi-VN') : ''}</td>
                 <td>${firstCK.Ma_hh}</td>
                 <td>${firstCK.hang_hoa?.Ten_hh || ''}</td>
                 <td><span class="congdoan-badge">${firstCK.Ma_ko || ''}</span></td>
@@ -347,6 +361,11 @@
                     <strong class="text-success">${soLuong.toLocaleString('vi-VN')}</strong>
                     <br><small class="text-warning">(xuất thêm)</small>
                 </td>
+                <!-- ← THÊM CELL NÀY -->
+                <td>
+                    <strong class="text-info">${daSuDung.toLocaleString('vi-VN')}</strong>
+                    ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
+                </td>
                 <td class="text-warning fw-bold">+${soLuong.toLocaleString('vi-VN')}</td>
                 <td>${firstCK.hang_hoa?.Dvt || ''}</td>
             </tr>
@@ -354,12 +373,13 @@
                     }
                 });
 
+                // ===== CUỐI CÙNG: Đóng tbody và table =====
                 nxDetailsHtml += `
             </tbody>
         </table>
     </div>
-
 `;
+
 
                 // Render detail table
                 let detailTableHtml = `
@@ -369,7 +389,7 @@
                             <thead>
                                 <tr>
                                     <th>STT</th>
-                                    <th>Ngày nhập</th>
+                                    <th>Số CT</th>
                                     <th>Mã HH</th>
                                     <th>Tên hàng</th>
                                     <th>Công đoạn</th>
@@ -387,7 +407,7 @@
                     detailTableHtml += `
                         <tr>
                             <td>${idx + 1}</td>
-                            <td>${item.UserNgE ? new Date(item.UserNgE).toLocaleString('vi-VN') : ''}</td>
+                            <td>${item.So_ct || ''}</td>
                             <td>${item.Ma_hh || ''}</td>
                             <td>${item.hang_hoa?.Ten_hh || ''}</td>
                             <td><span class="congdoan-badge">${item.Ma_ko || ''}</span></td>
@@ -420,7 +440,7 @@
                 return;
             }
 
-            console.log('🔄 Bắt đầu refresh lúc:', new Date().toLocaleTimeString('vi-VN'));
+            // console.log('🔄 Bắt đầu refresh lúc:', new Date().toLocaleTimeString('vi-VN'));
             isRefreshing = true;
 
             const table = document.querySelector('#sxTable');
@@ -516,17 +536,17 @@
                         const soThieu = soluongGO - tongSX;
 
                         const subtotalRow = `
-                            <tr class="subtotal-row">
-                                <td colspan="16">
-                                    LỆNH <span class="clickable-lenh" onclick="loadDetailLenh('${soct}')">${soct}</span> 
-                                    ĐÃ SẢN XUẤT ĐƯỢC ${tongSX.toLocaleString('vi-VN')} CÒN THIẾU ${soThieu.toLocaleString('vi-VN')}
-                                </td>
-                            </tr>
-                        `;
+    <tr class="subtotal-row ${soThieu >= 0 ? 'table-danger' : 'table-success'}">
+        <td colspan="16">
+            LỆNH ${soct}: ĐÃ SẢN XUẤT ĐƯỢC ${Number(tongSX ?? 0).toLocaleString('vi-VN')} 
+            CÒN THIẾU ${Number(soThieu ?? 0).toLocaleString('vi-VN')}
+        </td>
+    </tr>
+`;
                         tbody.insertAdjacentHTML('beforeend', subtotalRow);
                     });
 
-                    console.log('Refresh thành công, tải được', filteredData.length, 'bản ghi');
+                    // console.log('Refresh thành công, tải được', filteredData.length, 'bản ghi');
                     updateLastRefreshTime();
 
                 } catch (err) {

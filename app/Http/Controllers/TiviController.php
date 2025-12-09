@@ -57,6 +57,15 @@ class TiviController extends Controller
             ->where('DataKetoan2025.So_dh', $soCt)
 
             ->get();
+            // LẤY TẤT CẢ CHI TIẾT CỦA LỆNH SẢN XUẤT MA_CT = NX TABLE DATAKETOAN2025
+            $nxDetails2025 = DataKetoan2025::with([
+                'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
+                'nhanVien:Ma_nv,Ten_nv',
+            ])
+            ->select('DataKetoan2025.*')
+            ->where('DataKetoan2025.Ma_ct', 'NX')
+            ->where('DataKetoan2025.So_dh', $soCt)
+            ->get();
             // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = SX
             $sxDetails = DataKetoanData::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
@@ -65,6 +74,7 @@ class TiviController extends Controller
             ->select('DataKetoanData.*')
             ->where('DataKetoanData.Ma_ct', 'SX')
             ->where('DataKetoanData.So_dh', $soCt)
+            ->orderBy('DataKetoanData.Ma_ko')
             ->get();
 
             // Tính tổng sản xuất theo công đoạn
@@ -99,16 +109,17 @@ class TiviController extends Controller
                     'congDoanCuoi' => $congDoanCuoi, // Thêm thông tin công đoạn cuối
                     'summary' => [
                         'so_ct' => $soCt,
+                        'so_dh' => $orderInfo->So_dh,
                         'so_luong_don' => $soluongDon,
                         'total_sx' => $totalSX,
                         'total_loi' => $totalLoi,
-                        
                         'con_thieu' => $soluongDon - $totalSX,
                         'percent_complete' => $percentComplete,
                         'by_cong_doan' => $summaryByCongDoan
                     ],
                     'nxDetails' => $nxDetails,
-                    'ckDetails' => $ckDetails
+                    'ckDetails' => $ckDetails,
+                    'nxDetails2025' => $nxDetails2025
                 ]
             ]);
 

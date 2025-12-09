@@ -71,7 +71,7 @@ class DanhMucController extends Controller
                 'DataKetoanData (Ma_hh)'   => DataKetoanData::where('Ma_hh', $old)->count(),
                 'DataKetoanData (Ma_sp)'   => DataKetoanData::where('Ma_sp', $old)->count(),
                 'DataKetoan2025 (Ma_hh)'   => DataKetoan2025::where('Ma_hh', $old)->count(),
-                'CodeDanhMuc (Codeid1)'    => CodeDanhMuc::where('Codeid1', $old)->count(),
+                // 'CodeDanhMuc (Codeid1)'    => CodeDanhMuc::where('Codeid1', $old)->count(),
                 'CodeHangHoa (Ma_so)'      => CodeHangHoa::where('Ma_so', $old)->count(),
                 'DataCdLO2025 (Ma_hh)'     => DataCdLO2025::where('Ma_hh', $old)->count(),
             ];
@@ -108,7 +108,7 @@ class DanhMucController extends Controller
             DataKetoanOder::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
             DataKetoanData::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
             DataKetoanData::where('Ma_sp', $old)->update(['Ma_sp' => $new]);
-            CodeDanhMuc::where('Codeid1', $old)->update(['Codeid1' => $new]);
+            // CodeDanhMuc::where('Codeid1', $old)->update(['Codeid1' => $new]);
             DataCdLO2025::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
             DataKetoan2025::where('Ma_hh', $old)->update(['Ma_hh' => $new]);
             CodeHangHoa::where('Ma_so', $old)->update(['Ma_so' => $new]);
