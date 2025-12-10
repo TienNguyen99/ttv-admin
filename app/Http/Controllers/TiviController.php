@@ -38,7 +38,7 @@ class TiviController extends Controller
                     'message' => 'Không tìm thấy lệnh'
                 ], 404);
             }
-            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = NX
+            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = NX (PHÂN TÍCH)
             $nxDetails = DataKetoanData::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
@@ -47,7 +47,7 @@ class TiviController extends Controller
             ->where('DataKetoanData.Ma_ct', 'NX')
             ->where('DataKetoanData.So_dh', $soCt)
             ->get();
-            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = CK nhưng table DataKetoan2025
+            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = CK nhưng table DataKetoan2025 (PHIẾU CHUYỂN KHO NỘI BỘ)
             $ckDetails = DataKetoan2025::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
@@ -55,9 +55,8 @@ class TiviController extends Controller
             ->select('DataKetoan2025.*')
             ->where('DataKetoan2025.Ma_ct', 'CK')
             ->where('DataKetoan2025.So_dh', $soCt)
-
             ->get();
-            // LẤY TẤT CẢ CHI TIẾT CỦA LỆNH SẢN XUẤT MA_CT = NX TABLE DATAKETOAN2025
+            // LẤY TẤT CẢ CHI TIẾT CỦA LỆNH SẢN XUẤT MA_CT = NX TABLE DATAKETOAN2025 (PHIẾU NHẬP THÀNH PHẨM)
             $nxDetails2025 = DataKetoan2025::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
@@ -66,7 +65,16 @@ class TiviController extends Controller
             ->where('DataKetoan2025.Ma_ct', 'NX')
             ->where('DataKetoan2025.So_dh', $soCt)
             ->get();
-            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = SX
+            // LẤY TẤT CẢ CHI TIẾT CỦA LỆNH SẢN XUẤT MA_CT = XU TABLE DATAKETOAN2025 ( PHIẾU XUẤT BÁN HÀNG)
+            $xuDetails2025 = DataKetoan2025::with([
+                'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
+                'nhanVien:Ma_nv,Ten_nv',
+            ])
+            ->select('DataKetoan2025.*')
+            ->where('DataKetoan2025.Ma_ct', 'XU')
+            ->where('DataKetoan2025.So_dh', $soCt)
+            ->get();
+            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = SX ( PHIẾU SẢN XUẤT )
             $sxDetails = DataKetoanData::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
@@ -87,7 +95,8 @@ class TiviController extends Controller
                     'count' => $items->count()
                 ];
             })->values();
-
+            // Tính tổng xuất kho (XU) - CÔNG ĐOẠN CUỐI CÙNG
+$totalXuatKho = $xuDetails2025->sum('Soluong');
             // Lấy công đoạn có Ma_ko lớn nhất (công đoạn cuối cùng)
             $congDoanCuoi = $summaryByCongDoan->sortByDesc('Ma_ko')->first();
             
@@ -115,11 +124,15 @@ class TiviController extends Controller
                         'total_loi' => $totalLoi,
                         'con_thieu' => $soluongDon - $totalSX,
                         'percent_complete' => $percentComplete,
-                        'by_cong_doan' => $summaryByCongDoan
+                        'by_cong_doan' => $summaryByCongDoan,
+                        'total_xuat_kho' => $totalXuatKho, // THÊM DÒNG NÀY
+                        'con_thieu_xuat_kho' => $soluongDon - $totalXuatKho  // THÊM DÒNG NÀY
                     ],
                     'nxDetails' => $nxDetails,
                     'ckDetails' => $ckDetails,
-                    'nxDetails2025' => $nxDetails2025
+                    'nxDetails2025' => $nxDetails2025,
+                    'xuDetails2025' => $xuDetails2025
+                    
                 ]
             ]);
 

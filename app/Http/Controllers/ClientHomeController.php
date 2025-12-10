@@ -250,18 +250,48 @@ class ClientHomeController extends Controller
     // API của DATA kế toán
     // API riêng lấy chi tiết xuất kho
     public function getXuatKhoKeToanDetail(Request $request)
-    {
-        $ma_hh = urldecode($request->query('ma_hh'));
+{
+    $ma_hh = urldecode($request->query('ma_hh'));
 
-        $details = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
-            ->select('Ngay_ct', 'So_ct', 'Ma_hh', 'Soluong', 'Dgvonvnd', 'Dgbanvnd','Dgbannte')
-            ->where('Ma_ct', '=', 'XU')
-            ->where('Ma_hh', $ma_hh)
-            ->orderBy('Ngay_ct')
-            ->get();
+    // Lấy chi tiết xuất kho
+    $details = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        ->select('Ngay_ct', 'So_ct', 'Ma_hh', 'Soluong', 'Dgvonvnd', 'Dgbanvnd', 'Dgbannte')
+        ->where('Ma_ct', '=', 'XU')
+        ->where('Ma_hh', $ma_hh)
+        ->orderBy('Ngay_ct')
+        ->get();
 
-        return response()->json($details);
-    }
+    // Lấy thông tin nhập kho để so sánh (dùng subquery để DISTINCT trước)
+    $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
+        ->where('Ma_ct', '=', 'NX')
+        // ->where('Ma3ko', '=', 'KTPHAM')
+        ->where('Ma_sp', $ma_hh)
+        ->distinct();
+
+    $nhapkho = DB::query()
+        ->fromSub($sub, 'sub')
+        ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhap'))
+        ->groupBy('Ma_vv', 'Ma_sp')
+        ->get();
+
+    // Tính tổng nhập kho
+    $tongNhap = $nhapkho->sum('total_nhap');
+    
+    // Tính tổng xuất kho
+    $tongXuat = $details->sum('Soluong');
+    
+    // Tính tồn kho
+    $tonKho = $tongNhap - $tongXuat;
+
+    return response()->json([
+        'xuat_kho' => $details,
+        'nhap_kho' => $nhapkho,
+        'tong_nhap' => $tongNhap,
+        'tong_xuat' => $tongXuat,
+        'ton_kho' => $tonKho
+    ]);
+}
     // API lấy danh sách vật tư Nhập thành phẩm của kế toán để tìm nguyên liệu phân tích
     public function getVatTuThanhPhamKeToan(Request $request)
     {

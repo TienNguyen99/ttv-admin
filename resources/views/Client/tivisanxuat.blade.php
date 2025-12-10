@@ -7,7 +7,6 @@
     <title>CÁC LỆNH SẢN XUẤT 24 GIỜ QUA</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="{{ asset('css/tivicss.css') }}" rel="stylesheet">
-
 </head>
 
 <body>
@@ -18,7 +17,7 @@
     <div class="container-fluid mt-4">
         <h1 class="text-center mb-3">LỆNH ĐANG SẢN XUẤT TRONG 24 GIỜ QUA</h1>
         <p class="text-center text-muted">
-            <small>Tự động cập nhật mỗi 10 giây | Lần cập nhật cuối: <span id="lastUpdate">---</span></small>
+            <small>Tự động cập nhật mỗi 20 giây | Lần cập nhật cuối: <span id="lastUpdate">---</span></small>
         </p>
 
         <table class="table table-bordered table-striped text-center align-middle" id="sxTable">
@@ -88,7 +87,7 @@
         function tvFetch(url, callback) {
             const xhr = new XMLHttpRequest();
             xhr.open("GET", url, true);
-            xhr.timeout = 8000; // 8 giây timeout
+            xhr.timeout = 8000;
 
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
@@ -117,18 +116,12 @@
             xhr.send();
         }
 
-        /**
-         * Hàm cập nhật thời gian refresh
-         */
         function updateLastRefreshTime() {
             const now = new Date();
             const timeStr = now.toLocaleTimeString('vi-VN');
             document.getElementById('lastUpdate').textContent = timeStr;
         }
 
-        /**
-         * Hàm tải chi tiết lệnh sản xuất
-         */
         function loadDetailLenh(soCt) {
             const modal = new bootstrap.Modal(document.getElementById('detailModal'));
             const modalBody = document.getElementById('detailModalBody');
@@ -162,43 +155,54 @@
                     nxDetails,
                     ckDetails,
                     nxDetails2025
-
                 } = response.data;
 
                 // Render summary card
                 let summaryHtml = `
-                    <div class="summary-card">
-                        <h5 class="mb-3">Tổng Quan Lệnh ${soCt}</h5>
-                        <div class="summary-item">
-                            <span>Khách hàng:</span>
-                            <strong>${orderInfo.khach_hang?.Ten_kh || 'N/A'}</strong>
-                        </div>
-                        <div class="summary-item">
-                            <span>Sản phẩm:</span>
-                            <strong>${orderInfo.hang_hoa?.Ten_hh || 'N/A'}</strong>
-                        </div>
-                        <div class="summary-item">
-                            <span>Số lượng đơn:</span>
-                            <strong>${Number(summary.so_luong_don).toLocaleString('vi-VN')} ${orderInfo.hang_hoa?.Dvt || ''}</strong>
-                        </div>
-                        <div class="summary-item">
-                            <span>Đã sản xuất:</span>
-                            <strong class="text-success">${Number(summary.total_sx).toLocaleString('vi-VN')}</strong>
-                        </div>
-                        <div class="summary-item">
-                            <span>Còn thiếu:</span>
-                            <strong class="text-warning">${Number(summary.con_thieu).toLocaleString('vi-VN')}</strong>
-                        </div>
-                        <div class="summary-item">
-                            <span>Tổng lỗi:</span>
-                            <strong class="text-danger">${Number(summary.total_loi).toLocaleString('vi-VN')}</strong>
-                        </div>
-                        <div class="summary-item">
-                            <span>📈 Tiến độ:</span>
-                            <strong>${summary.percent_complete}%</strong>
-                        </div>
-                    </div>
-                `;
+    <div class="summary-card">
+        <h5 class="mb-3">Tổng Quan Lệnh ${soCt}</h5>
+        <div class="summary-item">
+            <span>Khách hàng:</span>
+            <strong>${orderInfo.khach_hang?.Ten_kh || 'N/A'}</strong>
+        </div>
+        <div class="summary-item">
+            <span>Sản phẩm:</span>
+            <strong>${orderInfo.hang_hoa?.Ten_hh || 'N/A'}</strong>
+        </div>
+        <div class="summary-item">
+            <span>Số lượng đơn:</span>
+            <strong>${Number(summary.so_luong_don).toLocaleString('vi-VN')} ${orderInfo.hang_hoa?.Dvt || ''}</strong>
+        </div>
+        <div class="summary-item">
+            <span>Đã sản xuất:</span>
+            <strong class="text-success">${Number(summary.total_sx).toLocaleString('vi-VN')}</strong>
+            <small class="text-muted">(${summary.percent_complete}%)</small>
+        </div>
+        <div class="summary-item">
+            <span>Còn lại SX:</span>
+            <strong class="text-warning">${Number(summary.con_thieu).toLocaleString('vi-VN')}</strong>
+        </div>
+        <div class="summary-item">
+            <span>Tổng lỗi:</span>
+            <strong class="text-danger">${Number(summary.total_loi).toLocaleString('vi-VN')}</strong>
+        </div>
+        <hr>
+        <div class="summary-item">
+            <span>Đã xuất kho:</span>
+            <strong class="${summary.total_xuat_kho >= summary.so_luong_don ? 'text-success' : 'text-warning'}">
+                ${Number(summary.total_xuat_kho || 0).toLocaleString('vi-VN')}
+            </strong>
+            <small class="text-muted">(${summary.percent_xuat_kho || 0}%)</small>
+        </div>
+        <div class="summary-item">
+            <span>Còn lại xuất kho:</span>
+            <strong class="${summary.con_thieu_xuat_kho <= 0 ? 'text-success' : 'text-danger'}">
+                ${Number(summary.con_thieu_xuat_kho || 0).toLocaleString('vi-VN')}
+            </strong>
+            ${summary.con_thieu_xuat_kho <= 0 ? '<span class="badge bg-success ms-2">✓ Đã xuất đủ</span>' : '<span class="badge bg-danger ms-2">✗ Chưa đủ</span>'}
+        </div>
+    </div>
+`;
 
                 // Render summary by công đoạn
                 if (summary.by_cong_doan && summary.by_cong_doan.length > 0) {
@@ -226,160 +230,182 @@
                         `;
                     });
 
-                    summaryHtml += `
-                            </div>
+                    summaryHtml += `</div></div>`;
+                }
+
+                // === PHẦN RENDER NX DETAILS - ĐÃ SỬA ===
+                let nxDetailsHtml = '';
+
+                if (nxDetails.length === 0) {
+                    // Trường hợp KHÔNG CÓ định mức
+                    nxDetailsHtml = `
+                        <div class="alert alert-danger mb-4" role="alert">
+                            <strong>⚠️ Chưa có định mức!</strong> Vui lòng cập nhật định mức cho lệnh sản xuất này.
+                        </div>
+                        
+                        <h6 class="mb-3 text-muted">Chi Tiết Nhập Xuất</h6>
+                        <div class="table-responsive">
+                            <table class="table table-bordered detail-table">
+                                <thead>
+                                    <tr>
+                                        <th>STT</th>
+                                        <th>Mã HH</th>
+                                        <th>Tên hàng</th>
+                                        <th>Công đoạn</th>
+                                        <th>Số đề xuất</th>
+                                        <th>Đã xuất</th>
+                                        <th>Đã sử dụng</th>
+                                        <th>Dư/Thiếu</th>
+                                        <th>ĐVT</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="9" class="text-center text-muted">
+                                            <em>Không có dữ liệu định mức</em>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     `;
-                }
-                // Render NX details gồm STT,Ma_ko,Ma_hh,Ma_sp,Soluong
-                // Thay thế phần render NX details trong function loadDetailLenh
 
-                // Lấy số lượng đơn từ summary
-                const soLuongDon = Number(summary.so_luong_don || 0);
-
-                // Tạo map xuất kho theo Ma_hh (không cần Ma_ko) để tra cứu nhanh
-                const ckMap = {};
-                ckDetails.forEach(ck => {
-                    const key = ck.Ma_hh;
-                    if (!ckMap[key]) {
-                        ckMap[key] = {
-                            total: 0,
-                            items: []
-                        };
+                    if (ckDetails.length > 0) {
+                        nxDetailsHtml += `
+                            <div class="alert alert-warning mt-3">
+                                <strong>Lưu ý:</strong> Có ${ckDetails.length} phiếu xuất kho nhưng chưa có định mức để so sánh.
+                            </div>
+                        `;
                     }
-                    ckMap[key].total += Number(ck.Soluong || 0);
-                    ckMap[key].items.push(ck);
-                });
+                } else {
+                    // Trường hợp CÓ định mức
+                    const soLuongDon = Number(summary.so_luong_don || 0);
 
-                // Tạo map định mức để check sau
-                const nxMap = {};
-                nxDetails.forEach(nx => {
-                    const key = nx.Ma_hh;
-                    nxMap[key] = nx;
-                });
-                // ← THÊM ĐOẠN CODE NÀY
-                // Tạo map đã sử dụng từ nxDetails2025
-                const daSuDungMap = {};
-                nxDetails2025.forEach(nx => {
-                    const key = nx.Ma_hh;
-                    if (!daSuDungMap[key]) {
-                        daSuDungMap[key] = 0;
-                    }
-                    daSuDungMap[key] += Number(nx.Soluong || 0);
-                });
+                    const ckMap = {};
+                    ckDetails.forEach(ck => {
+                        const key = ck.Ma_hh;
+                        if (!ckMap[key]) {
+                            ckMap[key] = {
+                                total: 0,
+                                items: []
+                            };
+                        }
+                        ckMap[key].total += Number(ck.Soluong || 0);
+                        ckMap[key].items.push(ck);
+                    });
 
-                // ===== BƯỚC 3: Cập nhật header table (dòng ~240) =====
-                let nxDetailsHtml = `
-    <h6 class="mb-3">Chi Tiết Nhập Xuất (${nxDetails.length} định mức, ${ckDetails.length} xuất kho, ${nxDetails2025.length} đã sử dụng)</h6>
-    
-    <div class="table-responsive">
-        <table class="table table-bordered table-hover detail-table">
-            <thead>
-                <tr>
-                    <th>STT</th>
-                    <th>Mã HH</th>
-                    <th>Tên hàng</th>
-                    <th>Công đoạn</th>
-                    <th>Số đề xuất</th>
-                    <th>Đã xuất</th>
-                    <th>Đã sử dụng</th>  <!-- ← THÊM CỘT NÀY -->
-                    <th>Dư/Thiếu</th>
-                    <th>ĐVT</th>
-                </tr>
-            </thead>
-            <tbody>
-`;
+                    const nxMap = {};
+                    nxDetails.forEach(nx => {
+                        nxMap[nx.Ma_hh] = nx;
+                    });
 
-                // ===== BƯỚC 4: Thêm cột "Đã sử dụng" trong vòng lặp nxDetails (dòng ~260) =====
-                nxDetails.forEach((item, idx) => {
-                    const dinhMucDonVi = Number(item.Soluong || 0);
-                    const dinhMucDeXuat = dinhMucDonVi * soLuongDon;
-                    const key = item.Ma_hh;
-                    const daXuat = ckMap[key]?.total || 0;
-                    const daSuDung = daSuDungMap[key] || 0; // ← THÊM DÒNG NÀY
-                    const duThieu = daXuat - dinhMucDeXuat;
+                    const daSuDungMap = {};
+                    nxDetails2025.forEach(nx => {
+                        const key = nx.Ma_hh;
+                        daSuDungMap[key] = (daSuDungMap[key] || 0) + Number(nx.Soluong || 0);
+                    });
 
-                    // Xác định class cho cột dư/thiếu
-                    let duThieuClass = '';
-                    let duThieuText = '';
-                    if (duThieu > 0) {
-                        duThieuClass = 'text-success fw-bold';
-                        duThieuText = `+${duThieu.toLocaleString('vi-VN')}`;
-                    } else if (duThieu < 0) {
-                        duThieuClass = 'text-danger fw-bold';
-                        duThieuText = duThieu.toLocaleString('vi-VN');
-                    } else {
-                        duThieuClass = 'text-muted';
-                        duThieuText = '0';
-                    }
+                    nxDetailsHtml = `
+                        <h6 class="mb-3">Chi Tiết Nhập Xuất (${nxDetails.length} định mức, ${ckDetails.length} xuất kho, ${nxDetails2025.length} đã sử dụng)</h6>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover detail-table">
+                                <thead>
+                                    <tr>
+                                        <th>STT</th>
+                                        <th>Mã HH</th>
+                                        <th>Tên hàng</th>
+                                        <th>Công đoạn</th>
+                                        <th>Số đề xuất</th>
+                                        <th>Đã xuất</th>
+                                        <th>Đã sử dụng</th>
+                                        <th>Dư/Thiếu</th>
+                                        <th>ĐVT</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
 
-                    nxDetailsHtml += `
-        <tr>
-            <td>${idx + 1}</td>
-            <td>${item.Ma_hh}</td>
-            <td>${item.hang_hoa?.Ten_hh || ''}</td>
-            <td><span class="congdoan-badge">${item.Ma_ko || ''}</span></td>
-            <td>
-                ${dinhMucDonVi.toLocaleString('vi-VN')} 
-                <small class="text-muted">× ${soLuongDon.toLocaleString('vi-VN')}</small>
-                <br>
-                <strong class="text-primary">= ${dinhMucDeXuat.toLocaleString('vi-VN')}</strong>
-            </td>
-            <td>
-                <strong class="text-success">${daXuat.toLocaleString('vi-VN')}</strong>
-                ${daXuat === 0 ? '<br><small class="text-muted">(chưa xuất)</small>' : ''}
-            </td>
-            <!-- ← THÊM CELL NÀY -->
-            <td>
-                <strong class="text-info">${daSuDung.toLocaleString('vi-VN')}</strong>
-                ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
-            </td>
-            <td class="${duThieuClass}">${duThieuText}</td>
-            <td>${item.hang_hoa?.Dvt || ''}</td>
-        </tr>
-    `;
-                });
+                    nxDetails.forEach((item, idx) => {
+                        const dinhMucDonVi = Number(item.Soluong || 0);
+                        const dinhMucDeXuat = dinhMucDonVi * soLuongDon;
+                        const key = item.Ma_hh;
+                        const daXuat = ckMap[key]?.total || 0;
+                        const daSuDung = daSuDungMap[key] || 0;
+                        const duThieu = daXuat - dinhMucDeXuat;
 
-                // ===== BƯỚC 5: Thêm cột cho dòng xuất thêm (dòng ~300) =====
-                Object.entries(ckMap).forEach(([key, data], idx) => {
-                    if (!nxMap[key]) {
-                        const firstCK = data.items[0];
-                        const soLuong = data.total;
-                        const daSuDung = daSuDungMap[key] || 0; // ← THÊM DÒNG NÀY
+                        let duThieuClass = '';
+                        let duThieuText = '';
+                        if (duThieu > 0) {
+                            duThieuClass = 'text-success fw-bold';
+                            duThieuText = `+${duThieu.toLocaleString('vi-VN')}`;
+                        } else if (duThieu < 0) {
+                            duThieuClass = 'text-danger fw-bold';
+                            duThieuText = duThieu.toLocaleString('vi-VN');
+                        } else {
+                            duThieuClass = 'text-muted';
+                            duThieuText = '0';
+                        }
 
                         nxDetailsHtml += `
-            <tr class="table-warning">
-                <td>${nxDetails.length + idx + 1}</td>
-                <td>${firstCK.Ma_hh}</td>
-                <td>${firstCK.hang_hoa?.Ten_hh || ''}</td>
-                <td><span class="congdoan-badge">${firstCK.Ma_ko || ''}</span></td>
-                <td class="text-muted">
-                    <small>(không có định mức)</small><br>
-                    <strong>0</strong>
-                </td>
-                <td>
-                    <strong class="text-success">${soLuong.toLocaleString('vi-VN')}</strong>
-                    <br><small class="text-warning">(xuất thêm)</small>
-                </td>
-                <!-- ← THÊM CELL NÀY -->
-                <td>
-                    <strong class="text-info">${daSuDung.toLocaleString('vi-VN')}</strong>
-                    ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
-                </td>
-                <td class="text-warning fw-bold">+${soLuong.toLocaleString('vi-VN')}</td>
-                <td>${firstCK.hang_hoa?.Dvt || ''}</td>
-            </tr>
-        `;
-                    }
-                });
+                            <tr>
+                                <td>${idx + 1}</td>
+                                <td>${item.Ma_hh}</td>
+                                <td>${item.hang_hoa?.Ten_hh || ''}</td>
+                                <td><span class="congdoan-badge">${item.Ma_ko || ''}</span></td>
+                                <td>
+                                    ${dinhMucDonVi.toLocaleString('vi-VN')} 
+                                    <small class="text-muted">× ${soLuongDon.toLocaleString('vi-VN')}</small>
+                                    <br>
+                                    <strong class="text-primary">= ${dinhMucDeXuat.toLocaleString('vi-VN')}</strong>
+                                </td>
+                                <td>
+                                    <strong class="text-success">${daXuat.toLocaleString('vi-VN')}</strong>
+                                    ${daXuat === 0 ? '<br><small class="text-muted">(chưa xuất)</small>' : ''}
+                                </td>
+                                <td>
+                                    <strong class="text-info">${daSuDung.toLocaleString('vi-VN')}</strong>
+                                    ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
+                                </td>
+                                <td class="${duThieuClass}">${duThieuText}</td>
+                                <td>${item.hang_hoa?.Dvt || ''}</td>
+                            </tr>
+                        `;
+                    });
 
-                // ===== CUỐI CÙNG: Đóng tbody và table =====
-                nxDetailsHtml += `
-            </tbody>
-        </table>
-    </div>
-`;
+                    Object.entries(ckMap).forEach(([key, data], idx) => {
+                        if (!nxMap[key]) {
+                            const firstCK = data.items[0];
+                            const soLuong = data.total;
+                            const daSuDung = daSuDungMap[key] || 0;
 
+                            nxDetailsHtml += `
+                                <tr class="table-warning">
+                                    <td>${nxDetails.length + idx + 1}</td>
+                                    <td>${firstCK.Ma_hh}</td>
+                                    <td>${firstCK.hang_hoa?.Ten_hh || ''}</td>
+                                    <td><span class="congdoan-badge">${firstCK.Ma_ko || ''}</span></td>
+                                    <td class="text-muted">
+                                        <small>(không có định mức)</small><br>
+                                        <strong>0</strong>
+                                    </td>
+                                    <td>
+                                        <strong class="text-success">${soLuong.toLocaleString('vi-VN')}</strong>
+                                        <br><small class="text-warning">(xuất thêm)</small>
+                                    </td>
+                                    <td>
+                                        <strong class="text-info">${daSuDung.toLocaleString('vi-VN')}</strong>
+                                        ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
+                                    </td>
+                                    <td class="text-warning fw-bold">+${soLuong.toLocaleString('vi-VN')}</td>
+                                    <td>${firstCK.hang_hoa?.Dvt || ''}</td>
+                                </tr>
+                            `;
+                        }
+                    });
+
+                    nxDetailsHtml += `</tbody></table></div>`;
+                }
 
                 // Render detail table
                 let detailTableHtml = `
@@ -403,6 +429,7 @@
                             </thead>
                             <tbody>
                 `;
+
                 sxDetails.forEach((item, idx) => {
                     detailTableHtml += `
                         <tr>
@@ -421,26 +448,15 @@
                     `;
                 });
 
-                detailTableHtml += `
-                            </tbody>
-                        </table>
-                    </div>
-                `;
+                detailTableHtml += `</tbody></table></div>`;
 
                 modalBody.innerHTML = summaryHtml + nxDetailsHtml + detailTableHtml;
             });
         }
 
-        /**
-         * Hàm tải dữ liệu sản xuất
-         */
         function loadSXData() {
-            // Tránh gọi API nếu lần trước chưa xong
-            if (isRefreshing) {
-                return;
-            }
+            if (isRefreshing) return;
 
-            // console.log('🔄 Bắt đầu refresh lúc:', new Date().toLocaleTimeString('vi-VN'));
             isRefreshing = true;
 
             const table = document.querySelector('#sxTable');
@@ -495,11 +511,8 @@
                             const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ? 'bg-warning' :
                                 'bg-danger';
 
-                            const imageHtml = `
-                                <img src="/hinh_hh/HH_${item.hang_hoa.Ma_hh}/${item.hang_hoa.Pngpath}" 
-                                     alt="${item.hang_hoa.Ten_hh}" class="clickable-image">
-                            `;
-
+                            const imageHtml =
+                                `<img src="/hinh_hh/HH_${item.hang_hoa.Ma_hh}/${item.hang_hoa.Pngpath}" alt="${item.hang_hoa.Ten_hh}" class="clickable-image">`;
                             const lenhHtml =
                                 `<span class="clickable-lenh" onclick="loadDetailLenh('${item.So_dh}')">${item.So_ct_go ?? ''}</span>`;
 
@@ -532,21 +545,18 @@
                             tbody.insertAdjacentHTML('beforeend', row);
                         });
 
-                        const pctTong = soluongGO > 0 ? (tongSX / soluongGO * 100).toFixed(1) : 0;
                         const soThieu = soluongGO - tongSX;
-
                         const subtotalRow = `
-    <tr class="subtotal-row ${soThieu >= 0 ? 'table-danger' : 'table-success'}">
-        <td colspan="16">
-            LỆNH ${soct}: ĐÃ SẢN XUẤT ĐƯỢC ${Number(tongSX ?? 0).toLocaleString('vi-VN')} 
-            CÒN THIẾU ${Number(soThieu ?? 0).toLocaleString('vi-VN')}
-        </td>
-    </tr>
-`;
+                            <tr class="subtotal-row ${soThieu >= 0 ? 'table-danger' : 'table-success'}">
+                                <td colspan="16">
+                                    LỆNH ${soct}: ĐÃ SẢN XUẤT ĐƯỢC ${Number(tongSX ?? 0).toLocaleString('vi-VN')} 
+                                    CÒN LẠI ${Number(soThieu ?? 0).toLocaleString('vi-VN')}
+                                </td>
+                            </tr>
+                        `;
                         tbody.insertAdjacentHTML('beforeend', subtotalRow);
                     });
 
-                    // console.log('Refresh thành công, tải được', filteredData.length, 'bản ghi');
                     updateLastRefreshTime();
 
                 } catch (err) {
@@ -561,7 +571,6 @@
             });
         }
 
-        // Click ảnh để phóng to
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('clickable-image')) {
                 const modalImg = document.getElementById('modalImage');
@@ -571,15 +580,9 @@
             }
         });
 
-        // Khởi động
         loadSXData();
-        // Set interval và lưu reference để có thể clear nếu cần
-        refreshInterval = setInterval(function() {
+        refreshInterval = setInterval(loadSXData, 20000);
 
-            loadSXData();
-        }, 10000);
-
-        // Cleanup khi đóng trang
         window.addEventListener('beforeunload', function() {
             if (refreshInterval) {
                 clearInterval(refreshInterval);

@@ -204,15 +204,47 @@
     </div>
     <!-- Modal Chi tiết xuất kho kế toán -->
     <div class="modal fade" id="xuatKhoModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Chi tiết xuất kho kế toán</h5>
+                    <h5 class="modal-title">Chi tiết xuất kho kế toán (So sánh với nhập kho)</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <!-- Phần tóm tắt -->
+                    <div class="summary-box">
+                        <h6 class="text-primary mb-3">📊 Tổng quan</h6>
+                        <div class="summary-item">
+                            <span class="summary-label">Tổng nhập kho:</span>
+                            <span class="summary-value text-success" id="tongNhap">0</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Tổng xuất kho:</span>
+                            <span class="summary-value text-primary" id="tongXuat">0</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Tồn kho:</span>
+                            <span class="summary-value" id="tonKho">0</span>
+                        </div>
+                    </div>
+
+                    <!-- Bảng nhập kho -->
+                    <h6 class="text-success mb-2">📦 Chi tiết nhập kho</h6>
+                    <table class="table table-bordered table-sm mb-4" id="nhapKhoCompareTable">
+                        <thead class="table-success">
+                            <tr>
+                                <th>Mã vụ việc</th>
+                                <th>Mã sản phẩm</th>
+                                <th>Số lượng nhập</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+
+                    <!-- Bảng xuất kho -->
+                    <h6 class="text-primary mb-2">📤 Chi tiết xuất kho</h6>
                     <table class="table table-bordered" id="xuatKhoDetailTable">
-                        <thead>
+                        <thead class="table-primary">
                             <tr>
                                 <th>Ngày chứng từ</th>
                                 <th>Số chứng từ</th>
@@ -449,7 +481,9 @@
                                 text: '📤 Xuất Excel',
                                 className: 'btn btn-success',
                                 exportOptions: {
-                                     columns: [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23, 24] // In
+                                    columns: [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23,
+                                        24
+                                    ] // In
                                     //columns: [3, 4, 5, 7, 8, 9, 10, 13, 14, 15, 18, 19, 23, 24] //Để in báo cáo
                                 },
                                 title: 'Bang_Lenh_San_Xuat',
@@ -617,35 +651,77 @@
                     new bootstrap.Modal(document.getElementById("xuatModal")).show();
                 });
         });
-        // Xem chi tiết xuất kho kế toán
+        // Xem chi tiết xuất kho kế toán với so sánh nhập kho
         $(document).on("click", ".show-xuatketoan", function() {
             const ma_hh = $(this).data("ma-hh");
 
             fetch(`/api/xuatkhoketoan-chi-tiet?ma_hh=${encodeURIComponent(ma_hh)}`)
                 .then(res => res.json())
-                .then(details => {
-                    const tbody = $("#xuatKhoDetailTable tbody");
-                    tbody.empty();
+                .then(data => {
+                    // Cập nhật tổng quan
+                    const tongNhap = Number(data.tong_nhap || 0);
+                    const tongXuat = Number(data.tong_xuat || 0);
+                    const tonKho = Number(data.ton_kho || 0);
 
-                    if (details.length === 0) {
-                        tbody.append(`<tr><td colspan="4" class="text-center">Không có dữ liệu</td></tr>`);
+                    $("#tongNhap").text(tongNhap.toFixed(2));
+                    $("#tongXuat").text(tongXuat.toFixed(2));
+
+                    // Màu sắc cho tồn kho
+                    const tonKhoEl = $("#tonKho");
+                    tonKhoEl.text(tonKho.toFixed(2));
+                    if (tonKho > 0) {
+                        tonKhoEl.removeClass("text-danger").addClass("text-success");
+                    } else if (tonKho < 0) {
+                        tonKhoEl.removeClass("text-success").addClass("text-danger");
                     } else {
-                        details.forEach(d => {
-                            tbody.append(`
-                      <tr>
-                        <td>${new Date(d.Ngay_ct).toLocaleDateString("vi-VN")}</td>
-                        <td>${d.So_ct}</td>
-                        <td>${d.Ma_hh}</td>
-                        <td>${Number(d.Soluong).toFixed(4)}</td>
-                        <td>${Number(d.Dgvonvnd).toLocaleString("vi-VN")}</td>
-                        <td>${Number(d.Dgbanvnd).toLocaleString("vi-VN")}</td>
-                        <td>${Number(d.Dgbannte).toLocaleString("en-US")}</td>
-                      </tr>
+                        tonKhoEl.removeClass("text-success text-danger");
+                    }
+
+                    // Hiển thị bảng nhập kho
+                    const tbodyNhap = $("#nhapKhoCompareTable tbody");
+                    tbodyNhap.empty();
+
+                    if (data.nhap_kho && data.nhap_kho.length > 0) {
+                        data.nhap_kho.forEach(n => {
+                            tbodyNhap.append(`
+                        <tr>
+                            <td>${n.Ma_vv}</td>
+                            <td>${n.Ma_sp}</td>
+                            <td class="text-end">${Number(n.total_nhap).toFixed(2)}</td>
+                        </tr>
                     `);
                         });
+                    } else {
+                        tbodyNhap.append(`<tr><td colspan="3" class="text-center">Chưa có nhập kho</td></tr>`);
+                    }
+
+                    // Hiển thị bảng xuất kho
+                    const tbodyXuat = $("#xuatKhoDetailTable tbody");
+                    tbodyXuat.empty();
+
+                    if (data.xuat_kho && data.xuat_kho.length > 0) {
+                        data.xuat_kho.forEach(d => {
+                            tbodyXuat.append(`
+                        <tr>
+                            <td>${new Date(d.Ngay_ct).toLocaleDateString("vi-VN")}</td>
+                            <td>${d.So_ct}</td>
+                            <td>${d.Ma_hh}</td>
+                            <td class="text-end">${Number(d.Soluong).toFixed(2)}</td>
+                            <td class="text-end">${Number(d.Dgvonvnd).toLocaleString("vi-VN")}</td>
+                            <td class="text-end">${Number(d.Dgbanvnd).toLocaleString("vi-VN")}</td>
+                            <td class="text-end">${Number(d.Dgbannte).toLocaleString("en-US")}</td>
+                        </tr>
+                    `);
+                        });
+                    } else {
+                        tbodyXuat.append(`<tr><td colspan="7" class="text-center">Chưa có xuất kho</td></tr>`);
                     }
 
                     new bootstrap.Modal(document.getElementById("xuatKhoModal")).show();
+                })
+                .catch(err => {
+                    console.error("Lỗi khi tải dữ liệu:", err);
+                    alert("Không thể tải dữ liệu. Vui lòng thử lại!");
                 });
         });
         // Xem chi tiết phân tích
