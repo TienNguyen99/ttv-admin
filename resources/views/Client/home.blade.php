@@ -4,48 +4,20 @@
 <head>
     <meta charset="UTF-8">
     <title>THEO DÕI LỆNH SẢN XUẤT TAGTIME</title>
-
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-
     <!-- DataTables CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <!-- DataTables Buttons CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
 
-    <style>
-        td,
-        th {
-            font-size: 13px;
-            vertical-align: middle;
-        }
-
-        .text-danger {
-            color: #dc3545;
-            font-weight: bold;
-        }
-
-        .text-success {
-            color: #28a745;
-            font-weight: bold;
-        }
-
-        .text-warning {
-            color: #ffc107;
-            font-weight: bold;
-        }
-
-        .text-primary {
-            color: #007bff;
-            font-weight: bold;
-        }
-    </style>
+    <style></style>
 </head>
 
 <body>
     <div class="container-fluid mt-4">
-        <h3 class="mb-4">📋 BẢNG THEO DÕI LỆNH SẢN XUẤT TAGTIME</h3>
-        <!-- ✅ Danh sách 10 thay đổi gần nhất -->
+        <h3 class="mb-4">BẢNG THEO DÕI LỆNH SẢN XUẤT TAGTIME</h3>
+        <!-- Danh sách 10 thay đổi gần nhất -->
         <div class="mb-3">
             <label class="form-label">Mã kế toán thay đổi gần nhất:</label>
             <table class="table table-sm table-bordered" id="last-changes-table" style="max-width:600px;">
@@ -318,17 +290,13 @@
             </div>
         </div>
     </div>
-
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-
     <!-- Bootstrap Bundle JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
     <!-- DataTables JS -->
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-
     <script>
         let dataTable;
 
@@ -352,12 +320,10 @@
                         tongnhapkhoketoan,
                         tongxuatkhoketoan,
                         xuatkhotheomavvketoan,
-
                         lastChange
                     } = response;
                     // Hiển thị mã kế toán thay đổi gần nhất
                     const tbodyLast = document.querySelector("#last-changes-table tbody");
-
                     if (lastChange && lastChange.length > 0) {
                         tbodyLast.innerHTML = lastChange.map((item, idx) => `
                         <tr>
@@ -368,8 +334,7 @@
                             <td>${item.Ma_vv}</td>
                             <td>${Number(item.Soluong).toFixed(2)}</td>
                             <td>${Number(item.Noluong).toFixed(2)}</td>
-<td>${(item.Soluong / item.Noluong).toFixed(4)}</td>
-
+                            <td>${(item.Soluong / item.Noluong).toFixed(4)}</td>
                             <td>${new Date(item.UserNg0).toLocaleDateString("vi-VN")}</td>
                             <td>${new Date(item.Ngay_ct).toLocaleDateString("vi-VN")}</td>
                         </tr>`).join("");
@@ -397,7 +362,6 @@
                         // Xuất kho kế toán theo Ma_vv và Ma_hh
                         const xuatkhomavvkt = Math.round(xuatkhotheomavvketoan[keyketoan2]
                             ?.xuatkhotheomavv_ketoan ?? 0);
-
                         const tongnhap = Math.round(tongnhapkhoketoan[row.Ma_hh]?.totalnhapkho_ketoan ?? 0);
                         const tongxuat = Math.round(tongxuatkhoketoan[row.Ma_hh]?.totalxuatkho_ketoan ?? 0);
                         const tongton = Math.round(tongnhap - tongxuat);
@@ -405,9 +369,19 @@
                         const maHh = row.Ma_hh;
                         const dsMaHHKeToan = datamahhketoan[row.So_dh] || [];
                         const isMismatch = !dsMaHHKeToan.includes(maHh);
-                        const maHhCell = isMismatch ?
-                            `<span style="color:red; font-weight:bold;">${maHh}</span>` :
-                            maHh; // Mã hàng hóa
+                        // Kiểm tra độ dài mã hàng hóa
+                        let maHhCell;
+                        if (maHh && maHh.length > 16) {
+                            // Nếu độ dài > 18 ký tự, hiển thị màu cam và in đậm
+                            maHhCell =
+                                `<span style="color:orange; font-weight:bold;" title="${maHh}">${maHh}</span>`;
+                        } else if (isMismatch) {
+                            // Nếu không khớp với kế toán, hiển thị màu đỏ
+                            maHhCell = `<span style="color:red; font-weight:bold;">${maHh}</span>`;
+                        } else {
+                            // Bình thường
+                            maHhCell = maHh;
+                        }
                         // Xác định tình trạng
                         let statusLabel = '';
                         //if (xuat >= sum && sum > 0 || (row.Noibo && row.Noibo.includes("R"))) {
@@ -426,7 +400,6 @@
                         } else if (nhap > 0 && nhap < sum) {
                             statusLabel = '<span class="text-warning">📦 Chưa đủ số lượng</span>';
                         }
-
                         return [
                             index + 1,
                             row.So_hd,
@@ -449,7 +422,6 @@
                             `<button class="btn btn-link p-0 text-primary show-nhap" data-key="${row.So_ct}|${row.Ma_hh}">${nhap}</button>`,
                             xuatkhomavvkt,
                             `<button class="btn btn-link p-0 text-danger show-xuat" data-so-dh="${row.So_ct}">Xem</button>`,
-
                             `<button class="btn btn-link p-0 text-success show-vattuketoan" data-ma-vv="${row.So_dh}">${Math.round(nhaptp)} </button>`,
                             datamahhketoan[row.So_dh] ?
                             `<span class="text-success">✅ ${datamahhketoan[row.So_dh].join(", ")}</span>` :
@@ -482,8 +454,7 @@
                                 className: 'btn btn-success',
                                 exportOptions: {
                                     columns: [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23,
-                                        24
-                                    ] // In
+                                        24] // In
                                     //columns: [3, 4, 5, 7, 8, 9, 10, 13, 14, 15, 18, 19, 23, 24] //Để in báo cáo
                                 },
                                 title: 'Bang_Lenh_San_Xuat',
@@ -512,13 +483,11 @@
                             const khachHang = $('#filterKhachHang').val().toLowerCase();
                             const maHH = $('#filterMaHH').val().toLowerCase();
                             const tinhTrang = $('#filterTinhTrang').val();
-
                             const ngayGiao = $('#filterNgayGiao').val();
                             const ngayRaLenh = $('#filterNgayRaLenh').val();
                             const lenhSanXuat = $('#filterLenhSanXuat').val();
                             const maKinhDoanh = $('#filterMaKinhDoanh').val().toLowerCase();
                             const excludeText = $('#filterexcludeMaLenh').val().toLowerCase();
-
                             // CẬP NHẬT CHỈ SỐ CỘT (phù hợp với cấu trúc bảng hiện tại)
                             const khachHangCol = (data[4] || '').toLowerCase();
                             const maHHCol = (data[6] || '').toLowerCase();
@@ -528,7 +497,6 @@
                             const lenhSanXuatCol = data[3] || '';
                             const maKinhDoanhCol = (data[5] || '').toLowerCase();
                             const excludeCol = (data[2] || '').toLowerCase();
-
                             //Ẩn mã lệnh
                             if (excludeText && excludeCol.includes(excludeText)) return false;
                             if (khachHang && !khachHangCol.includes(khachHang)) return false;
@@ -536,35 +504,26 @@
                             if (tinhTrang && !tinhTrangCol.includes(tinhTrang)) return false;
                             if (lenhSanXuat && !lenhSanXuatCol.includes(lenhSanXuat)) return false;
                             if (maKinhDoanh && !maKinhDoanhCol.includes(maKinhDoanh)) return false;
-
                             if (ngayGiao) {
                                 const [day, month, year] = ngayGiaoCol.split('/');
                                 const tableMonth = `${year}-${month.padStart(2, '0')}`;
                                 if (!tableMonth.startsWith(ngayGiao)) return false;
                             }
-
                             if (ngayRaLenh) {
                                 // Chuyển ngày trong bảng thành đối tượng Date
                                 const [day, month, year] = ngayRaLenhCol.split('/');
                                 const tableDate = new Date(`${year}-${month}-${day}`);
-
                                 // Ngày người dùng chọn
                                 const filterDate = new Date(ngayRaLenh);
-
                                 // Ngày hiện tại
                                 const currentDate = new Date();
-
                                 // Giữ lại các dòng có ngày >= ngày chọn và <= hiện tại
                                 if (tableDate < filterDate || tableDate > currentDate) {
                                     return false;
                                 }
                             }
-
-
                             return true;
                         });
-
-
                     } else {
                         dataTable.clear();
                         dataTable.rows.add(rows);
@@ -575,10 +534,8 @@
                     console.error("Lỗi khi tải dữ liệu:", err);
                 });
         }
-
         fetchData();
         setInterval(fetchData, 10000);
-
         // Xem chi tiết nhập kho
         $(document).on("click", ".show-nhap", function() {
             const key = $(this).data("key");
@@ -800,13 +757,11 @@
                 });
         });
     </script>
-
     <!-- Buttons + JSZip (Excel) -->
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
-
     {{-- Script copy --}}
     <script>
         $(document).on('click', '.copy-text', function() {

@@ -6,47 +6,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CÁC LỆNH SẢN XUẤT 24 GIỜ QUA</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="{{ asset('css/tivicss.css') }}" rel="stylesheet">
 </head>
 
 <body>
     <div class="refresh-indicator" id="refreshIndicator">
-        Đang cập nhật...
+        <div class="spinner-border" role="status"></div>
+        <span>Đang cập nhật...</span>
     </div>
 
-    <div class="container-fluid mt-4">
-        <h1 class="text-center mb-3">LỆNH ĐANG SẢN XUẤT TRONG 24 GIỜ QUA</h1>
-        <p class="text-center text-muted">
-            <small>Tự động cập nhật mỗi 20 giây | Lần cập nhật cuối: <span id="lastUpdate">---</span></small>
-        </p>
+    <div class="container-fluid">
+        <div class="dashboard-header">
+            <h1 class="text-center mb-3">
+                <i class="bi bi-clipboard-data"></i> LỆNH ĐANG SẢN XUẤT TRONG 24 GIỜ QUA
+            </h1>
+            <div class="text-center">
+                <span class="update-info">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    Tự động cập nhật mỗi 20 giây | Lần cập nhật cuối: <strong id="lastUpdate">---</strong>
+                </span>
+            </div>
+        </div>
 
-        <table class="table table-bordered table-striped text-center align-middle" id="sxTable">
-            <thead>
-                <tr>
-                    <th>STT</th>
-                    <th>Ngày nhập phiếu</th>
-                    <th>Lệnh</th>
-                    <th>Mã HH</th>
-                    <th>Hình ảnh</th>
-                    <th>Tên Hàng</th>
-                    <th>Công đoạn</th>
-                    <th>Tên công nhân</th>
-                    <th>Số lượng đơn</th>
-                    <th>Số lượng đơn vị khác(mm,g)</th>
-                    <th>Sản xuất</th>
-                    <th>Tổng SX</th>
-                    <th>Lỗi</th>
-                    <th>ĐVT</th>
-                    <th>%</th>
-                    <th>Ghi chú</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td colspan="16">Đang tải dữ liệu...</td>
-                </tr>
-            </tbody>
-        </table>
+        <div id="cardsContainer" class="row g-4 px-3">
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-light" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Đang tải...</span>
+                    </div>
+                    <p class="mt-3 text-white fs-5">Đang tải dữ liệu...</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Modal Phóng to ảnh -->
@@ -65,14 +57,17 @@
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="detailModalTitle">Chi Tiết Lệnh Sản Xuất</h5>
+                    <h5 class="modal-title" id="detailModalTitle">
+                        <i class="bi bi-info-circle"></i> Chi Tiết Lệnh Sản Xuất
+                    </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body" id="detailModalBody">
-                    <div class="text-center">
+                    <div class="text-center py-5">
                         <div class="spinner-border text-primary" role="status">
                             <span class="visually-hidden">Đang tải...</span>
                         </div>
+                        <p class="mt-3 text-muted">Đang tải dữ liệu...</p>
                     </div>
                 </div>
             </div>
@@ -127,12 +122,13 @@
             const modalBody = document.getElementById('detailModalBody');
             const modalTitle = document.getElementById('detailModalTitle');
 
-            modalTitle.textContent = `Chi Tiết Lệnh: ${soCt}`;
+            modalTitle.innerHTML = `<i class="bi bi-info-circle"></i> Chi Tiết Lệnh: ${soCt}`;
             modalBody.innerHTML = `
-                <div class="text-center">
+                <div class="text-center py-5">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Đang tải...</span>
                     </div>
+                    <p class="mt-3 text-muted">Đang tải dữ liệu...</p>
                 </div>
             `;
 
@@ -157,72 +153,70 @@
                     nxDetails2025
                 } = response.data;
 
-                // Render summary card
                 let summaryHtml = `
     <div class="summary-card">
-        <h5 class="mb-3">Tổng Quan Lệnh ${soCt}</h5>
+        <h5 class="mb-3"><i class="bi bi-clipboard-check"></i> Tổng Quan Lệnh ${soCt}</h5>
         <div class="summary-item">
-            <span>Khách hàng:</span>
+            <span><i class="bi bi-person-badge"></i> Khách hàng:</span>
             <strong>${orderInfo.khach_hang?.Ten_kh || 'N/A'}</strong>
         </div>
         <div class="summary-item">
-            <span>Sản phẩm:</span>
+            <span><i class="bi bi-box-seam"></i> Sản phẩm:</span>
             <strong>${orderInfo.hang_hoa?.Ten_hh || 'N/A'}</strong>
         </div>
         <div class="summary-item">
-            <span>Số lượng đơn:</span>
+            <span><i class="bi bi-cart-check"></i> Số lượng đơn:</span>
             <strong>${Number(summary.so_luong_don).toLocaleString('vi-VN')} ${orderInfo.hang_hoa?.Dvt || ''}</strong>
         </div>
         <div class="summary-item">
-            <span>Đã sản xuất:</span>
+            <span><i class="bi bi-check-circle"></i> Đã sản xuất:</span>
             <strong class="text-success">${Number(summary.total_sx).toLocaleString('vi-VN')}</strong>
             <small class="text-muted">(${summary.percent_complete}%)</small>
         </div>
         <div class="summary-item">
-            <span>Còn lại SX:</span>
+            <span><i class="bi bi-hourglass-split"></i> Còn lại SX:</span>
             <strong class="text-warning">${Number(summary.con_thieu).toLocaleString('vi-VN')}</strong>
         </div>
         <div class="summary-item">
-            <span>Tổng lỗi:</span>
+            <span><i class="bi bi-x-circle"></i> Tổng lỗi:</span>
             <strong class="text-danger">${Number(summary.total_loi).toLocaleString('vi-VN')}</strong>
         </div>
         <hr>
         <div class="summary-item">
-            <span>Đã xuất kho:</span>
+            <span><i class="bi bi-box-arrow-right"></i> Đã xuất kho:</span>
             <strong class="${summary.total_xuat_kho >= summary.so_luong_don ? 'text-success' : 'text-warning'}">
                 ${Number(summary.total_xuat_kho || 0).toLocaleString('vi-VN')}
             </strong>
             <small class="text-muted">(${summary.percent_xuat_kho || 0}%)</small>
         </div>
         <div class="summary-item">
-            <span>Còn lại xuất kho:</span>
+            <span><i class="bi bi-clock-history"></i> Còn lại xuất kho:</span>
             <strong class="${summary.con_thieu_xuat_kho <= 0 ? 'text-success' : 'text-danger'}">
                 ${Number(summary.con_thieu_xuat_kho || 0).toLocaleString('vi-VN')}
             </strong>
-            ${summary.con_thieu_xuat_kho <= 0 ? '<span class="badge bg-success ms-2">✓ Đã xuất đủ</span>' : '<span class="badge bg-danger ms-2">✗ Chưa đủ</span>'}
+            ${summary.con_thieu_xuat_kho <= 0 ? '<span class="badge bg-success ms-2"><i class="bi bi-check-lg"></i> Đã xuất đủ</span>' : '<span class="badge bg-danger ms-2"><i class="bi bi-x-lg"></i> Chưa đủ</span>'}
         </div>
     </div>
 `;
 
-                // Render summary by công đoạn
                 if (summary.by_cong_doan && summary.by_cong_doan.length > 0) {
                     summaryHtml += `
                         <div class="mb-4">
-                            <h6 class="mb-3">Tổng Hợp Theo Công Đoạn</h6>
+                            <h6 class="mb-3"><i class="bi bi-diagram-3"></i> Tổng Hợp Theo Công Đoạn</h6>
                             <div class="row">
                     `;
 
                     summary.by_cong_doan.forEach(cd => {
                         summaryHtml += `
-                            <div class="col-md-4 mb-2">
+                            <div class="col-md-4 mb-3">
                                 <div class="card">
                                     <div class="card-body">
                                         <span class="congdoan-badge">${cd.Ma_ko}</span>
-                                        <div class="mt-2">
-                                            <small>Số lượng:</small> <strong>${Number(cd.total_sx).toLocaleString('vi-VN')}</strong><br>
-                                            <small>Số lượng khác (mm,g):</small> <strong>${Number(cd.total_soluongkhac).toLocaleString('vi-VN')}</strong><br>
-                                            <small>Lỗi:</small> <strong class="text-danger">${Number(cd.total_loi).toLocaleString('vi-VN')}</strong><br>
-                                            <small>Số ca SX:</small> <strong>${cd.count}</strong>
+                                        <div class="mt-3">
+                                            <small><i class="bi bi-check-square"></i> Số lượng:</small> <strong>${Number(cd.total_sx).toLocaleString('vi-VN')}</strong><br>
+                                            <small><i class="bi bi-rulers"></i> SL khác (mm,g):</small> <strong>${Number(cd.total_soluongkhac).toLocaleString('vi-VN')}</strong><br>
+                                            <small><i class="bi bi-exclamation-triangle"></i> Lỗi:</small> <strong class="text-danger">${Number(cd.total_loi).toLocaleString('vi-VN')}</strong><br>
+                                            <small><i class="bi bi-calendar2-week"></i> Số ca SX:</small> <strong>${cd.count}</strong>
                                         </div>
                                     </div>
                                 </div>
@@ -233,17 +227,15 @@
                     summaryHtml += `</div></div>`;
                 }
 
-                // === PHẦN RENDER NX DETAILS - ĐÃ SỬA ===
                 let nxDetailsHtml = '';
 
                 if (nxDetails.length === 0) {
-                    // Trường hợp KHÔNG CÓ định mức
                     nxDetailsHtml = `
                         <div class="alert alert-danger mb-4" role="alert">
-                            <strong>⚠️ Chưa có định mức!</strong> Vui lòng cập nhật định mức cho lệnh sản xuất này.
+                            <i class="bi bi-exclamation-triangle-fill"></i> <strong>Chưa có định mức!</strong> Vui lòng cập nhật định mức cho lệnh sản xuất này.
                         </div>
                         
-                        <h6 class="mb-3 text-muted">Chi Tiết Nhập Xuất</h6>
+                        <h6 class="mb-3 text-muted"><i class="bi bi-arrow-left-right"></i> Chi Tiết Nhập Xuất</h6>
                         <div class="table-responsive">
                             <table class="table table-bordered detail-table">
                                 <thead>
@@ -273,12 +265,11 @@
                     if (ckDetails.length > 0) {
                         nxDetailsHtml += `
                             <div class="alert alert-warning mt-3">
-                                <strong>Lưu ý:</strong> Có ${ckDetails.length} phiếu xuất kho nhưng chưa có định mức để so sánh.
+                                <i class="bi bi-info-circle"></i> <strong>Lưu ý:</strong> Có ${ckDetails.length} phiếu xuất kho nhưng chưa có định mức để so sánh.
                             </div>
                         `;
                     }
                 } else {
-                    // Trường hợp CÓ định mức
                     const soLuongDon = Number(summary.so_luong_don || 0);
 
                     const ckMap = {};
@@ -306,7 +297,7 @@
                     });
 
                     nxDetailsHtml = `
-                        <h6 class="mb-3">Chi Tiết Nhập Xuất (${nxDetails.length} định mức, ${ckDetails.length} xuất kho, ${nxDetails2025.length} đã sử dụng)</h6>
+                        <h6 class="mb-3"><i class="bi bi-arrow-left-right"></i> Chi Tiết Nhập Xuất (${nxDetails.length} định mức, ${ckDetails.length} xuất kho, ${nxDetails2025.length} đã sử dụng)</h6>
                         
                         <div class="table-responsive">
                             <table class="table table-bordered table-hover detail-table">
@@ -407,9 +398,8 @@
                     nxDetailsHtml += `</tbody></table></div>`;
                 }
 
-                // Render detail table
                 let detailTableHtml = `
-                    <h6 class="mb-3">Chi Tiết Sản Xuất (${sxDetails.length} bản ghi)</h6>
+                    <h6 class="mb-3"><i class="bi bi-list-check"></i> Chi Tiết Sản Xuất (${sxDetails.length} bản ghi)</h6>
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover detail-table">
                             <thead>
@@ -459,19 +449,17 @@
 
             isRefreshing = true;
 
-            const table = document.querySelector('#sxTable');
-            const tbody = table.querySelector('tbody');
+            const container = document.querySelector('#cardsContainer');
             const refreshIndicator = document.getElementById('refreshIndicator');
 
-            table.classList.add('refreshing');
             refreshIndicator.classList.add('active');
 
             tvFetch("/api/tivi/sx-data", function(response, error) {
                 try {
                     if (error || !response) {
                         console.error("Lỗi tải dữ liệu:", error);
-                        tbody.innerHTML =
-                            `<tr><td colspan="16" class="text-danger text-center">Lỗi tải dữ liệu: ${error?.message || 'Unknown error'}</td></tr>`;
+                        container.innerHTML =
+                            `<div class="col-12"><div class="alert alert-danger text-center">Lỗi tải dữ liệu: ${error?.message || 'Unknown error'}</div></div>`;
                         return;
                     }
 
@@ -485,11 +473,9 @@
                         return ngay >= cutoff && ngay <= now;
                     });
 
-                    tbody.innerHTML = "";
-
                     if (filteredData.length === 0) {
-                        tbody.innerHTML =
-                            `<tr><td colspan="16" class="text-center text-warning">Không có lệnh SX trong 24h qua</td></tr>`;
+                        container.innerHTML =
+                            `<div class="col-12"><div class="alert alert-warning text-center">Không có lệnh SX trong 24h qua</div></div>`;
                         return;
                     }
 
@@ -500,85 +486,78 @@
                         groups[key].push(item);
                     });
 
+                    container.innerHTML = "";
+
                     Object.entries(groups).forEach(([soct, rows]) => {
-                        let tongSX = 0;
-                        const soluongGO = Number(rows[0]?.Soluong_go ?? 0);
+                        const firstItem = rows[0];
+                        const tongSX = Number(totalBySoct?.[firstItem.So_dh] ?? 0);
+                        const soluongGO = Number(firstItem.Soluong_go ?? 0);
+                        const soThieu = soluongGO - tongSX;
+                        const pct = soluongGO > 0 ? ((tongSX / soluongGO) * 100).toFixed(1) : 0;
 
-                        rows.forEach((item, index) => {
-                            tongSX = Number(totalBySoct?.[item.So_dh] ?? 0);
-                            const pct = soluongGO > 0 ? (item.Soluong / soluongGO * 100).toFixed(
-                                1) : 0;
-                            const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ? 'bg-warning' :
-                                'bg-danger';
+                        const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ? 'bg-warning' : 'bg-danger';
+                        const statusColor = soThieu > 0 ? 'danger' : 'success';
+                        const statusIcon = soThieu > 0 ? 'exclamation-triangle-fill' : 'check-circle-fill';
 
-                            const imageHtml =
-                                `<img src="/hinh_hh/HH_${item.hang_hoa.Ma_hh}/${item.hang_hoa.Pngpath}" alt="${item.hang_hoa.Ten_hh}" class="clickable-image">`;
-                            const lenhHtml =
-                                `<span class="clickable-lenh" onclick="loadDetailLenh('${item.So_dh}')">${item.So_ct_go ?? ''}</span>`;
-
-                            const row = `
-                                <tr>
-                                    <td>${index + 1}</td>
-                                    <td>${item.UserNgE ? new Date(item.UserNgE).toLocaleDateString('vi-VN') : ''}</td>
-                                    <td>${lenhHtml}</td>
-                                    <td>${item.Ma_hh ?? ''}</td>
-                                    <td>${imageHtml}</td>
-                                    <td>${item.hang_hoa?.Ten_hh ?? ''}</td>
-                                    <td>${item.Ma_ko ?? ''}</td>
-                                    <td>${item.nhan_vien?.Ten_nv ?? ''}</td>
-                                    <td>${soluongGO.toLocaleString('vi-VN')}</td>
-                                    <td>${Number(item.Dgbanvnd ?? 0).toLocaleString('vi-VN')}</td>
-                                    <td>${Number(item.Soluong ?? 0).toLocaleString('vi-VN')}</td>
-                                    <td>${Number(tongSX ?? 0).toLocaleString('vi-VN')}</td>
-                                    <td>${Math.round(item.Tien_vnd ?? 0)}</td>
-                                    <td>${item.hang_hoa?.Dvt ?? ''}</td>
-                                    <td>
-                                        <div class="progress">
-                                            <div class="progress-bar ${barColor}" style="width:${Math.min(pct, 100)}%">
-                                                ${pct}%
+                        const card = `
+                            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
+                                <div class="product-card" onclick="loadDetailLenh('${firstItem.So_dh}')">
+                                    <div class="product-image-wrapper">
+                                        <img src="/hinh_hh/HH_${firstItem.hang_hoa.Ma_hh}/${firstItem.hang_hoa.Pngpath}" 
+                                             alt="${firstItem.hang_hoa.Ten_hh}" 
+                                             class="product-image"
+                                             onclick="event.stopPropagation(); showImageModal(this.src)">
+                                        <div class="status-badge badge-${statusColor}">
+                                            <i class="bi bi-${statusIcon}"></i>
+                                        </div>
+                                    </div>
+                                    <div class="product-info">
+                                        <h6 class="product-order">${soct}</h6>
+                                        <p class="product-name">${firstItem.hang_hoa?.Ten_hh || ''}</p>
+                                        <div class="progress-info">
+                                            <div class="progress-numbers">
+                                                <span class="text-success fw-bold">${tongSX.toLocaleString('vi-VN')}</span>
+                                                <span class="text-muted">/</span>
+                                                <span class="fw-bold">${soluongGO.toLocaleString('vi-VN')}</span>
+                                            </div>
+                                            <div class="progress mt-2">
+                                                <div class="progress-bar ${barColor}" style="width: ${Math.min(pct, 100)}%">
+                                                    ${pct}%
+                                                </div>
                                             </div>
                                         </div>
-                                    </td>
-                                    <td>${item.DgiaiV ?? ''}</td>
-                                </tr>
-                            `;
-                            tbody.insertAdjacentHTML('beforeend', row);
-                        });
-
-                        const soThieu = soluongGO - tongSX;
-                        const subtotalRow = `
-                            <tr class="subtotal-row ${soThieu >= 0 ? 'table-danger' : 'table-success'}">
-                                <td colspan="16">
-                                    LỆNH ${soct}: ĐÃ SẢN XUẤT ĐƯỢC ${Number(tongSX ?? 0).toLocaleString('vi-VN')} 
-                                    CÒN LẠI ${Number(soThieu ?? 0).toLocaleString('vi-VN')}
-                                </td>
-                            </tr>
+                                        <div class="remaining-info mt-2">
+                                            <small class="text-${statusColor}">
+                                                <i class="bi bi-${statusIcon}"></i> 
+                                                ${soThieu > 0 ? 'Thiếu' : 'Dư'}: <strong>${Math.abs(soThieu).toLocaleString('vi-VN')}</strong>
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         `;
-                        tbody.insertAdjacentHTML('beforeend', subtotalRow);
+                        container.insertAdjacentHTML('beforeend', card);
                     });
 
                     updateLastRefreshTime();
 
                 } catch (err) {
                     console.error("Lỗi xử lý dữ liệu:", err);
-                    tbody.innerHTML =
-                        `<tr><td colspan="16" class="text-danger text-center">Lỗi xử lý dữ liệu!</td></tr>`;
+                    container.innerHTML =
+                        `<div class="col-12"><div class="alert alert-danger text-center">Lỗi xử lý dữ liệu!</div></div>`;
                 } finally {
-                    table.classList.remove('refreshing');
                     refreshIndicator.classList.remove('active');
                     isRefreshing = false;
                 }
             });
         }
 
-        document.addEventListener('click', function(e) {
-            if (e.target.classList.contains('clickable-image')) {
-                const modalImg = document.getElementById('modalImage');
-                modalImg.src = e.target.src;
-                const modal = new bootstrap.Modal(document.getElementById('imageModal'));
-                modal.show();
-            }
-        });
+        function showImageModal(src) {
+            const modalImg = document.getElementById('modalImage');
+            modalImg.src = src;
+            const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+            modal.show();
+        }
 
         loadSXData();
         refreshInterval = setInterval(loadSXData, 20000);
