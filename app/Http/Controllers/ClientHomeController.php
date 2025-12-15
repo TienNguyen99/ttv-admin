@@ -67,6 +67,9 @@ class ClientHomeController extends Controller
         $cd2 = $cd('02');
         $cd3 = $cd('03');
         $cd4 = $cd('04');
+        $cd5 = $cd('05');
+        $cd6 = $cd('06');
+        $cd7 = $cd('07');
 
         $nx = DB::table('DataKetoanData')
             
@@ -217,6 +220,9 @@ class ClientHomeController extends Controller
             'cd2' => $cd2,
             'cd3' => $cd3,
             'cd4' => $cd4,
+            'cd5' => $cd5,
+            'cd6' => $cd6,
+            'cd7' => $cd7,
             'nx' => $nx,
             'xv' => $xv,
             'nhapKho' => $nhapKho,

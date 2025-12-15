@@ -10,8 +10,33 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <!-- DataTables Buttons CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+    <style>
+        td,
+        th {
+            font-size: 13px;
+            vertical-align: middle;
+        }
 
-    <style></style>
+        .text-danger {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .text-success {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .text-warning {
+            color: #ffc107;
+            font-weight: bold;
+        }
+
+        .text-primary {
+            color: #007bff;
+            font-weight: bold;
+        }
+    </style>
 </head>
 
 <body>
@@ -311,6 +336,9 @@
                         cd2,
                         cd3,
                         cd4,
+                        cd5,
+                        cd6,
+                        cd7,
                         nx,
                         xv,
                         nhapKho,
@@ -345,10 +373,10 @@
                         const key = `${row.So_ct}|${row.Ma_hh}`;
                         const keyketoan = `${row.So_dh}|${row.Ma_hh}`;
                         const keyketoan2 = `${row.So_dh}|${row.hang_hoa?.Ma_so}`;
-                        const cdSteps = [cd1, cd2, cd3, cd4];
+                        const cdSteps = [cd1, cd2, cd3, cd4, cd5, cd6, cd7];
                         let step = 0,
                             label = 'Chưa bắt đầu';
-                        for (let i = 3; i >= 0; i--) {
+                        for (let i = 6; i >= 0; i--) {
                             if (cdSteps[i][key]) {
                                 step = Math.round(cdSteps[i][key].total);
                                 label = `Công đoạn${i + 1} - ${step}`;
@@ -384,9 +412,7 @@
                         }
                         // Xác định tình trạng
                         let statusLabel = '';
-                        //if (xuat >= sum && sum > 0 || (row.Noibo && row.Noibo.includes("R"))) {
-                        //    statusLabel = '<span class="text-success">✔️ Hoàn thành</span>';
-                        //}
+
                         if (xuatkhomavvkt >= sum || (row.Noibo && row.Noibo.includes("R"))) {
                             statusLabel = '<span class="text-success">✔️ Hoàn thành</span>';
                         } else if (xuatkhomavvkt < sum && xuatkhomavvkt > 0) {

@@ -405,6 +405,7 @@
                             <thead>
                                 <tr>
                                     <th>STT</th>
+                                    <th>Ngày ra phiếu</th>
                                     <th>Số CT</th>
                                     <th>Mã HH</th>
                                     <th>Tên hàng</th>
@@ -424,6 +425,7 @@
                     detailTableHtml += `
                         <tr>
                             <td>${idx + 1}</td>
+                            <td>${item.Ngay_ct || ''}</td>
                             <td>${item.So_ct || ''}</td>
                             <td>${item.Ma_hh || ''}</td>
                             <td>${item.hang_hoa?.Ten_hh || ''}</td>
