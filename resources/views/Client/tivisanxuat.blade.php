@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="{{ asset('favicon.ico') }}" type="image/x-icon" />
     <title>CÁC LỆNH SẢN XUẤT 24 GIỜ QUA</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -82,7 +83,7 @@
         function tvFetch(url, callback) {
             const xhr = new XMLHttpRequest();
             xhr.open("GET", url, true);
-            xhr.timeout = 8000;
+            xhr.timeout = 20000; // 20 seconds
 
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
@@ -123,14 +124,14 @@
             const modalTitle = document.getElementById('detailModalTitle');
 
             modalTitle.innerHTML = `<i class="bi bi-info-circle"></i> Chi Tiết Lệnh: ${soCt}`;
-            modalBody.innerHTML = `
-                <div class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Đang tải...</span>
-                    </div>
-                    <p class="mt-3 text-muted">Đang tải dữ liệu...</p>
-                </div>
-            `;
+            // modalBody.innerHTML = `
+        //     <div class="text-center py-5">
+        //         <div class="spinner-border text-primary" role="status">
+        //             <span class="visually-hidden">Đang tải...</span>
+        //         </div>
+        //         <p class="mt-3 text-muted">Đang tải dữ liệu...</p>
+        //     </div>
+        // `;
 
             modal.show();
 
@@ -308,10 +309,11 @@
                                         <th>Tên hàng</th>
                                         <th>Công đoạn</th>
                                         <th>Số đề xuất</th>
-                                        <th>Đã xuất</th>
+                                        <th>Đã xuất vật tư</th>
+                                        <th>Xuất vật tư Dư/Thiếu</th>
                                         <th>Đã sử dụng</th>
-                                        <th>Dư/Thiếu</th>
-                                        <th>ĐVT</th>
+                                        <th>Vật tư dư cần trả lại</th>
+                                        <th>Đơn vị</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -354,11 +356,15 @@
                                     <strong class="text-success">${daXuat.toLocaleString('vi-VN')}</strong>
                                     ${daXuat === 0 ? '<br><small class="text-muted">(chưa xuất)</small>' : ''}
                                 </td>
+                                
+                                <td class="${duThieuClass}">${duThieuText}</td>
                                 <td>
                                     <strong class="text-info">${daSuDung.toLocaleString('vi-VN')}</strong>
                                     ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
                                 </td>
-                                <td class="${duThieuClass}">${duThieuText}</td>
+                                <td class="text-warning fw-bold">
+                                    ${daXuat - daSuDung > 0 ? `+${(daXuat - daSuDung).toLocaleString('vi-VN')}` : (daXuat - daSuDung).toLocaleString('vi-VN')}
+                                </td>
                                 <td>${item.hang_hoa?.Dvt || ''}</td>
                             </tr>
                         `;
@@ -455,7 +461,7 @@
             const refreshIndicator = document.getElementById('refreshIndicator');
 
             refreshIndicator.classList.add('active');
-
+            // API TỔNG
             tvFetch("/api/tivi/sx-data", function(response, error) {
                 try {
                     if (error || !response) {
@@ -554,12 +560,7 @@
             });
         }
 
-        function showImageModal(src) {
-            const modalImg = document.getElementById('modalImage');
-            modalImg.src = src;
-            const modal = new bootstrap.Modal(document.getElementById('imageModal'));
-            modal.show();
-        }
+
 
         loadSXData();
         refreshInterval = setInterval(loadSXData, 20000);
@@ -570,6 +571,7 @@
             }
         });
     </script>
+    <script src="{{ asset('js/showImageModal.js') }}"></script>
 </body>
 
 </html>
