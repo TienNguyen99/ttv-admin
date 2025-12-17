@@ -20,13 +20,56 @@
     <div class="container-fluid">
         <div class="dashboard-header">
             <h1 class="text-center mb-3">
-                <i class="bi bi-clipboard-data"></i> LỆNH ĐANG SẢN XUẤT TRONG 24 GIỜ QUA
+                <i class="bi bi-clipboard-data"></i> LỆNH ĐANG SẢN XUẤT
             </h1>
-            <div class="text-center">
+            <div class="text-center mb-3">
                 <span class="update-info">
                     <i class="bi bi-arrow-clockwise"></i>
                     Tự động cập nhật mỗi 20 giây | Lần cập nhật cuối: <strong id="lastUpdate">---</strong>
                 </span>
+            </div>
+
+            <!-- Time Range Switch -->
+            <div class="text-center mb-3">
+                <div class="btn-group time-range-switch" role="group">
+                    <input type="radio" class="btn-check" name="timeRange" id="time24h" value="24h" checked
+                        autocomplete="off">
+                    <label class="btn btn-outline-light btn-sm" for="time24h">
+                        <i class="bi bi-clock-history"></i> 24 Giờ
+                    </label>
+
+                    <input type="radio" class="btn-check" name="timeRange" id="timeAll" value="all"
+                        autocomplete="off">
+                    <label class="btn btn-outline-light btn-sm" for="timeAll">
+                        <i class="bi bi-infinity"></i> Toàn Bộ
+                    </label>
+                </div>
+            </div>
+
+            <!-- Filter Buttons -->
+            <div class="text-center">
+                <div class="btn-group flex-wrap" role="group" aria-label="Filter buttons">
+                    <button type="button" class="btn btn-sm btn-outline-light filter-btn active" data-filter="all">
+                        <i class="bi bi-grid-3x3-gap"></i> Tất cả
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger filter-btn"
+                        data-filter="chua-phan-tich">
+                        <i class="bi bi-exclamation-circle"></i> Chưa phân tích
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger filter-btn"
+                        data-filter="chua-xuat-vat-tu">
+                        <i class="bi bi-box-arrow-right"></i> Chưa xuất vật tư
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger filter-btn" data-filter="chua-nhap-kho">
+                        <i class="bi bi-box-arrow-in-down"></i> Chưa nhập kho
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger filter-btn" data-filter="chua-xuat-kho">
+                        <i class="bi bi-truck"></i> Chưa xuất kho
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success filter-btn" data-filter="hoan-tat">
+                        <i class="bi bi-check-circle-fill"></i> Hoàn tất
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -76,14 +119,60 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
     <script>
         let isRefreshing = false;
         let refreshInterval = null;
+        let currentFilter = 'all';
+        let currentTimeRange = '24h';
+        let allCardsData = [];
+
+        // Time Range Switch functionality
+        document.querySelectorAll('input[name="timeRange"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                currentTimeRange = this.value;
+                loadSXData();
+            });
+        });
+
+        // Filter functionality
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.filter-btn')) {
+                const btn = e.target.closest('.filter-btn');
+                const filter = btn.getAttribute('data-filter');
+
+                // Update active state
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Apply filter
+                currentFilter = filter;
+                applyFilter();
+            }
+        });
+
+        function applyFilter() {
+            const cards = document.querySelectorAll('#cardsContainer > div[data-status]');
+
+            cards.forEach(card => {
+                const status = card.getAttribute('data-status');
+
+                if (currentFilter === 'all') {
+                    card.classList.remove('card-hidden');
+                } else {
+                    if (status.includes(currentFilter)) {
+                        card.classList.remove('card-hidden');
+                    } else {
+                        card.classList.add('card-hidden');
+                    }
+                }
+            });
+        }
 
         function tvFetch(url, callback) {
             const xhr = new XMLHttpRequest();
             xhr.open("GET", url, true);
-            xhr.timeout = 20000; // 20 seconds
+            xhr.timeout = 20000;
 
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
@@ -124,15 +213,6 @@
             const modalTitle = document.getElementById('detailModalTitle');
 
             modalTitle.innerHTML = `<i class="bi bi-info-circle"></i> Chi Tiết Lệnh: ${soCt}`;
-            // modalBody.innerHTML = `
-        //     <div class="text-center py-5">
-        //         <div class="spinner-border text-primary" role="status">
-        //             <span class="visually-hidden">Đang tải...</span>
-        //         </div>
-        //         <p class="mt-3 text-muted">Đang tải dữ liệu...</p>
-        //     </div>
-        // `;
-
             modal.show();
 
             tvFetch(`/api/tivi/sx-detail/${soCt}`, function(response, error) {
@@ -461,7 +541,7 @@
             const refreshIndicator = document.getElementById('refreshIndicator');
 
             refreshIndicator.classList.add('active');
-            // API TỔNG
+
             tvFetch("/api/tivi/sx-data", function(response, error) {
                 try {
                     if (error || !response) {
@@ -473,17 +553,29 @@
 
                     const data = response.data || [];
                     const totalBySoct = response.totalBySoct || {};
+                    const statusMap = response.statusMap || {};
 
                     const now = new Date();
                     const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                    const filteredData = data.filter(item => {
-                        const ngay = new Date(item.UserNgE);
-                        return ngay >= cutoff && ngay <= now;
-                    });
+
+                    // Lọc dữ liệu theo time range
+                    let filteredData;
+                    if (currentTimeRange === '24h') {
+                        filteredData = data.filter(item => {
+                            const ngay = new Date(item.UserNgE);
+                            return ngay >= cutoff && ngay <= now;
+                        });
+                    } else {
+                        // Hiển thị toàn bộ
+                        filteredData = data;
+                    }
 
                     if (filteredData.length === 0) {
+                        const message = currentTimeRange === '24h' ?
+                            'Không có lệnh SX trong 24h qua' :
+                            'Không có dữ liệu lệnh SX';
                         container.innerHTML =
-                            `<div class="col-12"><div class="alert alert-warning text-center">Không có lệnh SX trong 24h qua</div></div>`;
+                            `<div class="col-12"><div class="alert alert-warning text-center">${message}</div></div>`;
                         return;
                     }
 
@@ -498,7 +590,8 @@
 
                     Object.entries(groups).forEach(([soct, rows]) => {
                         const firstItem = rows[0];
-                        const tongSX = Number(totalBySoct?.[firstItem.So_dh] ?? 0);
+                        const soDh = firstItem.So_dh;
+                        const tongSX = Number(totalBySoct?.[soDh] ?? 0);
                         const soluongGO = Number(firstItem.Soluong_go ?? 0);
                         const soThieu = soluongGO - tongSX;
                         const pct = soluongGO > 0 ? ((tongSX / soluongGO) * 100).toFixed(1) : 0;
@@ -507,9 +600,49 @@
                         const statusColor = soThieu > 0 ? 'danger' : 'success';
                         const statusIcon = soThieu > 0 ? 'exclamation-triangle-fill' : 'check-circle-fill';
 
+                        // Lấy trạng thái từ statusMap
+                        const status = statusMap[soDh] || {
+                            co_dinh_muc: false,
+                            da_xuat_vat_tu: false,
+                            da_nhap_kho: false,
+                            da_xuat_kho: false
+                        };
+
+                        // Tạo các badge cảnh báo và data-status cho filter
+                        let warningHtml = '';
+                        let statusClasses = [];
+
+                        if (!status.co_dinh_muc) {
+                            warningHtml +=
+                                '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-exclamation-circle"></i> Chưa phân tích</span>';
+                            statusClasses.push('chua-phan-tich');
+                        }
+                        if (!status.da_xuat_vat_tu) {
+                            warningHtml +=
+                                '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-box-arrow-right"></i> Chưa xuất VT</span>';
+                            statusClasses.push('chua-xuat-vat-tu');
+                        }
+                        if (!status.da_nhap_kho) {
+                            warningHtml +=
+                                '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-box-arrow-in-down"></i> Chưa nhập kho</span>';
+                            statusClasses.push('chua-nhap-kho');
+                        }
+                        if (!status.da_xuat_kho) {
+                            warningHtml +=
+                                '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-truck"></i> Chưa xuất kho</span>';
+                            statusClasses.push('chua-xuat-kho');
+                        }
+
+                        // Nếu không có cảnh báo, hiển thị trạng thái hoàn tất
+                        if (warningHtml === '') {
+                            warningHtml =
+                                '<span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Hoàn tất</span>';
+                            statusClasses.push('hoan-tat');
+                        }
+
                         const card = `
-                            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
-                                <div class="product-card" onclick="loadDetailLenh('${firstItem.So_dh}')">
+                            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6" data-status="${statusClasses.join(' ')}">
+                                <div class="product-card" onclick="loadDetailLenh('${soDh}')">
                                     <div class="product-image-wrapper">
                                         <img src="/hinh_hh/HH_${firstItem.hang_hoa.Ma_hh}/${firstItem.hang_hoa.Pngpath}" 
                                              alt="${firstItem.hang_hoa.Ten_hh}" 
@@ -540,12 +673,18 @@
                                                 ${soThieu > 0 ? 'Thiếu' : 'Dư'}: <strong>${Math.abs(soThieu).toLocaleString('vi-VN')}</strong>
                                             </small>
                                         </div>
+                                        <div class="warning-info mt-2">
+                                            ${warningHtml}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         `;
                         container.insertAdjacentHTML('beforeend', card);
                     });
+
+                    // Apply current filter after loading data
+                    applyFilter();
 
                     updateLastRefreshTime();
 
@@ -559,8 +698,6 @@
                 }
             });
         }
-
-
 
         loadSXData();
         refreshInterval = setInterval(loadSXData, 20000);

@@ -145,63 +145,116 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
     }
 
     public function getSXData(Request $request)
-    {
-        $data = DataKetoanData::with([
-            'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
-            'nhanVien:Ma_nv,Ten_nv',
-            'khachHang:Ma_kh,Ten_kh'
-        ])
+{
+    $data = DataKetoanData::with([
+        'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
+        'nhanVien:Ma_nv,Ten_nv',
+        'khachHang:Ma_kh,Ten_kh'
+    ])
+    ->select(
+        'DataKetoanData.So_dh',
+        'DataKetoanData.Ma_hh',
+        'DataKetoanData.Ma_ko',
+        'DataKetoanData.Ma_nv',
+        'DataKetoanData.Soluong',
+        'DataKetoanData.UserNgE',
+        'DataKetoanData.Ma_kh',
+        'DataKetoanData.Dgbanvnd',
+        'DataKetoanData.Tien_vnd',
+        'DataKetoanData.DgiaiV',
+        DB::raw('go.So_dh as So_ct_go'),
+        DB::raw('go.Soluong_go as Soluong_go')
+    )
+    ->leftJoin(DB::raw("
+        (
+            SELECT So_ct, So_dh, SUM(Soluong) AS Soluong_go
+            FROM DataKetoanData
+            WHERE Ma_ct = 'GO'
+            GROUP BY So_ct, So_dh
+        ) AS go
+    "), 'go.So_ct', '=', 'DataKetoanData.So_dh')
+    ->where('DataKetoanData.Ma_ct', '=', 'SX')
+    ->orderBy('DataKetoanData.So_dh')
+    ->get();
+
+    // Tính tổng theo lệnh - CHỈ LẤY CÔNG ĐOẠN CUỐI
+    $totalBySoct = DB::table('DataKetoanData')
         ->select(
-            'DataKetoanData.So_dh',
-            'DataKetoanData.Ma_hh',
-            'DataKetoanData.Ma_ko',
-            'DataKetoanData.Ma_nv',
-            'DataKetoanData.Soluong',
-            'DataKetoanData.UserNgE',
-            'DataKetoanData.Ma_kh',
-            'DataKetoanData.Dgbanvnd',
-            'DataKetoanData.Tien_vnd',
-            'DataKetoanData.DgiaiV',
-            DB::raw('go.So_dh as So_ct_go'),
-            DB::raw('go.Soluong_go as Soluong_go')
+            'So_dh',
+            DB::raw('MAX(Ma_ko) as Ma_ko_cuoi')
         )
-        ->leftJoin(DB::raw("
-            (
-                SELECT So_ct, So_dh, SUM(Soluong) AS Soluong_go
-                FROM DataKetoanData
-                WHERE Ma_ct = 'GO'
-                GROUP BY So_ct, So_dh
-            ) AS go
-        "), 'go.So_ct', '=', 'DataKetoanData.So_dh')
-        ->where('DataKetoanData.Ma_ct', '=', 'SX')
-        ->orderBy('DataKetoanData.So_dh')
-        ->get();
+        ->where('Ma_ct', '=', 'SX')
+        ->groupBy('So_dh')
+        ->get()
+        ->mapWithKeys(function ($item) {
+            // Lấy tổng số lượng của công đoạn cuối cùng
+            $total = DB::table('DataKetoanData')
+                ->where('Ma_ct', 'SX')
+                ->where('So_dh', $item->So_dh)
+                ->where('Ma_ko', $item->Ma_ko_cuoi)
+                ->sum('Soluong');
+            
+            return [$item->So_dh => $total];
+        });
 
-        // Tính tổng theo lệnh - CHỈ LẤY CÔNG ĐOẠN CUỐI
-        $totalBySoct = DB::table('DataKetoanData')
-            ->select(
-                'So_dh',
-                DB::raw('MAX(Ma_ko) as Ma_ko_cuoi')
-            )
-            ->where('Ma_ct', '=', 'SX')
-            ->groupBy('So_dh')
-            ->get()
-            ->mapWithKeys(function ($item) {
-                // Lấy tổng số lượng của công đoạn cuối cùng
-                $total = DB::table('DataKetoanData')
-                    ->where('Ma_ct', 'SX')
-                    ->where('So_dh', $item->So_dh)
-                    ->where('Ma_ko', $item->Ma_ko_cuoi)
-                    ->sum('Soluong');
-                
-                return [$item->So_dh => $total];
-            });
-
-        return response()->json([
-            'data' => $data,
-            'totalBySoct' => $totalBySoct
-        ]);
+    // ===== THÊM PHẦN KIỂM TRA TRẠNG THÁI =====
+    
+    // Lấy danh sách tất cả So_dh duy nhất
+    $allSoDh = $data->pluck('So_dh')->unique();
+    
+    // Kiểm tra có định mức (NX) - GROUP BY
+    $dinhMucStatus = DB::table('DataKetoanData')
+        ->select('So_dh')
+        ->where('Ma_ct', 'NX')
+        ->whereIn('So_dh', $allSoDh)
+        ->groupBy('So_dh')
+        ->pluck('So_dh')
+        ->flip();
+    
+    // Kiểm tra đã xuất vật tư (CK trong 2025) - GROUP BY
+    $xuatVatTuStatus = DB::table('DataKetoan2025')
+        ->select('So_dh')
+        ->where('Ma_ct', 'CK')
+        ->whereIn('So_dh', $allSoDh)
+        ->groupBy('So_dh')
+        ->pluck('So_dh')
+        ->flip();
+    
+    // Kiểm tra đã nhập kho (NX trong 2025) - GROUP BY
+    $nhapKhoStatus = DB::table('DataKetoan2025')
+        ->select('So_dh')
+        ->where('Ma_ct', 'NX')
+        ->whereIn('So_dh', $allSoDh)
+        ->groupBy('So_dh')
+        ->pluck('So_dh')
+        ->flip();
+    
+    // Kiểm tra đã xuất kho (XU trong 2025) - GROUP BY
+    $xuatKhoStatus = DB::table('DataKetoan2025')
+        ->select('So_dh')
+        ->where('Ma_ct', 'XU')
+        ->whereIn('So_dh', $allSoDh)
+        ->groupBy('So_dh')
+        ->pluck('So_dh')
+        ->flip();
+    
+    // Tạo map trạng thái cho từng lệnh
+    $statusMap = [];
+    foreach ($allSoDh as $soDh) {
+        $statusMap[$soDh] = [
+            'co_dinh_muc' => isset($dinhMucStatus[$soDh]),
+            'da_xuat_vat_tu' => isset($xuatVatTuStatus[$soDh]),
+            'da_nhap_kho' => isset($nhapKhoStatus[$soDh]),
+            'da_xuat_kho' => isset($xuatKhoStatus[$soDh])
+        ];
     }
+
+    return response()->json([
+        'data' => $data,
+        'totalBySoct' => $totalBySoct,
+        'statusMap' => $statusMap  // THÊM TRẠNG THÁI VÀO RESPONSE
+    ]);
+}
 
     // API hiển thị Tivi
     public function getTiviData(Request $request)

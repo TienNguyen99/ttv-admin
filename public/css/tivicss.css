@@ -485,3 +485,66 @@ body {
 /* ============================================
    END OF TIVI CSS
    ============================================ */
+
+.filter-btn {
+    border-radius: 20px !important;
+    margin: 5px;
+    padding: 8px 20px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.filter-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.filter-btn.active {
+    background-color: #fff;
+    color: #000;
+    font-weight: 600;
+}
+
+.filter-btn.btn-outline-danger.active {
+    background-color: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
+}
+
+.filter-btn.btn-outline-success.active {
+    background-color: #198754;
+    color: #fff;
+    border-color: #198754;
+}
+
+.card-hidden {
+    display: none !important;
+}
+
+.warning-info .badge {
+    font-size: 0.7rem;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+}
+
+.warning-info .badge i {
+    font-size: 0.65rem;
+}
+
+.time-range-switch .btn {
+    border-radius: 20px;
+    padding: 8px 20px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.time-range-switch .btn-check:checked+.btn {
+    background-color: #fff;
+    color: #000;
+    font-weight: 600;
+}
+
+.time-range-switch {
+    margin-bottom: 15px;
+}
