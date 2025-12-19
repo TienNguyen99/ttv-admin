@@ -517,6 +517,12 @@ body {
     border-color: #198754;
 }
 
+.filter-btn.btn-outline-warning.active {
+    background-color: #ffc107;
+    color: #000;
+    border-color: #ffc107;
+}
+
 .card-hidden {
     display: none !important;
 }

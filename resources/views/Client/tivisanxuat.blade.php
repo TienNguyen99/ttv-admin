@@ -66,6 +66,10 @@
                     <button type="button" class="btn btn-sm btn-outline-danger filter-btn" data-filter="chua-xuat-kho">
                         <i class="bi bi-truck"></i> Chưa xuất kho
                     </button>
+                    <button type="button" class="btn btn-sm btn-outline-warning filter-btn"
+                        data-filter="xuat-du-vat-tu">
+                        <i class="bi bi-arrow-up-circle"></i> Xuất dư vật tư
+                    </button>
                     <button type="button" class="btn btn-sm btn-outline-success filter-btn" data-filter="hoan-tat">
                         <i class="bi bi-check-circle-fill"></i> Hoàn tất
                     </button>
@@ -119,7 +123,76 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        .filter-btn {
+            border-radius: 20px !important;
+            margin: 5px;
+            padding: 8px 20px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
 
+        .filter-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .filter-btn.active {
+            background-color: #fff;
+            color: #000;
+            font-weight: 600;
+        }
+
+        .filter-btn.btn-outline-danger.active {
+            background-color: #dc3545;
+            color: #fff;
+            border-color: #dc3545;
+        }
+
+        .filter-btn.btn-outline-success.active {
+            background-color: #198754;
+            color: #fff;
+            border-color: #198754;
+        }
+
+        .filter-btn.btn-outline-warning.active {
+            background-color: #ffc107;
+            color: #000;
+            border-color: #ffc107;
+        }
+
+        .card-hidden {
+            display: none !important;
+        }
+
+        .warning-info .badge {
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        .warning-info .badge i {
+            font-size: 0.65rem;
+        }
+
+        .time-range-switch .btn {
+            border-radius: 20px;
+            padding: 8px 20px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .time-range-switch .btn-check:checked+.btn {
+            background-color: #fff;
+            color: #000;
+            font-weight: 600;
+        }
+
+        .time-range-switch {
+            margin-bottom: 15px;
+        }
+    </style>
     <script>
         let isRefreshing = false;
         let refreshInterval = null;
@@ -207,6 +280,23 @@
             document.getElementById('lastUpdate').textContent = timeStr;
         }
 
+        function getCongDoanName(maKo) {
+            if (!maKo) return '';
+
+            // Chuyển về string
+            const maKoStr = String(maKo);
+
+            // Map với cả dạng có 0 và không có 0
+            const congDoanMap = {
+                '5': 'QC',
+                '05': 'QC',
+                '6': 'Nhập kho',
+                '06': 'Nhập kho'
+            };
+
+            return congDoanMap[maKoStr] || maKoStr;
+        }
+
         function loadDetailLenh(soCt) {
             const modal = new bootstrap.Modal(document.getElementById('detailModal'));
             const modalBody = document.getElementById('detailModalBody');
@@ -292,7 +382,7 @@
                             <div class="col-md-4 mb-3">
                                 <div class="card">
                                     <div class="card-body">
-                                        <span class="congdoan-badge">${cd.Ma_ko}</span>
+                                        <span class="congdoan-badge">${getCongDoanName(cd.Ma_ko)}</span>
                                         <div class="mt-3">
                                             <small><i class="bi bi-check-square"></i> Số lượng:</small> <strong>${Number(cd.total_sx).toLocaleString('vi-VN')}</strong><br>
                                             <small><i class="bi bi-rulers"></i> SL khác (mm,g):</small> <strong>${Number(cd.total_soluongkhac).toLocaleString('vi-VN')}</strong><br>
@@ -425,7 +515,7 @@
                                 <td>${idx + 1}</td>
                                 <td>${item.Ma_hh}</td>
                                 <td>${item.hang_hoa?.Ten_hh || ''}</td>
-                                <td><span class="congdoan-badge">${item.Ma_ko || ''}</span></td>
+                                <td><span class="congdoan-badge">${getCongDoanName(item.Ma_ko || '')}</span></td>
                                 <td>
                                     ${dinhMucDonVi.toLocaleString('vi-VN')} 
                                     <small class="text-muted">× ${soLuongDon.toLocaleString('vi-VN')}</small>
@@ -461,7 +551,7 @@
                                     <td>${nxDetails.length + idx + 1}</td>
                                     <td>${firstCK.Ma_hh}</td>
                                     <td>${firstCK.hang_hoa?.Ten_hh || ''}</td>
-                                    <td><span class="congdoan-badge">${firstCK.Ma_ko || ''}</span></td>
+                                    <td><span class="congdoan-badge">${getCongDoanName(firstCK.Ma_ko || '')}</span></td>
                                     <td class="text-muted">
                                         <small>(không có định mức)</small><br>
                                         <strong>0</strong>
@@ -515,7 +605,7 @@
                             <td>${item.So_ct || ''}</td>
                             <td>${item.Ma_hh || ''}</td>
                             <td>${item.hang_hoa?.Ten_hh || ''}</td>
-                            <td><span class="congdoan-badge">${item.Ma_ko || ''}</span></td>
+                            <td><span class="congdoan-badge">${getCongDoanName(item.Ma_ko || '')}</span></td>
                             <td>${item.nhan_vien?.Ten_nv || ''}</td>
                             <td><strong>${Number(item.Soluong || 0).toLocaleString('vi-VN')}</strong></td>
                             <td><strong>${Number(item.Dgbanvnd || 0).toLocaleString('vi-VN')}</strong></td>
@@ -631,6 +721,13 @@
                             warningHtml +=
                                 '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-truck"></i> Chưa xuất kho</span>';
                             statusClasses.push('chua-xuat-kho');
+                        }
+
+                        // Kiểm tra xuất dư vật tư
+                        if (status.xuat_du_vat_tu) {
+                            warningHtml +=
+                                '<span class="badge bg-warning text-dark me-1 mb-1"><i class="bi bi-arrow-up-circle"></i> Xuất dư VT</span>';
+                            statusClasses.push('xuat-du-vat-tu');
                         }
 
                         // Nếu không có cảnh báo, hiển thị trạng thái hoàn tất

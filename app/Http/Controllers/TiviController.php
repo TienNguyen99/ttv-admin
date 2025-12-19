@@ -187,7 +187,6 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
         ->groupBy('So_dh')
         ->get()
         ->mapWithKeys(function ($item) {
-            // Lấy tổng số lượng của công đoạn cuối cùng
             $total = DB::table('DataKetoanData')
                 ->where('Ma_ct', 'SX')
                 ->where('So_dh', $item->So_dh)
@@ -197,12 +196,11 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
             return [$item->So_dh => $total];
         });
 
-    // ===== THÊM PHẦN KIỂM TRA TRẠNG THÁI =====
+    // ===== KIỂM TRA TRẠNG THÁI =====
     
-    // Lấy danh sách tất cả So_dh duy nhất
     $allSoDh = $data->pluck('So_dh')->unique();
     
-    // Kiểm tra có định mức (NX) - GROUP BY
+    // Kiểm tra có định mức (NX trong DataKetoanData)
     $dinhMucStatus = DB::table('DataKetoanData')
         ->select('So_dh')
         ->where('Ma_ct', 'NX')
@@ -211,7 +209,7 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
         ->pluck('So_dh')
         ->flip();
     
-    // Kiểm tra đã xuất vật tư (CK trong 2025) - GROUP BY
+    // Kiểm tra đã xuất vật tư (CK trong DataKetoan2025)
     $xuatVatTuStatus = DB::table('DataKetoan2025')
         ->select('So_dh')
         ->where('Ma_ct', 'CK')
@@ -220,7 +218,7 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
         ->pluck('So_dh')
         ->flip();
     
-    // Kiểm tra đã nhập kho (NX trong 2025) - GROUP BY
+    // Kiểm tra đã nhập kho (NX trong DataKetoan2025)
     $nhapKhoStatus = DB::table('DataKetoan2025')
         ->select('So_dh')
         ->where('Ma_ct', 'NX')
@@ -229,7 +227,7 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
         ->pluck('So_dh')
         ->flip();
     
-    // Kiểm tra đã xuất kho (XU trong 2025) - GROUP BY
+    // Kiểm tra đã xuất kho (XU trong DataKetoan2025)
     $xuatKhoStatus = DB::table('DataKetoan2025')
         ->select('So_dh')
         ->where('Ma_ct', 'XU')
@@ -237,6 +235,52 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
         ->groupBy('So_dh')
         ->pluck('So_dh')
         ->flip();
+
+    // ===== KIỂM TRA XUẤT DƯ VẬT TƯ =====
+    $xuatDuVatTu = [];
+    foreach ($allSoDh as $soDh) {
+        // Lấy số lượng đơn
+        $soLuongDon = DB::table('DataKetoanData')
+            ->where('Ma_ct', 'GO')
+            ->where('So_ct', $soDh)
+            ->sum('Soluong');
+
+        if ($soLuongDon > 0) {
+            // Lấy định mức
+            $dinhMuc = DB::table('DataKetoanData')
+                ->select('Ma_hh', DB::raw('SUM(Soluong) as total_dinh_muc'))
+                ->where('Ma_ct', 'NX')
+                ->where('So_dh', $soDh)
+                ->groupBy('Ma_hh')
+                ->get()
+                ->keyBy('Ma_hh');
+
+            // Lấy đã xuất
+            $daXuat = DB::table('DataKetoan2025')
+                ->select('Ma_hh', DB::raw('SUM(Soluong) as total_xuat'))
+                ->where('Ma_ct', 'CK')
+                ->where('So_dh', $soDh)
+                ->groupBy('Ma_hh')
+                ->get()
+                ->keyBy('Ma_hh');
+
+            // Kiểm tra có xuất dư không
+            $coDu = false;
+            foreach ($daXuat as $maHh => $xuat) {
+                $dinhMucDeXuat = ($dinhMuc[$maHh]->total_dinh_muc ?? 0) * $soLuongDon;
+                $daXuatTotal = $xuat->total_xuat ?? 0;
+                
+                if ($daXuatTotal > $dinhMucDeXuat) {
+                    $coDu = true;
+                    break;
+                }
+            }
+            
+            if ($coDu) {
+                $xuatDuVatTu[] = $soDh;
+            }
+        }
+    }
     
     // Tạo map trạng thái cho từng lệnh
     $statusMap = [];
@@ -245,14 +289,15 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
             'co_dinh_muc' => isset($dinhMucStatus[$soDh]),
             'da_xuat_vat_tu' => isset($xuatVatTuStatus[$soDh]),
             'da_nhap_kho' => isset($nhapKhoStatus[$soDh]),
-            'da_xuat_kho' => isset($xuatKhoStatus[$soDh])
+            'da_xuat_kho' => isset($xuatKhoStatus[$soDh]),
+            'xuat_du_vat_tu' => in_array($soDh, $xuatDuVatTu)
         ];
     }
 
     return response()->json([
         'data' => $data,
         'totalBySoct' => $totalBySoct,
-        'statusMap' => $statusMap  // THÊM TRẠNG THÁI VÀO RESPONSE
+        'statusMap' => $statusMap
     ]);
 }
 
