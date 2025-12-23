@@ -1,131 +1,215 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Happy Birthday Mỹ Tiên</title>
-<link href="https://fonts.googleapis.com/css2?family=Dancing+Script&display=swap" rel="stylesheet">
-<style>
-html, body {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  overflow: hidden;
-  background: #d0a896;
-  touch-action: none;
-}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Happy Birthday Anh Quy</title>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script&display=swap" rel="stylesheet">
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background: #d0a896;
+            touch-action: none;
+        }
 
-#cake {
-  display: block;
-  position: relative;
-  margin: -10em auto 0 auto;
-}
+        #cake {
+            display: block;
+            position: relative;
+            margin: -10em auto 0 auto;
+        }
 
-/* Candle + Fire giữ nguyên */
-.velas {
-  background: #ffffff;
-  border-radius: 10px;
-  position: absolute;
-  top: 228px;
-  left: 50%;
-  margin-left: -2.4px;
-  margin-top: -8.33333333px;
-  width: 5px;
-  height: 35px;
-  transform: translateY(-300px);
-  animation: in 500ms 6s ease-out forwards;
-}
-.velas:after,
-.velas:before {
-  background: rgba(255, 0, 0, 0.4);
-  content: "";
-  position: absolute;
-  width: 100%;
-  height: 2.22222222px;
-}
-.velas:after { top: 25%; left: 0; }
-.velas:before { top: 45%; left: 0; }
+        /* Candle + Fire */
+        .velas {
+            background: #ffffff;
+            border-radius: 10px;
+            position: absolute;
+            top: 228px;
+            left: 50%;
+            margin-left: -2.4px;
+            margin-top: -8.33333333px;
+            width: 5px;
+            height: 35px;
+            transform: translateY(-300px);
+            animation: in 500ms 6s ease-out forwards;
+        }
 
-.fuego {
-  border-radius: 100%;
-  position: absolute;
-  top: -20px;
-  left: 50%;
-  margin-left: -2.6px;
-  width: 6.66666667px;
-  height: 18px;
-}
-.fuego:nth-child(1){ animation: fuego 2s 6.5s infinite; }
-.fuego:nth-child(2){ animation: fuego 1.5s 6.5s infinite; }
-.fuego:nth-child(3){ animation: fuego 1s 6.5s infinite; }
-.fuego:nth-child(4){ animation: fuego 0.5s 6.5s infinite; }
-.fuego:nth-child(5){ animation: fuego 0.2s 6.5s infinite; }
+        .velas:after,
+        .velas:before {
+            background: rgba(255, 0, 0, 0.4);
+            content: "";
+            position: absolute;
+            width: 100%;
+            height: 2.22222222px;
+        }
 
-@keyframes fuego {
-  0%, 100% { background: rgba(254, 248, 97, 0.5); transform: translateY(0) scale(1); }
-  50% { background: rgba(255, 50, 0, 0.1); transform: translateY(-20px) scale(0); }
-}
-@keyframes in { to { transform: translateY(0); } }
+        .velas:after {
+            top: 25%;
+            left: 0;
+        }
 
-.text {
-  color: #8b6a60;
-  font-family: 'Dancing Script', cursive;
-  text-align: center;
-}
-.text h1 { font-size: 2em; }
-.text p { font-size: 3em; }
+        .velas:before {
+            top: 45%;
+            left: 0;
+        }
 
-#surpriseBtn {
-  position: absolute;
-  top: 90%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #8b6a60;
-  color: white;
-  border: none;
-  padding: 10px 25px;
-  border-radius: 20px;
-  font-family: 'Dancing Script', cursive;
-  font-size: 1.5em;
-  cursor: pointer;
-  transition: 0.3s;
-}
-#surpriseBtn:hover { background: #a88679; }
+        .fuego {
+            border-radius: 100%;
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            margin-left: -2.6px;
+            width: 6.66666667px;
+            height: 18px;
+        }
 
-/* Ảnh surprise */
-#fallingImage {
-  position: absolute;
-  top: -200px;
-  left: 70%;
-  width: 120px;
-  opacity: 0;
-  transition: opacity 0.5s;
-}
-#fallingImage.fall {
-  opacity: 1;
-  animation: dropDown 1.5s ease-out forwards;
-}
-@keyframes dropDown {
-  from { top: -200px; transform: rotate(0deg); }
-  to { top: 60%; transform: rotate(10deg); }
-}
-</style>
+        .fuego:nth-child(1) {
+            animation: fuego 2s 6.5s infinite;
+        }
+
+        .fuego:nth-child(2) {
+            animation: fuego 1.5s 6.5s infinite;
+        }
+
+        .fuego:nth-child(3) {
+            animation: fuego 1s 6.5s infinite;
+        }
+
+        .fuego:nth-child(4) {
+            animation: fuego 0.5s 6.5s infinite;
+        }
+
+        .fuego:nth-child(5) {
+            animation: fuego 0.2s 6.5s infinite;
+        }
+
+        @keyframes fuego {
+
+            0%,
+            100% {
+                background: rgba(254, 248, 97, 0.5);
+                transform: translateY(0) scale(1);
+            }
+
+            50% {
+                background: rgba(255, 50, 0, 0.1);
+                transform: translateY(-20px) scale(0);
+            }
+        }
+
+        @keyframes in {
+            to {
+                transform: translateY(0);
+            }
+        }
+
+        .text {
+            color: #8b6a60;
+            font-family: 'Dancing Script', cursive;
+            text-align: center;
+        }
+
+        .text h1 {
+            font-size: 2em;
+        }
+
+        .text p {
+            font-size: 3em;
+        }
+
+        #surpriseBtn {
+            position: absolute;
+            top: 90%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #8b6a60;
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 20px;
+            font-family: 'Dancing Script', cursive;
+            font-size: 1.5em;
+            cursor: pointer;
+            transition: 0.3s;
+            z-index: 10;
+        }
+
+        /* Hộp quà lúc rơi */
+        #fallingBox {
+            position: absolute;
+            top: -200px;
+            left: 50%;
+            width: 80px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            margin-left: -40px;
+            opacity: 0;
+            z-index: 999;
+            pointer-events: none;
+        }
+
+        #fallingBox.fall {
+            opacity: 1;
+            animation: dropDown 1.5s ease-out forwards;
+        }
+
+        @keyframes dropDown {
+            from {
+                top: -200px;
+                transform: rotate(0deg);
+            }
+
+            to {
+                top: 20%;
+                transform: rotate(15deg);
+            }
+        }
+
+        /* Ảnh ẩn lúc đầu */
+        #finalImage {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain;
+            z-index: 10000;
+            transition: all 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #finalImage.show {
+            display: block;
+            transform: translate(-50%, -50%) scale(1);
+        }
+    </style>
 </head>
+
 <body>
 
-<div class="velas">
-  <div class="fuego"></div>
-  <div class="fuego"></div>
-  <div class="fuego"></div>
-  <div class="fuego"></div>
-  <div class="fuego"></div>
-</div>
+    <div class="velas">
+        <div class="fuego"></div>
+        <div class="fuego"></div>
+        <div class="fuego"></div>
+        <div class="fuego"></div>
+        <div class="fuego"></div>
+    </div>
 
-<!-- Giữ nguyên SVG bánh sinh nhật ở đây -->
-<svg id="cake" version="1.1" x="0px" y="0px" width="200px" height="500px" viewBox="0 0 200 500" enable-background="new 0 0 200 500" xml:space="preserve">
-    <path fill="#a88679" d="M173.667-13.94c-49.298,0-102.782,0-147.334,0c-3.999,0-4-16.002,0-16.002
-		c44.697,0,96.586,0,147.334,0C177.667-29.942,177.668-13.94,173.667-13.94z">
-        <animate id="bizcocho_3" attributeName="d" calcMode="spline" keySplines="0 0 1 1; 0 0 1 1" begin="relleno_2.end" dur="0.3s" fill="freeze" values="
+    <svg id="cake" version="1.1" x="0px" y="0px" width="200px" height="500px" viewBox="0 0 200 500"
+        enable-background="new 0 0 200 500" xml:space="preserve">
+        <path fill="#a88679" d="M173.667-13.94c-49.298,0-102.782,0-147.334,0c-3.999,0-4-16.002,0-16.002
+  c44.697,0,96.586,0,147.334,0C177.667-29.942,177.668-13.94,173.667-13.94z">
+            <animate id="bizcocho_3" attributeName="d" calcMode="spline" keySplines="0 0 1 1; 0 0 1 1"
+                begin="relleno_2.end" dur="0.3s" fill="freeze"
+                values="
                           M173.667-13.94c-49.298,0-102.782,0-147.334,0c-3.999,0-4-16.002,0-16.002
 		c44.697,0,96.586,0,147.334,0C177.667-29.942,177.668-13.94,173.667-13.94z
                           ;
@@ -136,11 +220,13 @@ html, body {
                           M173.667,427.569c-49.795,0-101.101,0-147.334,0c-3.999,0-4-16.002,0-16.002
 		c46.385,0,97.539,0,147.334,0C177.668,411.567,177.667,427.569,173.667,427.569z
                           " />
-    </path>
-    <path fill="#8b6a60" d="M100-178.521c1.858,0,3.364,1.506,3.364,3.363c0,0,0,33.17,0,44.227
-		c0,19.144,0,57.431,0,76.574c0,10.152,0,40.607,0,40.607c0,1.858-1.506,3.364-3.364,3.364l0,0c-1.858,0-3.364-1.506-3.364-3.364c0,0,0-30.455,0-40.607c0-19.144,0-57.432,0-76.575c0-11.057,0-44.226,0-44.226C96.636-177.015,98.142-178.521,100-178.521
-		L100-178.521z">
-        <animate id="relleno_2" attributeName="d" calcMode="spline" keySplines="0 0 1 1; 0 0 1 1; 0 0 0.58 1" begin="bizcocho_2.end" dur="0.5s" fill="freeze" values="
+        </path>
+        <path fill="#8b6a60" d="M100-178.521c1.858,0,3.364,1.506,3.364,3.363c0,0,0,33.17,0,44.227
+  c0,19.144,0,57.431,0,76.574c0,10.152,0,40.607,0,40.607c0,1.858-1.506,3.364-3.364,3.364l0,0c-1.858,0-3.364-1.506-3.364-3.364c0,0,0-30.455,0-40.607c0-19.144,0-57.432,0-76.575c0-11.057,0-44.226,0-44.226C96.636-177.015,98.142-178.521,100-178.521
+  L100-178.521z">
+            <animate id="relleno_2" attributeName="d" calcMode="spline" keySplines="0 0 1 1; 0 0 1 1; 0 0 0.58 1"
+                begin="bizcocho_2.end" dur="0.5s" fill="freeze"
+                values="
                           M100-178.521c1.858,0,3.364,1.506,3.364,3.363c0,0,0,33.17,0,44.227
 		c0,19.144,0,57.431,0,76.574c0,10.152,0,40.607,0,40.607c0,1.858-1.506,3.364-3.364,3.364l0,0c-1.858,0-3.364-1.506-3.364-3.364c0,0,0-30.455,0-40.607c0-19.144,0-57.432,0-76.575c0-11.057,0-44.226,0-44.226C96.636-177.015,98.142-178.521,100-178.521
 		L100-178.521z
@@ -159,10 +245,12 @@ html, body {
 		c19.143,0,20.39-3.797,26.459,0c3,1.877,0,7.823,0,7.823c-2.412,2.258-58.328,0-73.667,0l0,0c-1.858,0-67.187,0-73.667,0
 		c0,0-4.125-4.983,0-7.823c5.201-3.58,16.085,0,23.725,0c8.841,0,20.762,0,20.762,0c3.686,0,8.597,0,19.511,0H102.242z
                           " />
-    </path>
-    <path fill="#a88679" d="M173.667-15.929c-46.512,0-105.486,0-147.334,0c-3.999,0-4-16.002,0-16.002
-		c43.566,0,97.96,0,147.334,0C177.667-31.931,177.666-15.929,173.667-15.929z">
-        <animate id="bizcocho_2" attributeName="d" calcMode="spline" keySplines="0 0 1 1; 0 0 1 1; 0.25 0 0.58 1" begin="relleno_1.end" dur="0.5s" fill="freeze" values="
+        </path>
+        <path fill="#a88679" d="M173.667-15.929c-46.512,0-105.486,0-147.334,0c-3.999,0-4-16.002,0-16.002
+  c43.566,0,97.96,0,147.334,0C177.667-31.931,177.666-15.929,173.667-15.929z">
+            <animate id="bizcocho_2" attributeName="d" calcMode="spline" keySplines="0 0 1 1; 0 0 1 1; 0.25 0 0.58 1"
+                begin="relleno_1.end" dur="0.5s" fill="freeze"
+                values="
                           M173.667-15.929c-46.512,0-105.486,0-147.334,0c-3.999,0-4-16.002,0-16.002
 		c43.566,0,97.96,0,147.334,0C177.667-31.931,177.666-15.929,173.667-15.929z
                           ;
@@ -175,11 +263,13 @@ html, body {
                           M173.667,451.394c-49.298,0-102.782,0-147.334,0c-3.999,0-4-16.002,0-16.002
 		c44.697,0,96.586,0,147.334,0C177.667,435.392,177.668,451.394,173.667,451.394z
                           " />
-    </path>
-    <path fill="#8b6a60" d="M101.368-73.685c0,12.164,0,15.18,0,28.519c0,22.702,0-13.661,0,8.304c0,14.48,0,18.233,0,30.512
-		c0,1.753-2.958,1.847-2.958,0c0-12.68,0-16.277,0-30.401c0-21.983,0,11.66,0-8.305c0-13.027,0-15.992,0-28.628
-		C98.411-75.883,101.368-75.592,101.368-73.685z">
-        <animate id="relleno_1" attributeName="d" calcMode="spline" keySplines="0 0 1 1; 0 0 1 1; 0 0 0.6 1" begin="bizcocho_1.end" dur="0.5s" fill="freeze" values="
+        </path>
+        <path fill="#8b6a60" d="M101.368-73.685c0,12.164,0,15.18,0,28.519c0,22.702,0-13.661,0,8.304c0,14.48,0,18.233,0,30.512
+  c0,1.753-2.958,1.847-2.958,0c0-12.68,0-16.277,0-30.401c0-21.983,0,11.66,0-8.305c0-13.027,0-15.992,0-28.628
+  C98.411-75.883,101.368-75.592,101.368-73.685z">
+            <animate id="relleno_1" attributeName="d" calcMode="spline" keySplines="0 0 1 1; 0 0 1 1; 0 0 0.6 1"
+                begin="bizcocho_1.end" dur="0.5s" fill="freeze"
+                values="
                           M101.368-73.685c0,12.164,0,15.18,0,28.519c0,22.702,0-13.661,0,8.304c0,14.48,0,18.233,0,30.512
 		c0,1.753-2.958,1.847-2.958,0c0-12.68,0-16.277,0-30.401c0-21.983,0,11.66,0-8.305c0-13.027,0-15.992,0-28.628
 		C98.411-75.883,101.368-75.592,101.368-73.685z
@@ -196,10 +286,13 @@ html, body {
 		c-14.48,0-17.884,0-30.163,0c-2.087,0-2.068,0-3.915,0c-13.333,0-8.963,0-23.088,0c-11.668,0-34.99-0.294-48.412,1.831
 		c-4.109,0.65-3.01-10.006,0-10.006C37.129,451.394,149.379,451.394,173.667,451.394z
                           " />
-    </path>
-    <path fill="#a88679" d="M173.667,21.571c-33.174,0-111.467,0-147.334,0c-4,0-4-16.002,0-16.002c39.836,0,105.982,0,147.334,0
-		C177.668,5.569,177.667,21.571,173.667,21.571z">
-        <animate id="bizcocho_1" attributeName="d" calcMode="spline" keySplines="0 0 1 1; 0 0 1 1; 0 0 1 1; 0.25 0 1 1; 0 0 1 1; 0.25 0 0.6 1" begin="2s" dur="0.8s" fill="freeze" values="
+        </path>
+        <path fill="#a88679" d="M173.667,21.571c-33.174,0-111.467,0-147.334,0c-4,0-4-16.002,0-16.002c39.836,0,105.982,0,147.334,0
+  C177.668,5.569,177.667,21.571,173.667,21.571z">
+            <animate id="bizcocho_1" attributeName="d" calcMode="spline"
+                keySplines="0 0 1 1; 0 0 1 1; 0 0 1 1; 0.25 0 1 1; 0 0 1 1; 0.25 0 0.6 1" begin="2s" dur="0.8s"
+                fill="freeze"
+                values="
                           M173.667,21.571c-33.174,0-111.467,0-147.334,0c-4,0-4-16.002,0-16.002c39.836,0,105.982,0,147.334,0
 		C177.668,5.569,177.667,21.571,173.667,21.571z
                           ;
@@ -221,12 +314,15 @@ html, body {
                           M173.667,475.571c-46.512,0-105.486,0-147.334,0c-3.999,0-4-16.002,0-16.002c43.566,0,97.96,0,147.334,0
 		C177.667,459.569,177.666,475.571,173.667,475.571z
                           " />
-    </path>
-    <path fill="#fefae9" d="M104.812,113.216c0,3.119-2.164,5.67-4.812,5.67c-2.646,0-4.812-2.551-4.812-5.67c0-5.594,0-16.782,0-22.375
-	c0-5.143,0-15.427,0-20.568c0-7.333,0-21.998,0-29.33c0-5.523,0-16.569,0-22.092c0-3.295,0-9.885,0-13.181
-	C95.188,2.551,97.353,0,100,0c2.648,0,4.812,2.551,4.812,5.669c0,3.248,0,9.743,0,12.991c0,5.428,0,16.284,0,21.711
-	c0,7.618,0,22.854,0,30.472c0,4.952,0,14.854,0,19.807C104.812,96.292,104.812,107.576,104.812,113.216z">
-        <animate id="crema" attributeName="d" calcMode="spline" keySplines="0 0 1 1; 0 0 1 1; 0 0 1 1; 0.25 0 1 1; 0 0 1 1; 0 0 0.58 1" begin="bizcocho_3.end" dur="2s" fill="freeze" values="
+        </path>
+        <path fill="#fefae9" d="M104.812,113.216c0,3.119-2.164,5.67-4.812,5.67c-2.646,0-4.812-2.551-4.812-5.67c0-5.594,0-16.782,0-22.375
+ c0-5.143,0-15.427,0-20.568c0-7.333,0-21.998,0-29.33c0-5.523,0-16.569,0-22.092c0-3.295,0-9.885,0-13.181
+ C95.188,2.551,97.353,0,100,0c2.648,0,4.812,2.551,4.812,5.669c0,3.248,0,9.743,0,12.991c0,5.428,0,16.284,0,21.711
+ c0,7.618,0,22.854,0,30.472c0,4.952,0,14.854,0,19.807C104.812,96.292,104.812,107.576,104.812,113.216z">
+            <animate id="crema" attributeName="d" calcMode="spline"
+                keySplines="0 0 1 1; 0 0 1 1; 0 0 1 1; 0.25 0 1 1; 0 0 1 1; 0 0 0.58 1" begin="bizcocho_3.end"
+                dur="2s" fill="freeze"
+                values="
                           M104.812,113.216c0,3.119-2.164,5.67-4.812,5.67c-2.646,0-4.812-2.551-4.812-5.67c0-5.594,0-16.782,0-22.375
 	c0-5.143,0-15.427,0-20.568c0-7.333,0-21.998,0-29.33c0-5.523,0-16.569,0-22.092c0-3.295,0-9.885,0-13.181
 	C95.188,2.551,97.353,0,100,0c2.648,0,4.812,2.551,4.812,5.669c0,3.248,0,9.743,0,12.991c0,5.428,0,16.284,0,21.711
@@ -267,103 +363,96 @@ html, body {
 	c16.642-0.61,32.903,1.125,46.213,1.5c12.438,0.351,35.058-5.579,31.863,6.451c-5.532,20.833,1.25,28.216-4.409,27.883
 	c-7.606-0.447-6.058-37.895-20.62-23.333c-10.167,10.166-15.972-0.747-25,12C119.547,443.568,121.798,416.515,111.547,415.233z
                           " />
-    </path>
-    <rect x="10" y="475.571" fill="#fefae9" width="180" height="4" />
-</svg>
-<div class="text">
-  <h1>CHÚC MỪNG SINH NHẬT</h1>
-  <p>MỸ TIÊN</p>
-</div>
+        </path>
+        <rect x="10" y="475.571" fill="#fefae9" width="180" height="4" />
+    </svg>
 
-<button id="surpriseBtn">🎁</button>
+    <div class="text">
+        <h1>CHÚC MỪNG SINH NHẬT</h1>
+        <p>Nguyễn Thanh Quy</p>
+        22-12-2025
+    </div>
 
-<img id="fallingImage" src="https://sf-static.upanhlaylink.com/img/image_20251112d6ce8f41aba479e3fd02778fa05af931.jpg" alt="Surprise">
+    <button id="surpriseBtn">🎁</button>
 
-<script>
-const btn = document.getElementById('surpriseBtn');
-const img = document.getElementById('fallingImage');
+    <div id="fallingBox">🎁</div>
 
-let vx = 0, vy = 0; 
-let x = window.innerWidth * 0.7;
-let y = window.innerHeight * 0.6;
-let gravityX = 0, gravityY = 0;
-let lastTime = null;
-let running = false;
+    <img id="finalImage" src="https://sf-static.upanhlaylink.com/img/image_2025121961619f863b07d404eec9bb2aebc39e5f.jpg"
+        alt="Happy Birthday">
 
-btn.addEventListener('click', () => {
-  if (img.classList.contains('fall')) return;
-  img.classList.add('fall');
+    <script>
+        const btn = document.getElementById('surpriseBtn');
+        const box = document.getElementById('fallingBox');
+        const finalImg = document.getElementById('finalImage');
 
-  setTimeout(() => {
-    img.style.opacity = 1;
-    startGravity();
-  }, 1500);
-});
+        let vy = 0;
+        let x = window.innerWidth / 2 - 40;
+        let y = -200;
+        let lastTime = null;
+        let running = false;
+        let bottomTimer = 0;
+        let isOpened = false;
 
-function startGravity() {
-  if (running) return;
-  running = true;
+        const gravity = 800;
 
-  // iOS Safari cần xin phép
-  if (typeof DeviceMotionEvent !== 'undefined' && 
-      typeof DeviceMotionEvent.requestPermission === 'function') {
-    DeviceMotionEvent.requestPermission()
-      .then(state => {
-        if (state === 'granted') {
-          enableGravity();
-        } else {
-          alert('Vui lòng cho phép quyền cảm biến để ảnh có thể rơi theo hướng nhé 💫');
+        btn.addEventListener('click', () => {
+            if (box.classList.contains('fall')) return;
+            box.classList.add('fall');
+
+            setTimeout(() => {
+                box.style.opacity = 1;
+                const rect = box.getBoundingClientRect();
+                x = rect.left;
+                y = rect.top;
+                running = true;
+                requestAnimationFrame(updatePosition);
+            }, 1000);
+        });
+
+        function updatePosition(timestamp) {
+            if (!running || isOpened) return;
+
+            if (!lastTime) lastTime = timestamp;
+            const dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+
+            vy += gravity * dt;
+            y += vy * dt;
+
+            const maxY = window.innerHeight - box.offsetHeight;
+
+            if (y >= maxY) {
+                y = maxY;
+                vy *= -0.5; // Nảy nhẹ
+
+                bottomTimer += dt;
+                if (bottomTimer >= 0) {
+                    openGift();
+                }
+            } else {
+                bottomTimer = 0;
+            }
+
+            box.style.top = `${y}px`;
+            box.style.left = `${x}px`;
+            box.style.transform = `rotate(${vy * 0.1}deg)`;
+
+            requestAnimationFrame(updatePosition);
         }
-      })
-      .catch(err => {
-        console.error(err);
-        alert('Không thể truy cập cảm biến: ' + err);
-      });
-  } else {
-    // Android Chrome hoặc trình duyệt khác
-    enableGravity();
-  }
-}
 
-function enableGravity() {
-  window.addEventListener("deviceorientation", updateGravity);
-  requestAnimationFrame(updatePosition);
-}
+        function openGift() {
+            isOpened = true;
+            // Ẩn hộp quà và nút
+            box.style.display = 'none';
+            btn.style.display = 'none';
 
-function updateGravity(e) {
-  // e.beta (nghiêng trước/sau), e.gamma (trái/phải)
-  gravityX = Math.min(Math.max(e.gamma / 90, -1), 1);
-  gravityY = Math.min(Math.max(e.beta / 90, -1), 1);
-}
-
-function updatePosition(timestamp) {
-  if (!lastTime) lastTime = timestamp;
-  const dt = (timestamp - lastTime) / 1000;
-  lastTime = timestamp;
-
-  vx += gravityX * 400 * dt;
-  vy += gravityY * 400 * dt;
-
-  x += vx * dt;
-  y += vy * dt;
-
-  // giới hạn biên màn hình
-  const maxX = window.innerWidth - img.offsetWidth;
-  const maxY = window.innerHeight - img.offsetHeight;
-
-  if (x < 0) { x = 0; vx *= -0.5; }
-  if (x > maxX) { x = maxX; vx *= -0.5; }
-  if (y < 0) { y = 0; vy *= -0.5; }
-  if (y > maxY) { y = maxY; vy *= -0.5; }
-
-  img.style.left = `${x}px`;
-  img.style.top = `${y}px`;
-  img.style.transform = `rotate(${vx * 0.1}deg)`;
-
-  requestAnimationFrame(updatePosition);
-}
-</script>
-
-
+            // Hiển thị và zoom tấm ảnh
+            finalImg.style.display = 'block';
+            setTimeout(() => {
+                finalImg.classList.add('show');
+            }, 50);
+        }
+    </script>
 </body>
+
 </html>

@@ -123,76 +123,11 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <style>
-        .filter-btn {
-            border-radius: 20px !important;
-            margin: 5px;
-            padding: 8px 20px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
 
-        .filter-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        .filter-btn.active {
-            background-color: #fff;
-            color: #000;
-            font-weight: 600;
-        }
-
-        .filter-btn.btn-outline-danger.active {
-            background-color: #dc3545;
-            color: #fff;
-            border-color: #dc3545;
-        }
-
-        .filter-btn.btn-outline-success.active {
-            background-color: #198754;
-            color: #fff;
-            border-color: #198754;
-        }
-
-        .filter-btn.btn-outline-warning.active {
-            background-color: #ffc107;
-            color: #000;
-            border-color: #ffc107;
-        }
-
-        .card-hidden {
-            display: none !important;
-        }
-
-        .warning-info .badge {
-            font-size: 0.7rem;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-weight: 500;
-        }
-
-        .warning-info .badge i {
-            font-size: 0.65rem;
-        }
-
-        .time-range-switch .btn {
-            border-radius: 20px;
-            padding: 8px 20px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-
-        .time-range-switch .btn-check:checked+.btn {
-            background-color: #fff;
-            color: #000;
-            font-weight: 600;
-        }
-
-        .time-range-switch {
-            margin-bottom: 15px;
-        }
-    </style>
+    <script src="{{ asset('js/tvFetch.js') }}"></script>
+    <script src="{{ asset('js/updateLastRefreshTime.js') }}"></script>
+    <script src="{{ asset('js/showImageModal.js') }}"></script>
+    <script src="{{ asset('js/getCongDoanName.js') }}"></script>
     <script>
         let isRefreshing = false;
         let refreshInterval = null;
@@ -242,66 +177,12 @@
             });
         }
 
-        function tvFetch(url, callback) {
-            const xhr = new XMLHttpRequest();
-            xhr.open("GET", url, true);
-            xhr.timeout = 20000;
 
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    if (xhr.status === 200) {
-                        try {
-                            const json = JSON.parse(xhr.responseText);
-                            callback(json, null);
-                        } catch (e) {
-                            console.error("TV JSON parse error:", e);
-                            callback(null, e);
-                        }
-                    } else {
-                        callback(null, new Error(`HTTP ${xhr.status}`));
-                    }
-                }
-            };
-
-            xhr.onerror = function() {
-                callback(null, new Error('Network error'));
-            };
-
-            xhr.ontimeout = function() {
-                callback(null, new Error('Request timeout'));
-            };
-
-            xhr.send();
-        }
-
-        function updateLastRefreshTime() {
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString('vi-VN');
-            document.getElementById('lastUpdate').textContent = timeStr;
-        }
-
-        function getCongDoanName(maKo) {
-            if (!maKo) return '';
-
-            // Chuyển về string
-            const maKoStr = String(maKo);
-
-            // Map với cả dạng có 0 và không có 0
-            const congDoanMap = {
-                '5': 'QC',
-                '05': 'QC',
-                '6': 'Nhập kho',
-                '06': 'Nhập kho'
-            };
-
-            return congDoanMap[maKoStr] || maKoStr;
-        }
 
         function loadDetailLenh(soCt) {
             const modal = new bootstrap.Modal(document.getElementById('detailModal'));
             const modalBody = document.getElementById('detailModalBody');
             const modalTitle = document.getElementById('detailModalTitle');
-
             modalTitle.innerHTML = `<i class="bi bi-info-circle"></i> Chi Tiết Lệnh: ${soCt}`;
             modal.show();
 
@@ -324,52 +205,52 @@
                     nxDetails2025
                 } = response.data;
 
-                let summaryHtml = `
-    <div class="summary-card">
-        <h5 class="mb-3"><i class="bi bi-clipboard-check"></i> Tổng Quan Lệnh ${soCt}</h5>
-        <div class="summary-item">
-            <span><i class="bi bi-person-badge"></i> Khách hàng:</span>
-            <strong>${orderInfo.khach_hang?.Ten_kh || 'N/A'}</strong>
-        </div>
-        <div class="summary-item">
-            <span><i class="bi bi-box-seam"></i> Sản phẩm:</span>
-            <strong>${orderInfo.hang_hoa?.Ten_hh || 'N/A'}</strong>
-        </div>
-        <div class="summary-item">
-            <span><i class="bi bi-cart-check"></i> Số lượng đơn:</span>
-            <strong>${Number(summary.so_luong_don).toLocaleString('vi-VN')} ${orderInfo.hang_hoa?.Dvt || ''}</strong>
-        </div>
-        <div class="summary-item">
-            <span><i class="bi bi-check-circle"></i> Đã sản xuất:</span>
-            <strong class="text-success">${Number(summary.total_sx).toLocaleString('vi-VN')}</strong>
-            <small class="text-muted">(${summary.percent_complete}%)</small>
-        </div>
-        <div class="summary-item">
-            <span><i class="bi bi-hourglass-split"></i> Còn lại SX:</span>
-            <strong class="text-warning">${Number(summary.con_thieu).toLocaleString('vi-VN')}</strong>
-        </div>
-        <div class="summary-item">
-            <span><i class="bi bi-x-circle"></i> Tổng lỗi:</span>
-            <strong class="text-danger">${Number(summary.total_loi).toLocaleString('vi-VN')}</strong>
-        </div>
-        <hr>
-        <div class="summary-item">
-            <span><i class="bi bi-box-arrow-right"></i> Đã xuất kho:</span>
-            <strong class="${summary.total_xuat_kho >= summary.so_luong_don ? 'text-success' : 'text-warning'}">
-                ${Number(summary.total_xuat_kho || 0).toLocaleString('vi-VN')}
-            </strong>
-            <small class="text-muted">(${summary.percent_xuat_kho || 0}%)</small>
-        </div>
-        <div class="summary-item">
-            <span><i class="bi bi-clock-history"></i> Còn lại xuất kho:</span>
-            <strong class="${summary.con_thieu_xuat_kho <= 0 ? 'text-success' : 'text-danger'}">
-                ${Number(summary.con_thieu_xuat_kho || 0).toLocaleString('vi-VN')}
-            </strong>
-            ${summary.con_thieu_xuat_kho <= 0 ? '<span class="badge bg-success ms-2"><i class="bi bi-check-lg"></i> Đã xuất đủ</span>' : '<span class="badge bg-danger ms-2"><i class="bi bi-x-lg"></i> Chưa đủ</span>'}
-        </div>
-    </div>
-`;
+                let summaryHtml = `<div class="summary-card">
+                                    <h5 class="mb-3"><i class="bi bi-clipboard-check"></i> Tổng Quan Lệnh ${soCt}</h5>
+                                    <div class="summary-item">
+                                        <span><i class="bi bi-person-badge"></i> Khách hàng:</span>
+                                        <strong>${orderInfo.khach_hang?.Ten_kh || 'N/A'}</strong>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span><i class="bi bi-box-seam"></i> Sản phẩm:</span>
+                                        <strong>${orderInfo.hang_hoa?.Ten_hh || 'N/A'}</strong>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span><i class="bi bi-cart-check"></i> Số lượng đơn:</span>
+                                        <strong>${Number(summary.so_luong_don).toLocaleString('vi-VN')} ${orderInfo.hang_hoa?.Dvt || ''}</strong>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span><i class="bi bi-check-circle"></i> Đã sản xuất:</span>
+                                        <strong class="text-success">${Number(summary.total_sx).toLocaleString('vi-VN')}</strong>
+                                        <small class="text-muted">(${summary.percent_complete}%)</small>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span><i class="bi bi-hourglass-split"></i> Còn lại SX:</span>
+                                        <strong class="text-warning">${Number(summary.con_thieu).toLocaleString('vi-VN')}</strong>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span><i class="bi bi-x-circle"></i> Tổng lỗi:</span>
+                                        <strong class="text-danger">${Number(summary.total_loi).toLocaleString('vi-VN')}</strong>
+                                    </div>
+                                    <hr>
+                                    <div class="summary-item">
+                                        <span><i class="bi bi-box-arrow-right"></i> Đã xuất kho:</span>
+                                        <strong class="${summary.total_xuat_kho >= summary.so_luong_don ? 'text-success' : 'text-warning'}">
+                                            ${Number(summary.total_xuat_kho || 0).toLocaleString('vi-VN')}
+                                        </strong>
+                                        <small class="text-muted">(${summary.percent_xuat_kho || 0}%)</small>
+                                    </div>
+                                    <div class="summary-item">
+                                        <span><i class="bi bi-clock-history"></i> Còn lại xuất kho:</span>
+                                        <strong class="${summary.con_thieu_xuat_kho <= 0 ? 'text-success' : 'text-danger'}">
+                                            ${Number(summary.con_thieu_xuat_kho || 0).toLocaleString('vi-VN')}
+                                        </strong>
+                                        ${summary.con_thieu_xuat_kho <= 0 ? '<span class="badge bg-success ms-2"><i class="bi bi-check-lg"></i> Đã xuất đủ</span>' : '<span class="badge bg-danger ms-2"><i class="bi bi-x-lg"></i> Chưa đủ</span>'}
+                                    </div>
+                                </div>
+                            `;
 
+                // Tổng hợp theo công đoạn
                 if (summary.by_cong_doan && summary.by_cong_doan.length > 0) {
                     summaryHtml += `
                         <div class="mb-4">
@@ -805,7 +686,7 @@
             }
         });
     </script>
-    <script src="{{ asset('js/showImageModal.js') }}"></script>
+
 </body>
 
 </html>
