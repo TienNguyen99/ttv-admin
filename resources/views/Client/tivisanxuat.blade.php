@@ -5,27 +5,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="{{ asset('favicon.ico') }}" type="image/x-icon" />
-    <title>CÁC LỆNH SẢN XUẤT 24 GIỜ QUA</title>
+    <title>CÔNG TY TNHH NHÃN THỜI GIAN VIỆT TIẾN - BẢNG THEO DÕI SẢN XUẤT</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="{{ asset('css/tivicss.css') }}" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 
 <body>
-    <div class="refresh-indicator" id="refreshIndicator">
+    {{-- <div class="refresh-indicator" id="refreshIndicator">
         <div class="spinner-border" role="status"></div>
         <span>Đang cập nhật...</span>
-    </div>
+    </div> --}}
 
     <div class="container-fluid">
         <div class="dashboard-header">
             <h1 class="text-center mb-3">
-                <i class="bi bi-clipboard-data"></i> LỆNH ĐANG SẢN XUẤT
+                BẢNG THEO DÕI LỆNH ĐANG SẢN XUẤT
             </h1>
             <div class="text-center mb-3">
                 <span class="update-info">
                     <i class="bi bi-arrow-clockwise"></i>
-                    Tự động cập nhật mỗi 20 giây | Lần cập nhật cuối: <strong id="lastUpdate">---</strong>
+                    Lần cập nhật cuối: <strong id="lastUpdate">---</strong>
                 </span>
             </div>
 
@@ -80,10 +81,11 @@
         <div id="cardsContainer" class="row g-4 px-3">
             <div class="col-12">
                 <div class="text-center py-5">
-                    <div class="spinner-border text-light" role="status" style="width: 3rem; height: 3rem;">
+                    <div class="spinner-border text-primary" role="status"
+                        style="width: 3rem; height: 3rem; color: #3498db;">
                         <span class="visually-hidden">Đang tải...</span>
                     </div>
-                    <p class="mt-3 text-white fs-5">Đang tải dữ liệu...</p>
+                    <p class="mt-3 fs-5" style="color: #2c3e50;">Đang tải dữ liệu...</p>
                 </div>
             </div>
         </div>
@@ -204,7 +206,7 @@
                     ckDetails,
                     nxDetails2025
                 } = response.data;
-
+                //SUMMARY CARD
                 let summaryHtml = `<div class="summary-card">
                                     <h5 class="mb-3"><i class="bi bi-clipboard-check"></i> Tổng Quan Lệnh ${soCt}</h5>
                                     <div class="summary-item">
@@ -278,9 +280,8 @@
 
                     summaryHtml += `</div></div>`;
                 }
-
+                // CHI TIẾT NHẬP XUẤT KHI KHÔNG CÓ ĐỊNH MỨC
                 let nxDetailsHtml = '';
-
                 if (nxDetails.length === 0) {
                     nxDetailsHtml = `
                         <div class="alert alert-danger mb-4" role="alert">
@@ -321,9 +322,11 @@
                             </div>
                         `;
                     }
-                } else {
-                    const soLuongDon = Number(summary.so_luong_don || 0);
 
+                }
+                //-- CHI TIẾT NHẬP XUẤT KHI CÓ ĐỊNH MỨC
+                else {
+                    const soLuongDon = Number(summary.so_luong_don || 0);
                     const ckMap = {};
                     ckDetails.forEach(ck => {
                         const key = ck.Ma_hh;
@@ -358,7 +361,7 @@
                                         <th>STT</th>
                                         <th>Mã HH</th>
                                         <th>Tên hàng</th>
-                                        <th>Công đoạn</th>
+                                        
                                         <th>Số đề xuất</th>
                                         <th>Đã xuất vật tư</th>
                                         <th>Xuất vật tư Dư/Thiếu</th>
@@ -396,7 +399,7 @@
                                 <td>${idx + 1}</td>
                                 <td>${item.Ma_hh}</td>
                                 <td>${item.hang_hoa?.Ten_hh || ''}</td>
-                                <td><span class="congdoan-badge">${getCongDoanName(item.Ma_ko || '')}</span></td>
+                                
                                 <td>
                                     ${dinhMucDonVi.toLocaleString('vi-VN')} 
                                     <small class="text-muted">× ${soLuongDon.toLocaleString('vi-VN')}</small>
@@ -454,68 +457,85 @@
 
                     nxDetailsHtml += `</tbody></table></div>`;
                 }
-
+                //CHI TIẾT SẢN XUẤT
                 let detailTableHtml = `
-                    <h6 class="mb-3"><i class="bi bi-list-check"></i> Chi Tiết Sản Xuất (${sxDetails.length} bản ghi)</h6>
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-hover detail-table">
-                            <thead>
-                                <tr>
-                                    <th>STT</th>
-                                    <th>Ngày ra phiếu</th>
-                                    <th>Số CT</th>
-                                    <th>Mã HH</th>
-                                    <th>Tên hàng</th>
-                                    <th>Công đoạn</th>
-                                    <th>Công nhân</th>
-                                    <th>Số lượng</th>
-                                    <th>Số lượng khác (mm,g)</th>
-                                    <th>Lỗi</th>
-                                    <th>ĐVT</th>
-                                    <th>Ghi chú</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
-
+                                <h6 class="mb-3"><i class="bi bi-list-check"></i> Chi Tiết Sản Xuất (${sxDetails.length} bản ghi)</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-hover detail-table">
+                                        <thead>
+                                            <tr>
+                                                <th>STT</th>
+                                                <th>Ngày ra phiếu</th>
+                                                <th>Số CT</th>
+                                                <th>Mã HH</th>
+                                                <th>Tên hàng</th>
+                                                <th>Công đoạn</th>
+                                                <th>Công nhân</th>
+                                                <th>Số lượng</th>
+                                                <th>Số lượng khác (mm,g)</th>
+                                                <th>Lỗi</th>
+                                                <th>ĐVT</th>
+                                                <th>Ghi chú</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                            `;
+                // Duyệt qua sxDetails để tạo các dòng bảng
                 sxDetails.forEach((item, idx) => {
                     detailTableHtml += `
-                        <tr>
-                            <td>${idx + 1}</td>
-                            <td>${item.Ngay_ct || ''}</td>
-                            <td>${item.So_ct || ''}</td>
-                            <td>${item.Ma_hh || ''}</td>
-                            <td>${item.hang_hoa?.Ten_hh || ''}</td>
-                            <td><span class="congdoan-badge">${getCongDoanName(item.Ma_ko || '')}</span></td>
-                            <td>${item.nhan_vien?.Ten_nv || ''}</td>
-                            <td><strong>${Number(item.Soluong || 0).toLocaleString('vi-VN')}</strong></td>
-                            <td><strong>${Number(item.Dgbanvnd || 0).toLocaleString('vi-VN')}</strong></td>
-                            <td class="text-danger">${Math.round(item.Tien_vnd || 0)}</td>
-                            <td>${item.hang_hoa?.Dvt || ''}</td>
-                            <td>${item.DgiaiV || ''}</td>
-                        </tr>
-                    `;
+                                        <tr>
+                                            <td>${idx + 1}</td>
+                                            <td>${item.Ngay_ct || ''}</td>
+                                            <td>${item.So_ct || ''}</td>
+                                            <td>${item.Ma_hh || ''}</td>
+                                            <td>${item.hang_hoa?.Ten_hh || ''}</td>
+                                            <td><span class="congdoan-badge">${getCongDoanName(item.Ma_ko || '')}</span></td>
+                                            <td>${item.nhan_vien?.Ten_nv || ''}</td>
+                                            <td><strong>${Number(item.Soluong || 0).toLocaleString('vi-VN')}</strong></td>
+                                            <td><strong>${Number(item.Dgbanvnd || 0).toLocaleString('vi-VN')}</strong></td>
+                                            <td class="text-danger">${Math.round(item.Tien_vnd || 0)}</td>
+                                            <td>${item.hang_hoa?.Dvt || ''}</td>
+                                            <td>${item.DgiaiV || ''}</td>
+                                        </tr>
+                                    `;
                 });
 
                 detailTableHtml += `</tbody></table></div>`;
-
+                // Cập nhật nội dung modal
                 modalBody.innerHTML = summaryHtml + nxDetailsHtml + detailTableHtml;
             });
         }
 
         function loadSXData() {
             if (isRefreshing) return;
-
             isRefreshing = true;
-
             const container = document.querySelector('#cardsContainer');
-            const refreshIndicator = document.getElementById('refreshIndicator');
+            // BẰNG SWEETALERT2 TOAST:
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000,
+                timerProgressBar: true,
+                didOpen: (toast) => {
+                    toast.addEventListener('mouseenter', Swal.stopTimer)
+                    toast.addEventListener('mouseleave', Swal.resumeTimer)
+                }
+            });
 
-            refreshIndicator.classList.add('active');
+            Toast.fire({
+                icon: 'info',
+                title: 'Đang cập nhật dữ liệu...'
+            });
 
             tvFetch("/api/tivi/sx-data", function(response, error) {
                 try {
                     if (error || !response) {
+                        // Thông báo lỗi
+                        Toast.fire({
+                            icon: 'error',
+                            title: 'Lỗi tải dữ liệu!'
+                        });
                         console.error("Lỗi tải dữ liệu:", error);
                         container.innerHTML =
                             `<div class="col-12"><div class="alert alert-danger text-center">Lỗi tải dữ liệu: ${error?.message || 'Unknown error'}</div></div>`;
@@ -660,18 +680,26 @@
                         `;
                         container.insertAdjacentHTML('beforeend', card);
                     });
-
+                    Toast.fire({
+                        icon: 'success',
+                        title: 'Cập nhật thành công!'
+                    });
                     // Apply current filter after loading data
                     applyFilter();
 
                     updateLastRefreshTime();
 
                 } catch (err) {
+                    Toast.fire({
+                        icon: 'error',
+                        title: 'Lỗi xử lý dữ liệu!'
+                    });
                     console.error("Lỗi xử lý dữ liệu:", err);
                     container.innerHTML =
                         `<div class="col-12"><div class="alert alert-danger text-center">Lỗi xử lý dữ liệu!</div></div>`;
                 } finally {
-                    refreshIndicator.classList.remove('active');
+                    // KHÔNG CẦN DÒNG NÀY NỮA:
+                    // refreshIndicator.classList.remove('active');
                     isRefreshing = false;
                 }
             });

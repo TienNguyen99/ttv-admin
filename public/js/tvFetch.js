@@ -1,7 +1,7 @@
 function tvFetch(url, callback) {
     const xhr = new XMLHttpRequest();
     xhr.open("GET", url, true);
-    xhr.timeout = 30000; // 30 seconds timeout
+    xhr.timeout = 60000; // 60 seconds timeout
 
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
