@@ -143,11 +143,12 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
             ], 500);
         }
     }
+    
 
     public function getSXData(Request $request)
 {
     $data = DataKetoanData::with([
-        'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
+        'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so,Nhom1',
         'nhanVien:Ma_nv,Ten_nv',
         'khachHang:Ma_kh,Ten_kh'
     ])
