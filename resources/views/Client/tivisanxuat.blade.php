@@ -47,6 +47,18 @@
                 </div>
             </div>
 
+            <!-- Search by Order Number -->
+            <div class="text-center mb-3">
+                <div class="input-group" style="max-width: 300px; margin: 0 auto;">
+                    <input type="text" class="form-control" id="searchOrderInput"
+                        placeholder="Nhập số lệnh (VD: 4858)..."
+                        style="background-color: rgba(255,255,255,0.95); color: #333; border-color: #ddd; font-weight: 600;">
+                    <button class="btn btn-outline-light" type="button" id="clearSearchBtn" style="display:none;">
+                        <i class="bi bi-x-circle"></i> Xóa
+                    </button>
+                </div>
+            </div>
+
             <!-- Filter Buttons -->
             <div class="text-center">
                 <div class="btn-group flex-wrap" role="group" aria-label="Filter buttons">
@@ -142,6 +154,76 @@
         let currentFilter = 'all';
         let currentTimeRange = '24h';
         let allCardsData = [];
+        let searchQuery = '';
+
+        // Search by order number
+        const searchOrderInput = document.getElementById('searchOrderInput');
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+        if (searchOrderInput) {
+            searchOrderInput.addEventListener('input', function(e) {
+                searchQuery = this.value.trim();
+                if (searchQuery.length > 0) {
+                    clearSearchBtn.style.display = 'block';
+                    searchOrderInput.style.borderColor = '#28a745';
+                    searchOrderInput.style.boxShadow = '0 0 10px rgba(40, 167, 69, 0.3)';
+                } else {
+                    clearSearchBtn.style.display = 'none';
+                    searchOrderInput.style.borderColor = 'rgba(255,255,255,0.3)';
+                    searchOrderInput.style.boxShadow = 'none';
+                }
+                applyFilter();
+            });
+
+            // Add keyboard shortcut - Ctrl+K or Cmd+K to focus search
+            document.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    searchOrderInput.focus();
+                    searchOrderInput.select();
+                }
+            });
+
+            // Auto focus search when typing numbers (global keyboard listener)
+            document.addEventListener('keydown', function(e) {
+                // Only trigger if focus is not on the search input and it's a number or alphanumeric
+                if (document.activeElement !== searchOrderInput &&
+                    (e.key.match(/[0-9]/) || e.key.match(/[a-zA-Z]/))) {
+                    // Don't trigger if user is typing in another input
+                    if (document.activeElement.tagName !== 'INPUT' &&
+                        document.activeElement.tagName !== 'TEXTAREA' &&
+                        !document.activeElement.closest('.modal')) {
+                        searchOrderInput.focus();
+                        searchOrderInput.value = '';
+                        searchQuery = '';
+                    }
+                }
+            });
+
+            // Escape key to clear search
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && document.activeElement === searchOrderInput) {
+                    searchOrderInput.value = '';
+                    searchQuery = '';
+                    clearSearchBtn.style.display = 'none';
+                    searchOrderInput.style.borderColor = 'rgba(255,255,255,0.3)';
+                    searchOrderInput.style.boxShadow = 'none';
+                    applyFilter();
+                    searchOrderInput.blur();
+                }
+            });
+        }
+
+        if (clearSearchBtn) {
+            clearSearchBtn.addEventListener('click', function() {
+                searchQuery = '';
+                searchOrderInput.value = '';
+                this.style.display = 'none';
+                searchOrderInput.style.borderColor = 'rgba(255,255,255,0.3)';
+                searchOrderInput.style.boxShadow = 'none';
+                applyFilter();
+            });
+        }
 
         // Time Range Switch functionality
         document.querySelectorAll('input[name="timeRange"]').forEach(radio => {
@@ -172,15 +254,28 @@
 
             cards.forEach(card => {
                 const status = card.getAttribute('data-status');
+                const orderNumber = card.querySelector('.product-order')?.textContent.trim() || '';
 
-                if (currentFilter === 'all') {
+                let shouldShow = true;
+
+                // Check filter
+                if (currentFilter !== 'all') {
+                    if (!status.includes(currentFilter)) {
+                        shouldShow = false;
+                    }
+                }
+
+                // Check search query
+                if (shouldShow && searchQuery) {
+                    if (!orderNumber.includes(searchQuery)) {
+                        shouldShow = false;
+                    }
+                }
+
+                if (shouldShow) {
                     card.classList.remove('card-hidden');
                 } else {
-                    if (status.includes(currentFilter)) {
-                        card.classList.remove('card-hidden');
-                    } else {
-                        card.classList.add('card-hidden');
-                    }
+                    card.classList.add('card-hidden');
                 }
             });
         }
