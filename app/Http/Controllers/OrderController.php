@@ -43,6 +43,8 @@ class OrderController extends Controller
                 'Ma_so'
             )
             ->orderBy('Ngay_ct', 'desc')
+            ->where('Ngay_ct', '>=', '2025-11-01')
+            
             ->get();
 
         // ⚙️ Bước 2: Lazy load lenhSanxuat theo từng batch 2000 phần tử

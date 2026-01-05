@@ -139,6 +139,7 @@
                     <th>Tồn kế toán</th>
                     <th>Tình trạng</th>
                     <th>Mã kế toán xuất</th>
+                    <th>Mã mẹ</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -454,7 +455,8 @@
                             '<span class="text-danger">❌ Chưa có</span>',
                             `<button class="btn btn-link p-0 text-success show-xuatketoan" data-ma-hh="${row.hang_hoa?.Ma_so}">${tongton} </button>`,
                             statusLabel,
-                            datamahhketoanxuat[row.So_dh] ? datamahhketoanxuat[row.So_dh].join(", ") : ''
+                            datamahhketoanxuat[row.So_dh] ? datamahhketoanxuat[row.So_dh].join(", ") : '',
+                            row.hang_hoa?.Ma_so ?? ''
                         ];
                     });
 
@@ -480,7 +482,8 @@
                                 className: 'btn btn-success',
                                 exportOptions: {
                                     columns: [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 18, 19, 23,
-                                        24] // In
+                                        24
+                                    ] // In
                                     //columns: [3, 4, 5, 7, 8, 9, 10, 13, 14, 15, 18, 19, 23, 24] //Để in báo cáo
                                 },
                                 title: 'Bang_Lenh_San_Xuat',

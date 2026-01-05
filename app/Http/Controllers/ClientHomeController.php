@@ -7,6 +7,7 @@ use App\Models\DataKetoanData;
 use App\Models\DataKetoanOder;
 use App\Models\DataKetoan2025;
 use App\Models\CodeHangHoa;
+use App\Models\CodeKhachHang;
 
 use Illuminate\Support\Facades\DB;
 
@@ -30,9 +31,10 @@ class ClientHomeController extends Controller
         $data = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
             ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
             ->where('Ma_ct', '=', 'GO')
+            ->where('Ngay_ct', '>=', '2025-11-01')
             ->orderby('Ngay_ct', 'asc') 
-            // ->orderby('UserNg0', 'asc')
             ->get();
+
         // Chỉ show data Ma_ct = GO và Ma_kh = 'KHTN001024'
         $dataunipax = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
             ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
@@ -47,14 +49,11 @@ class ClientHomeController extends Controller
             ->where('Loaisx', '=', 'G')
             ->orderby('Ngay_ct', 'asc')
             ->get();
-
-
         $sumSoLuong = DB::table('DataKetoanData')
             ->select('So_ct', DB::raw('SUM(Soluong) as total'))
             ->where('Ma_ct', '=', 'GO')
             ->groupBy('So_ct')
             ->pluck('total', 'So_ct');
-
         $cd = fn($cd) => DB::table('DataKetoanData')
             ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total'))
             ->where('Ma_ct', '=', 'SX')

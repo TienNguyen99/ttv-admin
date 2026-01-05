@@ -16,7 +16,7 @@ class KeToanController extends Controller
 
     public function getDataToday()
     {
-        $data = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025 as d')
+        $data = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026 as d')
             ->join('TSoft_NhanTG_kt_new.dbo.CodeHanghoa as c', 'd.Ma_hh', '=', 'c.Ma_hh')
             ->join('TSoft_NhanTG_kt_new.dbo.CodeKhachang as kh', 'd.Ma_kh', '=', 'kh.Ma_kh')
             ->where('d.Ma_ct', '=', 'XU')
