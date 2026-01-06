@@ -229,6 +229,7 @@
         document.querySelectorAll('input[name="timeRange"]').forEach(radio => {
             radio.addEventListener('change', function() {
                 currentTimeRange = this.value;
+                lastDataHash = null; // Reset hash để buộc load lại
                 loadSXData();
             });
         });
@@ -345,11 +346,18 @@
                                     </div>
                                     <hr>
                                     <div class="summary-item">
+                                        <span><i class="bi bi-box-arrow-in"></i> Đã nhập kho:</span>
+                                        <strong class="${(Number(summary.total_nhap_kho || 0) >= Number(summary.so_luong_don || 0)) ? 'text-success' : 'text-warning'}">
+                                            ${Number(summary.total_nhap_kho || 0).toLocaleString('vi-VN')}
+                                        </strong>
+                                        <small class="text-muted">(${Number(summary.percent_nhap_kho || 0).toFixed(2)}%)</small>
+                                    </div>
+                                    <div class="summary-item">
                                         <span><i class="bi bi-box-arrow-right"></i> Đã xuất kho:</span>
-                                        <strong class="${summary.total_xuat_kho >= summary.so_luong_don ? 'text-success' : 'text-warning'}">
+                                        <strong class="${(Number(summary.total_xuat_kho || 0) >= Number(summary.so_luong_don || 0)) ? 'text-success' : 'text-warning'}">
                                             ${Number(summary.total_xuat_kho || 0).toLocaleString('vi-VN')}
                                         </strong>
-                                        <small class="text-muted">(${summary.percent_xuat_kho || 0}%)</small>
+                                        <small class="text-muted">(${Number(summary.percent_xuat_kho || 0).toFixed(2)}%)</small>
                                     </div>
                                     <div class="summary-item">
                                         <span><i class="bi bi-clock-history"></i> Còn lại xuất kho:</span>
