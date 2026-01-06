@@ -309,7 +309,8 @@
                     summary,
                     nxDetails,
                     ckDetails,
-                    nxDetails2025
+                    daSuDungVatTu,
+                    nhapTPKeToan
                 } = response.data;
 
                 // Cập nhật title với mã hàng
@@ -444,6 +445,8 @@
                 //-- CHI TIẾT NHẬP XUẤT KHI CÓ ĐỊNH MỨC
                 else {
                     const soLuongDon = Number(summary.so_luong_don || 0);
+
+                    // Map đã xuất vật tư (từ CK)
                     const ckMap = {};
                     ckDetails.forEach(ck => {
                         const key = ck.Ma_hh;
@@ -457,118 +460,149 @@
                         ckMap[key].items.push(ck);
                     });
 
+                    // Map định mức
                     const nxMap = {};
                     nxDetails.forEach(nx => {
                         nxMap[nx.Ma_hh] = nx;
                     });
 
+                    // ===== FIX: Map đã sử dụng vật tư =====
                     const daSuDungMap = {};
-                    nxDetails2025.forEach(nx => {
-                        const key = nx.Ma_hh;
-                        daSuDungMap[key] = (daSuDungMap[key] || 0) + Number(nx.Soluong || 0);
+                    daSuDungVatTu.forEach(item => {
+                        daSuDungMap[item.Ma_hh] = Number(item.total_su_dung || 0);
                     });
 
                     nxDetailsHtml = `
-                        <h6 class="mb-3"><i class="bi bi-arrow-left-right"></i> Chi Tiết Nhập Xuất (${nxDetails.length} định mức, ${ckDetails.length} xuất kho, ${nxDetails2025.length} đã sử dụng)</h6>
-                        
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-hover detail-table">
-                                <thead>
-                                    <tr>
-                                        <th>STT</th>
-                                        <th>Mã HH</th>
-                                        <th>Tên hàng</th>
-                                        
-                                        <th>Số đề xuất</th>
-                                        <th>Đã xuất vật tư</th>
-                                        <th>Xuất vật tư Dư/Thiếu</th>
-                                        <th>Đã sử dụng</th>
-                                        <th>Vật tư dư cần trả lại</th>
-                                        <th>Đơn vị</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                    `;
+                <h6 class="mb-3"><i class="bi bi-arrow-left-right"></i> Chi Tiết Nhập Xuất</h6>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> 
+                    <strong>Tổng quan:</strong> ${nxDetails.length} định mức, ${ckDetails.length} phiếu xuất kho, ${daSuDungVatTu.length} loại vật tư đã sử dụng
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover detail-table">
+                        <thead>
+                            <tr>
+                                <th>STT</th>
+                                <th>Mã HH</th>
+                                <th>Tên hàng</th>
+                                <th>Số đề xuất</th>
+                                <th>Đã xuất vật tư</th>
+                                <th>Xuất VT Dư/Thiếu</th>
+                                <th>Đã sử dụng</th>
+                                <th>VT dư cần trả lại</th>
+                                <th>Đơn vị</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
 
                     nxDetails.forEach((item, idx) => {
                         const dinhMucDonVi = Number(item.Soluong || 0);
                         const dinhMucDeXuat = dinhMucDonVi * soLuongDon;
                         const key = item.Ma_hh;
+
                         const daXuat = ckMap[key]?.total || 0;
                         const daSuDung = daSuDungMap[key] || 0;
-                        const duThieu = daXuat - dinhMucDeXuat;
+                        const xuatDuThieu = daXuat - dinhMucDeXuat;
+                        const vatTuDu = daXuat - daSuDung;
 
-                        let duThieuClass = '';
-                        let duThieuText = '';
-                        if (duThieu > 0) {
-                            duThieuClass = 'text-success fw-bold';
-                            duThieuText = `+${duThieu.toLocaleString('vi-VN')}`;
-                        } else if (duThieu < 0) {
-                            duThieuClass = 'text-danger fw-bold';
-                            duThieuText = duThieu.toLocaleString('vi-VN');
+                        // Class cho xuất dư/thiếu
+                        let xuatDuThieuClass = '';
+                        let xuatDuThieuText = '';
+                        if (xuatDuThieu > 0) {
+                            xuatDuThieuClass = 'text-warning fw-bold';
+                            xuatDuThieuText = `+${xuatDuThieu.toLocaleString('vi-VN')}`;
+                        } else if (xuatDuThieu < 0) {
+                            xuatDuThieuClass = 'text-danger fw-bold';
+                            xuatDuThieuText = xuatDuThieu.toLocaleString('vi-VN');
                         } else {
-                            duThieuClass = 'text-muted';
-                            duThieuText = '0';
+                            xuatDuThieuClass = 'text-success';
+                            xuatDuThieuText = '0';
+                        }
+
+                        // Class cho vật tư dư
+                        let vatTuDuClass = '';
+                        let vatTuDuText = '';
+                        if (vatTuDu > 0) {
+                            vatTuDuClass = 'text-warning fw-bold';
+                            vatTuDuText = `+${vatTuDu.toLocaleString('vi-VN')}`;
+                        } else if (vatTuDu < 0) {
+                            vatTuDuClass = 'text-danger fw-bold';
+                            vatTuDuText = vatTuDu.toLocaleString('vi-VN');
+                        } else {
+                            vatTuDuClass = 'text-success';
+                            vatTuDuText = '0';
                         }
 
                         nxDetailsHtml += `
-                            <tr>
-                                <td>${idx + 1}</td>
-                                <td>${item.Ma_hh}</td>
-                                <td>${item.hang_hoa?.Ten_hh || ''}</td>
-                                
-                                <td>
-                                    ${dinhMucDonVi.toLocaleString('vi-VN')} 
-                                    <small class="text-muted">× ${soLuongDon.toLocaleString('vi-VN')}</small>
-                                    <br>
-                                    <strong class="text-primary">= ${dinhMucDeXuat.toLocaleString('vi-VN')}</strong>
-                                </td>
-                                <td>
-                                    <strong class="text-success">${daXuat.toLocaleString('vi-VN')}</strong>
-                                    ${daXuat === 0 ? '<br><small class="text-muted">(chưa xuất)</small>' : ''}
-                                </td>
-                                
-                                <td class="${duThieuClass}">${duThieuText}</td>
-                                <td>
-                                    <strong class="text-info">${daSuDung.toLocaleString('vi-VN')}</strong>
-                                    ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
-                                </td>
-                                <td class="text-warning fw-bold">
-                                    ${daXuat - daSuDung > 0 ? `+${(daXuat - daSuDung).toLocaleString('vi-VN')}` : (daXuat - daSuDung).toLocaleString('vi-VN')}
-                                </td>
-                                <td>${item.hang_hoa?.Dvt || ''}</td>
-                            </tr>
-                        `;
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td><code>${item.Ma_hh}</code></td>
+                        <td>${item.hang_hoa?.Ten_hh || ''}</td>
+                        <td>
+                            ${dinhMucDonVi.toLocaleString('vi-VN')} 
+                            <small class="text-muted">× ${soLuongDon.toLocaleString('vi-VN')}</small>
+                            <br>
+                            <strong class="text-primary">= ${dinhMucDeXuat.toLocaleString('vi-VN')}</strong>
+                        </td>
+                        <td>
+                            <strong class="text-info">${daXuat.toLocaleString('vi-VN')}</strong>
+                            ${daXuat === 0 ? '<br><small class="text-muted">(chưa xuất)</small>' : ''}
+                        </td>
+                        <td class="${xuatDuThieuClass}">
+                            ${xuatDuThieuText}
+                            ${xuatDuThieu > 0 ? '<br><small>(xuất thêm)</small>' : xuatDuThieu < 0 ? '<br><small>(xuất thiếu)</small>' : ''}
+                        </td>
+                        <td>
+                            <strong class="text-success">${daSuDung.toLocaleString('vi-VN')}</strong>
+                            ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
+                        </td>
+                        <td class="${vatTuDuClass}">
+                            ${vatTuDuText}
+                            ${vatTuDu > 0 ? '<br><small>(cần trả lại)</small>' : vatTuDu < 0 ? '<br><small>(thiếu)</small>' : ''}
+                        </td>
+                        <td>${item.hang_hoa?.Dvt || ''}</td>
+                    </tr>
+                `;
                     });
 
+                    // Xử lý các vật tư xuất thêm (không có trong định mức)
                     Object.entries(ckMap).forEach(([key, data], idx) => {
                         if (!nxMap[key]) {
                             const firstCK = data.items[0];
                             const soLuong = data.total;
                             const daSuDung = daSuDungMap[key] || 0;
+                            const vatTuDu = soLuong - daSuDung;
 
                             nxDetailsHtml += `
-                                <tr class="table-warning">
-                                    <td>${nxDetails.length + idx + 1}</td>
-                                    <td>${firstCK.Ma_hh}</td>
-                                    <td>${firstCK.hang_hoa?.Ten_hh || ''}</td>
-                                    <td><span class="congdoan-badge">${getCongDoanName(firstCK.Ma_ko || '')}</span></td>
-                                    <td class="text-muted">
-                                        <small>(không có định mức)</small><br>
-                                        <strong>0</strong>
-                                    </td>
-                                    <td>
-                                        <strong class="text-success">${soLuong.toLocaleString('vi-VN')}</strong>
-                                        <br><small class="text-warning">(xuất thêm)</small>
-                                    </td>
-                                    <td>
-                                        <strong class="text-info">${daSuDung.toLocaleString('vi-VN')}</strong>
-                                        ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
-                                    </td>
-                                    <td class="text-warning fw-bold">+${soLuong.toLocaleString('vi-VN')}</td>
-                                    <td>${firstCK.hang_hoa?.Dvt || ''}</td>
-                                </tr>
-                            `;
+                        <tr class="table-warning">
+                            <td>${nxDetails.length + idx + 1}</td>
+                            <td><code>${firstCK.Ma_hh}</code></td>
+                            <td>${firstCK.hang_hoa?.Ten_hh || ''}</td>
+                            <td class="text-muted">
+                                <small>(không có định mức)</small><br>
+                                <strong>0</strong>
+                            </td>
+                            <td>
+                                <strong class="text-info">${soLuong.toLocaleString('vi-VN')}</strong>
+                                <br><small class="text-warning">(xuất thêm)</small>
+                            </td>
+                            <td class="text-warning fw-bold">
+                                +${soLuong.toLocaleString('vi-VN')}
+                                <br><small>(xuất thêm)</small>
+                            </td>
+                            <td>
+                                <strong class="text-success">${daSuDung.toLocaleString('vi-VN')}</strong>
+                                ${daSuDung === 0 ? '<br><small class="text-muted">(chưa dùng)</small>' : ''}
+                            </td>
+                            <td class="text-warning fw-bold">
+                                +${vatTuDu.toLocaleString('vi-VN')}
+                                <br><small>(cần trả lại)</small>
+                            </td>
+                            <td>${firstCK.hang_hoa?.Dvt || ''}</td>
+                        </tr>
+                    `;
                         }
                     });
 

@@ -38,7 +38,8 @@ class TiviController extends Controller
                     'message' => 'Không tìm thấy lệnh'
                 ], 404);
             }
-            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = NX (PHÂN TÍCH)
+            
+            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = NX (PHÂN TÍCH - ĐỊNH MỨC)
             $nxDetails = DataKetoanData::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
@@ -48,7 +49,7 @@ class TiviController extends Controller
             ->where('DataKetoanData.So_dh', $soCt)
             ->get();
            
-            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = CK nhưng table DataKetoan2025 (PHIẾU CHUYỂN KHO NỘI BỘ)
+            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = CK (PHIẾU CHUYỂN KHO NỘI BỘ - ĐÃ XUẤT VẬT TƯ)
             $ckDetails = DataKetoan2025::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
@@ -57,33 +58,27 @@ class TiviController extends Controller
             ->where('DataKetoan2025.Ma_ct', 'CK')
             ->where('DataKetoan2025.So_dh', $soCt)
             ->get();
-            // LẤY TẤT CẢ CHI TIẾT CỦA LỆNH SẢN XUẤT MA_CT = NX TABLE DATAKETOAN2025 (PHIẾU NHẬP THÀNH PHẨM DATABASE SẢN XUẤT)
-            // $nxDetails2025 = DataKetoan2025::with([
-            //     'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
-            //     'nhanVien:Ma_nv,Ten_nv',
-            // ])
-            // ->select('DataKetoan2025.*')
-            // ->where('DataKetoan2025.Ma_ct', 'NX')
-            // ->where('DataKetoan2025.So_dh', $soCt)
-            // ->get();
-            // LẤY TẤT CẢ CHI TIẾT CỦA LỆNH SẢN XUẤT MA_CT = NX TABLE TSoft_NhanTG_kt_new.dbo.DataKetoan2025 ( PHIẾU NHẬP THÀNH PHẨM DATABASE KẾ TOÁN)
-            $nxDetails2025 = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+            
+            // ===== FIX: LẤY "ĐÃ SỬ DỤNG VẬT TƯ" =====
+            // Query từ DataKetoan2025 với Ma_ct = 'NX' (Phiếu xuất sử dụng nội bộ)
+            $daSuDungVatTu = DataKetoan2025::select(
+                    'Ma_hh',
+                    DB::raw('SUM(Soluong) as total_su_dung')
+                )
+                ->where('Ma_ct', 'NX')
+                ->where('So_dh', $soCt)
+                ->groupBy('Ma_hh')
+                ->get();
+            
+            // LẤY "ĐÃ NHẬP KHO THÀNH PHẨM" (từ DB Kế Toán)
+            $nhapTPKeToan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
                 ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(DISTINCT Noluong) as Noluong'))
                 ->where('Ma_ct', 'NX')
                 ->where('Ma_vv', $orderInfo->So_dh)
                 ->groupBy('Ma_vv', 'Ma_sp')
                 ->get();
 
-            // LẤY TẤT CẢ CHI TIẾT CỦA LỆNH SẢN XUẤT MA_CT = XU TABLE DATAKETOAN2025 ( PHIẾU XUẤT BÁN HÀNG)
-            // $xuDetails2025 = DataKetoan2025::with([
-            //     'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
-            //     'nhanVien:Ma_nv,Ten_nv',
-            // ])
-            // ->select('DataKetoan2025.*')
-            // ->where('DataKetoan2025.Ma_ct', 'XU')
-            // ->where('DataKetoan2025.So_dh', $soCt)
-            // ->get();
-            // LẤY TẤT CẢ CHI TIẾT CỦA LỆNH SẢN XUẤT MA_CT = XU TABLE TSoft_NhanTG_kt_new.dbo.DataKetoan2025 ( PHIẾU XUẤT BÁN HÀNG)
+            // LẤY "ĐÃ XUẤT KHO BÁN HÀNG"
             $xuDetails2025 = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025 as dk')
                 ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
                 ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as Soluong'))
@@ -91,7 +86,8 @@ class TiviController extends Controller
                 ->where('dk.Ma_vv', $orderInfo->So_dh)
                 ->groupBy('dk.Ma_vv', 'hh.Ma_so')
                 ->get();
-            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = SX ( PHIẾU SẢN XUẤT )
+                
+            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = SX (PHIẾU SẢN XUẤT)
             $sxDetails = DataKetoanData::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
@@ -112,14 +108,17 @@ class TiviController extends Controller
                     'count' => $items->count()
                 ];
             })->values();
-            // Tính tổng xuất kho (XU) - CÔNG ĐOẠN CUỐI CÙNG
+            
+            // Tính tổng xuất kho (XU)
             $totalXuatKho = $xuDetails2025->sum('Soluong') ?? 0;
-            // Tính tổng nhập kho (NX trong ketoan DB) - dùng Noluong (số lượng nhập định mức)
-            $totalNhapKho = $nxDetails2025->sum('Noluong') ?? 0;
-            // Lấy công đoạn có Ma_ko lớn nhất (công đoạn cuối cùng)
+            
+            // Tính tổng nhập kho (NX trong ketoan DB)
+            $totalNhapKho = $nhapTPKeToan->sum('Noluong') ?? 0;
+            
+            // Lấy công đoạn cuối cùng
             $congDoanCuoi = $summaryByCongDoan->sortByDesc('Ma_ko')->first();
             
-            // Tổng sản xuất của lệnh = Số lượng công đoạn cuối
+            // Tổng sản xuất
             $totalSX = is_array($congDoanCuoi) ? ($congDoanCuoi['total_sx'] ?? 0) : 0;
             $totalLoi = $sxDetails->sum('Tien_vnd');
             
@@ -136,7 +135,7 @@ class TiviController extends Controller
                 'data' => [
                     'orderInfo' => $orderInfo,
                     'sxDetails' => $sxDetails,
-                    'congDoanCuoi' => $congDoanCuoi, // Thêm thông tin công đoạn cuối
+                    'congDoanCuoi' => $congDoanCuoi,
                     'summary' => [
                         'so_ct' => $soCt,
                         'so_dh' => $orderInfo->So_dh,
@@ -154,9 +153,9 @@ class TiviController extends Controller
                     ],
                     'nxDetails' => $nxDetails,
                     'ckDetails' => $ckDetails,
-                    'nxDetails2025' => $nxDetails2025,
+                    'daSuDungVatTu' => $daSuDungVatTu, // ← FIX: Đổi tên rõ ràng hơn
+                    'nhapTPKeToan' => $nhapTPKeToan,   // ← FIX: Đổi tên rõ ràng hơn
                     'xuDetails2025' => $xuDetails2025
-                    
                 ]
             ]);
 
