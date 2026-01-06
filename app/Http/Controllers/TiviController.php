@@ -11,12 +11,12 @@ class TiviController extends Controller
 {
     public function tiviIndex()
     {
-        return view('client.tivi');
+        return view('Client.tivi');
     }
     
     public function tiviSanxuat()
     {
-        return view('client.tivisanxuat');
+        return view('Client.tivisanxuat');
     }
     
     // API chi tiết lệnh sản xuất
@@ -101,7 +101,7 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
             $congDoanCuoi = $summaryByCongDoan->sortByDesc('Ma_ko')->first();
             
             // Tổng sản xuất của lệnh = Số lượng công đoạn cuối
-            $totalSX = $congDoanCuoi['total_sx'] ?? 0;
+            $totalSX = is_array($congDoanCuoi) ? ($congDoanCuoi['total_sx'] ?? 0) : 0;
             $totalLoi = $sxDetails->sum('Tien_vnd');
             
             // Tính % hoàn thành
@@ -178,23 +178,28 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
     ->orderBy('DataKetoanData.So_dh')
     ->get();
 
-    // Tính tổng theo lệnh - CHỈ LẤY CÔNG ĐOẠN CUỐI
-    $totalBySoct = DB::table('DataKetoanData')
+    // Tính tổng theo lệnh - CHỈ LẤY CÔNG ĐOẠN CUỐI (OPTIMIZED: single query)
+    $totalBySoct = DB::table('DataKetoanData as dkd1')
         ->select(
-            'So_dh',
-            DB::raw('MAX(Ma_ko) as Ma_ko_cuoi')
+            'dkd1.So_dh',
+            DB::raw('SUM(dkd1.Soluong) as total_sx')
         )
-        ->where('Ma_ct', '=', 'SX')
-        ->groupBy('So_dh')
+        ->where('dkd1.Ma_ct', '=', 'SX')
+        ->joinSub(
+            DB::table('DataKetoanData')
+                ->select('So_dh', DB::raw('MAX(Ma_ko) as Ma_ko_cuoi'))
+                ->where('Ma_ct', 'SX')
+                ->groupBy('So_dh'),
+            'dkd2',
+            function ($join) {
+                $join->on('dkd1.So_dh', '=', 'dkd2.So_dh')
+                     ->on('dkd1.Ma_ko', '=', 'dkd2.Ma_ko_cuoi');
+            }
+        )
+        ->groupBy('dkd1.So_dh')
         ->get()
         ->mapWithKeys(function ($item) {
-            $total = DB::table('DataKetoanData')
-                ->where('Ma_ct', 'SX')
-                ->where('So_dh', $item->So_dh)
-                ->where('Ma_ko', $item->Ma_ko_cuoi)
-                ->sum('Soluong');
-            
-            return [$item->So_dh => $total];
+            return [$item->So_dh => $item->total_sx];
         });
 
     // ===== KIỂM TRA TRẠNG THÁI =====
@@ -208,7 +213,8 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
         ->whereIn('So_dh', $allSoDh)
         ->groupBy('So_dh')
         ->pluck('So_dh')
-        ->flip();
+        ->flip()
+        ->toArray();
     
     // Kiểm tra đã xuất vật tư (CK trong DataKetoan2025)
     $xuatVatTuStatus = DB::table('DataKetoan2025')
@@ -217,7 +223,8 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
         ->whereIn('So_dh', $allSoDh)
         ->groupBy('So_dh')
         ->pluck('So_dh')
-        ->flip();
+        ->flip()
+        ->toArray();
     
     // Kiểm tra đã nhập kho (NX trong DataKetoan2025)
     $nhapKhoStatus = DB::table('DataKetoan2025')
@@ -226,7 +233,8 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
         ->whereIn('So_dh', $allSoDh)
         ->groupBy('So_dh')
         ->pluck('So_dh')
-        ->flip();
+        ->flip()
+        ->toArray();
     
     // Kiểm tra đã xuất kho (XU trong DataKetoan2025)
     $xuatKhoStatus = DB::table('DataKetoan2025')
@@ -235,7 +243,8 @@ $totalXuatKho = $xuDetails2025->sum('Soluong');
         ->whereIn('So_dh', $allSoDh)
         ->groupBy('So_dh')
         ->pluck('So_dh')
-        ->flip();
+        ->flip()
+        ->toArray();
 
     // ===== KIỂM TRA XUẤT DƯ VẬT TƯ =====
     $xuatDuVatTu = [];

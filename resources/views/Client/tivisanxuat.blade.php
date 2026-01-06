@@ -144,7 +144,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-    <script src="{{ asset('js/tvFetch.js') }}"></script>
     <script src="{{ asset('js/updateLastRefreshTime.js') }}"></script>
     <script src="{{ asset('js/showImageModal.js') }}"></script>
     <script src="{{ asset('js/getCongDoanName.js') }}"></script>
@@ -155,6 +154,7 @@
         let currentTimeRange = '24h';
         let allCardsData = [];
         let searchQuery = '';
+        let lastDataHash = null; // Lưu hash dữ liệu cũ để so sánh thay đổi
 
         // Search by order number
         const searchOrderInput = document.getElementById('searchOrderInput');
@@ -282,18 +282,21 @@
 
 
 
-        function loadDetailLenh(soCt) {
+        async function loadDetailLenh(soCt) {
             const modal = new bootstrap.Modal(document.getElementById('detailModal'));
             const modalBody = document.getElementById('detailModalBody');
             const modalTitle = document.getElementById('detailModalTitle');
             modalTitle.innerHTML = `<i class="bi bi-info-circle"></i> Chi Tiết Lệnh: ${soCt}`;
             modal.show();
 
-            tvFetch(`/api/tivi/sx-detail/${soCt}`, function(response, error) {
-                if (error || !response || !response.success) {
+            try {
+                const res = await fetch(`/api/tivi/sx-detail/${soCt}`);
+                const response = await res.json();
+
+                if (!res.ok || !response || !response.success) {
                     modalBody.innerHTML = `
                         <div class="alert alert-danger">
-                            <i class="bi bi-exclamation-triangle"></i> ${error?.message || response?.message || 'Không thể tải dữ liệu'}
+                            <i class="bi bi-exclamation-triangle"></i> ${response?.message || 'Không thể tải dữ liệu'}
                         </div>
                     `;
                     return;
@@ -307,6 +310,11 @@
                     ckDetails,
                     nxDetails2025
                 } = response.data;
+
+                // Cập nhật title với mã hàng
+                modalTitle.innerHTML =
+                    `<i class="bi bi-info-circle"></i> Chi Tiết Lệnh: ${soCt} - Mã hàng: ${orderInfo.hang_hoa?.Ma_so || 'N/A'} - Mã vụ việc: ${orderInfo.So_dh || 'N/A'}`;
+
                 //SUMMARY CARD
                 let summaryHtml = `<div class="summary-card">
                                     <h5 class="mb-3"><i class="bi bi-clipboard-check"></i> Tổng Quan Lệnh ${soCt}</h5>
@@ -604,10 +612,14 @@
                 detailTableHtml += `</tbody></table></div>`;
                 // Cập nhật nội dung modal
                 modalBody.innerHTML = summaryHtml + nxDetailsHtml + detailTableHtml;
-            });
+            } catch (err) {
+                console.error('Lỗi tải chi tiết lệnh:', err);
+                modalBody.innerHTML =
+                    `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> Lỗi tải dữ liệu</div>`;
+            }
         }
 
-        function loadSXData() {
+        async function loadSXData() {
             if (isRefreshing) return;
             isRefreshing = true;
             const container = document.querySelector('#cardsContainer');
@@ -629,68 +641,86 @@
                 title: 'Đang cập nhật dữ liệu...'
             });
 
-            tvFetch("/api/tivi/sx-data", function(response, error) {
-                try {
-                    if (error || !response) {
-                        // Thông báo lỗi
-                        Toast.fire({
-                            icon: 'error',
-                            title: 'Lỗi tải dữ liệu!'
-                        });
-                        console.error("Lỗi tải dữ liệu:", error);
-                        container.innerHTML =
-                            `<div class="col-12"><div class="alert alert-danger text-center">Lỗi tải dữ liệu: ${error?.message || 'Unknown error'}</div></div>`;
-                        return;
-                    }
+            try {
+                const res = await fetch("/api/tivi/sx-data");
+                const response = await res.json();
 
-                    const data = response.data || [];
-                    const totalBySoct = response.totalBySoct || {};
-                    const statusMap = response.statusMap || {};
-
-                    const now = new Date();
-                    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-                    // Lọc dữ liệu theo time range
-                    let filteredData;
-                    if (currentTimeRange === '24h') {
-                        filteredData = data.filter(item => {
-                            const ngay = new Date(item.UserNgE);
-                            return ngay >= cutoff && ngay <= now;
-                        });
-                    } else {
-                        // Hiển thị toàn bộ
-                        filteredData = data;
-                    }
-
-                    if (filteredData.length === 0) {
-                        const message = currentTimeRange === '24h' ?
-                            'Không có lệnh SX trong 24h qua' :
-                            'Không có dữ liệu lệnh SX';
-                        container.innerHTML =
-                            `<div class="col-12"><div class="alert alert-warning text-center">${message}</div></div>`;
-                        return;
-                    }
-
-                    // Nhóm theo Nhom1 trước, sau đó nhóm theo So_ct_go
-                    const groupsByNhom = {};
-                    filteredData.forEach(item => {
-                        const nhom = item.hang_hoa?.Nhom1 || 'Khác';
-                        if (!groupsByNhom[nhom]) {
-                            groupsByNhom[nhom] = {};
-                        }
-                        const key = item.So_ct_go ?? 'Chưa có lệnh';
-                        if (!groupsByNhom[nhom][key]) {
-                            groupsByNhom[nhom][key] = [];
-                        }
-                        groupsByNhom[nhom][key].push(item);
+                if (!res.ok || !response) {
+                    // Thông báo lỗi
+                    Toast.fire({
+                        icon: 'error',
+                        title: 'Lỗi tải dữ liệu!'
                     });
+                    console.error("Lỗi tải dữ liệu:", response?.message || 'Unknown error');
+                    container.innerHTML =
+                        `<div class="col-12"><div class="alert alert-danger text-center">Lỗi tải dữ liệu: ${response?.message || 'Unknown error'}</div></div>`;
+                    return;
+                }
 
-                    container.innerHTML = "";
+                // Tạo hash từ dữ liệu để so sánh thay đổi
+                const currentDataHash = JSON.stringify(response);
 
-                    // Duyệt theo từng danh mục
-                    Object.entries(groupsByNhom).forEach(([nhom, groups]) => {
-                        // Tạo heading cho danh mục
-                        const nhomHeader = `
+                // Nếu dữ liệu không thay đổi, không update UI
+                if (lastDataHash === currentDataHash) {
+                    Toast.fire({
+                        icon: 'info',
+                        title: 'Không có dữ liệu mới'
+                    });
+                    isRefreshing = false;
+                    return;
+                }
+
+                // Lưu hash dữ liệu mới
+                lastDataHash = currentDataHash;
+
+                const data = response.data || [];
+                const totalBySoct = response.totalBySoct || {};
+                const statusMap = response.statusMap || {};
+
+                const now = new Date();
+                const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+                // Lọc dữ liệu theo time range
+                let filteredData;
+                if (currentTimeRange === '24h') {
+                    filteredData = data.filter(item => {
+                        const ngay = new Date(item.UserNgE);
+                        return ngay >= cutoff && ngay <= now;
+                    });
+                } else {
+                    // Hiển thị toàn bộ
+                    filteredData = data;
+                }
+
+                if (filteredData.length === 0) {
+                    const message = currentTimeRange === '24h' ?
+                        'Không có lệnh SX trong 24h qua' :
+                        'Không có dữ liệu lệnh SX';
+                    container.innerHTML =
+                        `<div class="col-12"><div class="alert alert-warning text-center">${message}</div></div>`;
+                    return;
+                }
+
+                // Nhóm theo Nhom1 trước, sau đó nhóm theo So_ct_go
+                const groupsByNhom = {};
+                filteredData.forEach(item => {
+                    const nhom = item.hang_hoa?.Nhom1 || 'Khác';
+                    if (!groupsByNhom[nhom]) {
+                        groupsByNhom[nhom] = {};
+                    }
+                    const key = item.So_ct_go ?? 'Chưa có lệnh';
+                    if (!groupsByNhom[nhom][key]) {
+                        groupsByNhom[nhom][key] = [];
+                    }
+                    groupsByNhom[nhom][key].push(item);
+                });
+
+                container.innerHTML = "";
+
+                // Duyệt theo từng danh mục
+                Object.entries(groupsByNhom).forEach(([nhom, groups]) => {
+                    // Tạo heading cho danh mục
+                    const nhomHeader = `
                             <div class="row mb-4 mt-4">
                                 <div class="col-12">
                                     <h5 class="text-primary border-bottom pb-2">
@@ -699,81 +729,81 @@
                                 </div>
                             </div>
                         `;
-                        container.insertAdjacentHTML('beforeend', nhomHeader);
+                    container.insertAdjacentHTML('beforeend', nhomHeader);
 
-                        // Duyệt theo từng lệnh SX trong danh mục
-                        Object.entries(groups).forEach(([soct, rows]) => {
-                            const firstItem = rows[0];
-                            const soDh = firstItem.So_dh;
-                            const tongSX = Number(totalBySoct?.[soDh] ?? 0);
-                            const soluongGO = Number(firstItem.Soluong_go ?? 0);
-                            const soThieu = soluongGO - tongSX;
-                            const pct = soluongGO > 0 ? ((tongSX / soluongGO) * 100).toFixed(1) : 0;
+                    // Duyệt theo từng lệnh SX trong danh mục
+                    Object.entries(groups).forEach(([soct, rows]) => {
+                        const firstItem = rows[0];
+                        const soDh = firstItem.So_dh;
+                        const tongSX = Number(totalBySoct?.[soDh] ?? 0);
+                        const soluongGO = Number(firstItem.Soluong_go ?? 0);
+                        const soThieu = soluongGO - tongSX;
+                        const pct = soluongGO > 0 ? ((tongSX / soluongGO) * 100).toFixed(1) : 0;
 
-                            const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ? 'bg-warning' :
-                                'bg-danger';
-                            const statusColor = soThieu > 0 ? 'danger' : 'success';
-                            const statusIcon = soThieu > 0 ? 'exclamation-triangle-fill' :
-                                'check-circle-fill';
+                        const barColor = pct >= 90 ? 'bg-success' : pct >= 60 ? 'bg-warning' :
+                            'bg-danger';
+                        const statusColor = soThieu > 0 ? 'danger' : 'success';
+                        const statusIcon = soThieu > 0 ? 'exclamation-triangle-fill' :
+                            'check-circle-fill';
 
-                            // Lấy trạng thái từ statusMap
-                            const status = statusMap[soDh] || {
-                                co_dinh_muc: false,
-                                da_xuat_vat_tu: false,
-                                da_nhap_kho: false,
-                                da_xuat_kho: false
-                            };
+                        // Lấy trạng thái từ statusMap
+                        const status = statusMap[soDh] || {
+                            co_dinh_muc: false,
+                            da_xuat_vat_tu: false,
+                            da_nhap_kho: false,
+                            da_xuat_kho: false
+                        };
 
-                            // Tạo các badge cảnh báo và data-status cho filter
-                            let warningHtml = '';
-                            let statusClasses = [];
+                        // Tạo các badge cảnh báo và data-status cho filter
+                        let warningHtml = '';
+                        let statusClasses = [];
 
-                            if (!status.co_dinh_muc) {
-                                warningHtml +=
-                                    '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-exclamation-circle"></i> Chưa phân tích</span>';
-                                statusClasses.push('chua-phan-tich');
-                            }
-                            if (!status.da_xuat_vat_tu) {
-                                warningHtml +=
-                                    '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-box-arrow-right"></i> Chưa xuất VT</span>';
-                                statusClasses.push('chua-xuat-vat-tu');
-                            }
-                            if (!status.da_nhap_kho) {
-                                warningHtml +=
-                                    '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-box-arrow-in-down"></i> Chưa nhập kho</span>';
-                                statusClasses.push('chua-nhap-kho');
-                            }
-                            if (!status.da_xuat_kho) {
-                                warningHtml +=
-                                    '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-truck"></i> Chưa xuất kho</span>';
-                                statusClasses.push('chua-xuat-kho');
-                            }
+                        if (!status.co_dinh_muc) {
+                            warningHtml +=
+                                '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-exclamation-circle"></i> Chưa phân tích</span>';
+                            statusClasses.push('chua-phan-tich');
+                        }
+                        if (!status.da_xuat_vat_tu) {
+                            warningHtml +=
+                                '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-box-arrow-right"></i> Chưa xuất VT</span>';
+                            statusClasses.push('chua-xuat-vat-tu');
+                        }
+                        if (!status.da_nhap_kho) {
+                            warningHtml +=
+                                '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-box-arrow-in-down"></i> Chưa nhập kho</span>';
+                            statusClasses.push('chua-nhap-kho');
+                        }
+                        if (!status.da_xuat_kho) {
+                            warningHtml +=
+                                '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-truck"></i> Chưa xuất kho</span>';
+                            statusClasses.push('chua-xuat-kho');
+                        }
 
-                            // Kiểm tra xuất dư vật tư
-                            if (status.xuat_du_vat_tu) {
-                                warningHtml +=
-                                    '<span class="badge bg-warning text-dark me-1 mb-1"><i class="bi bi-arrow-up-circle"></i> Xuất dư VT</span>';
-                                statusClasses.push('xuat-du-vat-tu');
-                            }
+                        // Kiểm tra xuất dư vật tư
+                        if (status.xuat_du_vat_tu) {
+                            warningHtml +=
+                                '<span class="badge bg-warning text-dark me-1 mb-1"><i class="bi bi-arrow-up-circle"></i> Xuất dư VT</span>';
+                            statusClasses.push('xuat-du-vat-tu');
+                        }
 
-                            // Kiểm tra soThieu >= 0 (có thiếu hàng)
-                            if (soThieu >= 0) {
-                                warningHtml +=
-                                    '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-exclamation-diamond-fill"></i> Thiếu hàng</span>';
-                                statusClasses.push('thieu-hang');
-                            } else {
-                                // soThieu < 0 (có dư hàng)
-                                statusClasses.push('du-hang');
-                            }
+                        // Kiểm tra soThieu >= 0 (có thiếu hàng)
+                        if (soThieu >= 0) {
+                            warningHtml +=
+                                '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-exclamation-diamond-fill"></i> Thiếu hàng</span>';
+                            statusClasses.push('thieu-hang');
+                        } else {
+                            // soThieu < 0 (có dư hàng)
+                            statusClasses.push('du-hang');
+                        }
 
-                            // Nếu không có cảnh báo, hiển thị trạng thái hoàn tất
-                            if (warningHtml === '') {
-                                warningHtml =
-                                    '<span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Hoàn tất</span>';
-                                statusClasses.push('hoan-tat');
-                            }
+                        // Nếu không có cảnh báo, hiển thị trạng thái hoàn tất
+                        if (warningHtml === '') {
+                            warningHtml =
+                                '<span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Hoàn tất</span>';
+                            statusClasses.push('hoan-tat');
+                        }
 
-                            const card = `
+                        const card = `
                             <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6" data-status="${statusClasses.join(' ')}">
                                 <div class="product-card" onclick="loadDetailLenh('${soDh}')">
                                     <div class="product-image-wrapper">
@@ -814,36 +844,37 @@
                                 </div>
                             </div>
                         `;
-                            container.insertAdjacentHTML('beforeend', card);
-                        });
+                        container.insertAdjacentHTML('beforeend', card);
                     });
-                    Toast.fire({
-                        icon: 'success',
-                        title: 'Cập nhật thành công!'
-                    });
-                    // Apply current filter after loading data
-                    applyFilter();
+                });
+                Toast.fire({
+                    icon: 'success',
+                    title: 'Cập nhật thành công!'
+                });
+                // Apply current filter after loading data
+                applyFilter();
 
-                    updateLastRefreshTime();
+                updateLastRefreshTime();
 
-                } catch (err) {
-                    Toast.fire({
-                        icon: 'error',
-                        title: 'Lỗi xử lý dữ liệu!'
-                    });
-                    console.error("Lỗi xử lý dữ liệu:", err);
-                    container.innerHTML =
-                        `<div class="col-12"><div class="alert alert-danger text-center">Lỗi xử lý dữ liệu!</div></div>`;
-                } finally {
-                    // KHÔNG CẦN DÒNG NÀY NỮA:
-                    // refreshIndicator.classList.remove('active');
-                    isRefreshing = false;
-                }
-            });
+            } catch (err) {
+                Toast.fire({
+                    icon: 'error',
+                    title: 'Lỗi xử lý dữ liệu!'
+                });
+                console.error("Lỗi xử lý dữ liệu:", err);
+                container.innerHTML =
+                    `<div class="col-12"><div class="alert alert-danger text-center">Lỗi xử lý dữ liệu!</div></div>`;
+            } finally {
+                isRefreshing = false;
+            }
         }
 
         loadSXData();
-        refreshInterval = setInterval(loadSXData, 20000);
+        refreshInterval = setInterval(function() {
+            if (!isRefreshing) { // Chỉ gọi nếu không đang load
+                loadSXData();
+            }
+        }, 30000); // Tăng lên 30s, chỉ gọi nếu request trước đã xong
 
         window.addEventListener('beforeunload', function() {
             if (refreshInterval) {
