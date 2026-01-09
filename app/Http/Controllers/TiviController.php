@@ -54,9 +54,9 @@ class TiviController extends Controller
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
             ])
-            ->select('DataKetoan2025.*')
-            ->where('DataKetoan2025.Ma_ct', 'CK')
-            ->where('DataKetoan2025.So_dh', $soCt)
+            ->select('DataKetoan2026.*')
+            ->where('DataKetoan2026.Ma_ct', 'CK')
+            ->where('DataKetoan2026.So_dh', $soCt)
             ->get();
             
             // ===== FIX: LẤY "ĐÃ SỬ DỤNG VẬT TƯ" =====
@@ -198,6 +198,7 @@ class TiviController extends Controller
         ) AS go
     "), 'go.So_ct', '=', 'DataKetoanData.So_dh')
     ->where('DataKetoanData.Ma_ct', '=', 'SX')
+    ->where('DataKetoanData.Ngay_ct', '>=', '2026-01-01')
     ->orderBy('DataKetoanData.So_dh')
     ->get();
 
@@ -230,8 +231,7 @@ class TiviController extends Controller
     $allSoDh = $data->pluck('So_dh')->unique();
     
     // Kiểm tra có định mức (NX trong DataKetoanData)
-    $dinhMucStatus = DB::table('DataKetoanData')
-        ->select('So_dh')
+    $dinhMucStatus = DataKetoanData::select('So_dh')
         ->where('Ma_ct', 'NX')
         ->whereIn('So_dh', $allSoDh)
         ->groupBy('So_dh')
@@ -240,8 +240,7 @@ class TiviController extends Controller
         ->toArray();
     
     // Kiểm tra đã xuất vật tư (CK trong DataKetoan2025)
-    $xuatVatTuStatus = DB::table('DataKetoan2025')
-        ->select('So_dh')
+    $xuatVatTuStatus = DataKetoan2025::select('So_dh')
         ->where('Ma_ct', 'CK')
         ->whereIn('So_dh', $allSoDh)
         ->groupBy('So_dh')
@@ -250,8 +249,7 @@ class TiviController extends Controller
         ->toArray();
     
     // Kiểm tra đã nhập kho (NX trong DataKetoan2025)
-    $nhapKhoStatus = DB::table('DataKetoan2025')
-        ->select('So_dh')
+    $nhapKhoStatus = DataKetoan2025::select('So_dh')
         ->where('Ma_ct', 'NX')
         ->whereIn('So_dh', $allSoDh)
         ->groupBy('So_dh')
@@ -260,8 +258,7 @@ class TiviController extends Controller
         ->toArray();
     
     // Kiểm tra đã xuất kho (XU trong DataKetoan2025)
-    $xuatKhoStatus = DB::table('DataKetoan2025')
-        ->select('So_dh')
+    $xuatKhoStatus = DataKetoan2025::select('So_dh')
         ->where('Ma_ct', 'XU')
         ->whereIn('So_dh', $allSoDh)
         ->groupBy('So_dh')

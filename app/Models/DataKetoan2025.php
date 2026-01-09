@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DataKetoan2025 extends Model
 {
-    protected $table = 'DataKetoan2025';
+    protected $table = 'DataKetoan2026';
     public $timestamps = false;
     use HasFactory;
      public function hangHoa()

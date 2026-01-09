@@ -31,7 +31,7 @@ class ClientHomeController extends Controller
         $data = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
             ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
             ->where('Ma_ct', '=', 'GO')
-            ->where('Ngay_ct', '>=', '2025-11-01')
+            ->where('Ngay_ct', '>=', '2025-11-01') 
             ->orderby('Ngay_ct', 'asc') 
             ->get();
 
