@@ -354,14 +354,14 @@
                                         <small class="text-muted">(${Number(summary.percent_nhap_kho || 0).toFixed(2)}%)</small>
                                     </div>
                                     <div class="summary-item">
-                                        <span><i class="bi bi-box-arrow-right"></i> Đã xuất kho:</span>
+                                        <span><i class="bi bi-box-arrow-right"></i> Đã xuất hóa đơn:</span>
                                         <strong class="${(Number(summary.total_xuat_kho || 0) >= Number(summary.so_luong_don || 0)) ? 'text-success' : 'text-warning'}">
                                             ${Number(summary.total_xuat_kho || 0).toLocaleString('vi-VN')}
                                         </strong>
                                         <small class="text-muted">(${Number(summary.percent_xuat_kho || 0).toFixed(2)}%)</small>
                                     </div>
                                     <div class="summary-item">
-                                        <span><i class="bi bi-clock-history"></i> Còn lại xuất kho:</span>
+                                        <span><i class="bi bi-clock-history"></i> Còn lại xuất hóa đơn:</span>
                                         <strong class="${summary.con_thieu_xuat_kho <= 0 ? 'text-success' : 'text-danger'}">
                                             ${Number(summary.con_thieu_xuat_kho || 0).toLocaleString('vi-VN')}
                                         </strong>

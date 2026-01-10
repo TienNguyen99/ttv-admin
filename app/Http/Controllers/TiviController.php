@@ -71,7 +71,7 @@ class TiviController extends Controller
                 ->get();
             
             // LẤY "ĐÃ NHẬP KHO THÀNH PHẨM" (từ DB Kế Toán)
-            $nhapTPKeToan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+            $nhapTPKeToan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
                 ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(DISTINCT Noluong) as Noluong'))
                 ->where('Ma_ct', 'NX')
                 ->where('Ma_vv', $orderInfo->So_dh)
@@ -79,7 +79,7 @@ class TiviController extends Controller
                 ->get();
 
             // LẤY "ĐÃ XUẤT KHO BÁN HÀNG"
-            $xuDetails2025 = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025 as dk')
+            $xuDetails2025 = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026 as dk')
                 ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
                 ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as Soluong'))
                 ->where('dk.Ma_ct', 'XU')
@@ -248,18 +248,18 @@ class TiviController extends Controller
         ->flip()
         ->toArray();
     
-    // Kiểm tra đã nhập kho (NX trong DataKetoan2025)
-    $nhapKhoStatus = DataKetoan2025::select('So_dh')
-        ->where('Ma_ct', 'NX')
+    // Kiểm tra đã nhập kho (Ma_ko = 6 trong DataKetoanData)
+    $nhapKhoStatus = DataKetoanData::select('So_dh')
+        ->where('Ma_ko', '06')
         ->whereIn('So_dh', $allSoDh)
         ->groupBy('So_dh')
         ->pluck('So_dh')
         ->flip()
         ->toArray();
     
-    // Kiểm tra đã xuất kho (XU trong DataKetoan2025)
-    $xuatKhoStatus = DataKetoan2025::select('So_dh')
-        ->where('Ma_ct', 'XU')
+    // Kiểm tra đã xuất kho (Ma_ko = 9 trong DataKetoanData)
+    $xuatKhoStatus = DataKetoanData::select('So_dh')
+        ->where('Ma_ko', '09')
         ->whereIn('So_dh', $allSoDh)
         ->groupBy('So_dh')
         ->pluck('So_dh')
