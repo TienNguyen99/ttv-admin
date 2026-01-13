@@ -828,13 +828,16 @@
                             statusClasses.push('xuat-du-vat-tu');
                         }
 
-                        // Kiểm tra soThieu >= 0 (có thiếu hàng)
-                        if (soThieu >= 0) {
+                        // Kiểm tra soThieu > 0 (có thiếu hàng)
+                        if (soThieu > 0) {
                             warningHtml +=
                                 '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-exclamation-diamond-fill"></i> Thiếu hàng</span>';
                             statusClasses.push('thieu-hang');
-                        } else {
+                        } else if (soThieu < 0) {
                             // soThieu < 0 (có dư hàng)
+                            statusClasses.push('du-hang');
+                        } else {
+                            // soThieu = 0 (đủ hàng)
                             statusClasses.push('du-hang');
                         }
 

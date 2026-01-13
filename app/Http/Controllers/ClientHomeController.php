@@ -32,6 +32,7 @@ class ClientHomeController extends Controller
             ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
             ->where('Ma_ct', '=', 'GO')
             ->where('Ngay_ct', '>=', '2025-11-01') 
+            // ->whereBetween('Ngay_ct', ['2025-01-01', '2025-12-31'])
             ->orderby('Ngay_ct', 'asc') 
             ->get();
 
@@ -69,6 +70,9 @@ class ClientHomeController extends Controller
         $cd5 = $cd('05');
         $cd6 = $cd('06');
         $cd7 = $cd('07');
+        $cd8 = $cd('08');
+        $cd9 = $cd('09');
+        
 
         $nx = DB::table('DataKetoanData')
             
@@ -222,6 +226,8 @@ class ClientHomeController extends Controller
             'cd5' => $cd5,
             'cd6' => $cd6,
             'cd7' => $cd7,
+            'cd8' => $cd8,
+            'cd9' => $cd9,
             'nx' => $nx,
             'xv' => $xv,
             'nhapKho' => $nhapKho,

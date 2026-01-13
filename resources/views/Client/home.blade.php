@@ -340,6 +340,8 @@
                         cd5,
                         cd6,
                         cd7,
+                        cd8,
+                        cd9,
                         nx,
                         xv,
                         nhapKho,
@@ -395,7 +397,7 @@
                         const tongxuat = Math.round(tongxuatkhoketoan[row.Ma_hh]?.totalxuatkho_ketoan ?? 0);
                         const tongton = Math.round(tongnhap - tongxuat);
                         // Kiểm tra Ma_hh có giống datamahhketoan không
-                        const maHh = row.Ma_hh;
+                        const maHh = row.hang_hoa?.Ma_so ?? '';
                         const dsMaHHKeToan = datamahhketoan[row.So_dh] || [];
                         const isMismatch = !dsMaHHKeToan.includes(maHh);
                         // Kiểm tra độ dài mã hàng hóa
@@ -406,10 +408,10 @@
                                 `<span style="color:orange; font-weight:bold;" title="${maHh}">${maHh}</span>`;
                         } else if (isMismatch) {
                             // Nếu không khớp với kế toán, hiển thị màu đỏ
-                            maHhCell = `<span style="color:red; font-weight:bold;">${maHh}</span>`;
+                            maHhCell = `<span style="color:red; font-weight:bold;">${row.Ma_hh ?? ''}</span>`;
                         } else {
                             // Bình thường
-                            maHhCell = maHh;
+                            maHhCell = row.Ma_hh ?? '';
                         }
                         // Xác định tình trạng
                         let statusLabel = '';
