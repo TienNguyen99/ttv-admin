@@ -376,10 +376,10 @@
                         const key = `${row.So_ct}|${row.Ma_hh}`;
                         const keyketoan = `${row.So_dh}|${row.Ma_hh}`;
                         const keyketoan2 = `${row.So_dh}|${row.hang_hoa?.Ma_so}`;
-                        const cdSteps = [cd1, cd2, cd3, cd4, cd5, cd6, cd7];
+                        const cdSteps = [cd1, cd2, cd3, cd4, cd5, cd6, cd7, cd8, cd9];
                         let step = 0,
                             label = 'Chưa bắt đầu';
-                        for (let i = 6; i >= 0; i--) {
+                        for (let i = 8; i >= 0; i--) {
                             if (cdSteps[i][key]) {
                                 step = Math.round(cdSteps[i][key].total);
                                 label = `Công đoạn${i + 1} - ${step}`;

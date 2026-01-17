@@ -718,6 +718,7 @@
                 const data = response.data || [];
                 const totalBySoct = response.totalBySoct || {};
                 const statusMap = response.statusMap || {};
+                const tonKho = response.tonKho || {};
 
                 const now = new Date();
                 const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -880,7 +881,13 @@
                                                 <i class="bi bi-${statusIcon}"></i> 
                                                 ${soThieu > 0 ? 'Thiếu' : 'Dư'}: <strong>${Math.abs(soThieu).toLocaleString('vi-VN')}</strong>
                                             </small>
-                                            
+                                            ${tonKho[firstItem.hang_hoa.Ma_hh] ? `
+                                                <div class="mt-2 pt-2 border-top">
+                                                    <small class="text-muted">
+                                                        <i class="bi bi-box-seam"></i> Tồn kho: <strong class="text-info">${Math.round(tonKho[firstItem.hang_hoa.Ma_hh].ton_kho || 0).toLocaleString('vi-VN')}</strong>
+                                                    </small>
+                                                </div>
+                                                ` : ''}
                                         </div>
                                         <div class="warning-info mt-2">
                                             ${warningHtml}

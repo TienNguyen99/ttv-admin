@@ -266,6 +266,34 @@ class TiviController extends Controller
         ->flip()
         ->toArray();
 
+    // ===== KIỂM TRA TỒN KHO (cd 09 - cd 06) =====
+    $tonKho = DB::query()
+        ->fromSub(
+            DB::table('DataKetoanData')
+                ->select('Ma_hh', DB::raw('SUM(Soluong) as Soluong'))
+                ->where('Ma_ko', '09')
+                ->groupBy('Ma_hh'),
+            'cd9'
+        )
+        ->rightJoinSub(
+            DB::table('DataKetoanData')
+                ->select('Ma_hh', DB::raw('SUM(Soluong) as Soluong'))
+                ->where('Ma_ko', '06')
+                ->groupBy('Ma_hh'),
+            'cd6',
+            'cd9.Ma_hh',
+            '=',
+            'cd6.Ma_hh'
+        )
+        ->select(
+            DB::raw('COALESCE(cd9.Ma_hh, cd6.Ma_hh) as Ma_hh'),
+            DB::raw('COALESCE(cd9.Soluong, 0) as xuat_kho'),
+            DB::raw('COALESCE(cd6.Soluong, 0) as nhap_kho'),
+            DB::raw('CAST(COALESCE(cd6.Soluong, 0) - COALESCE(cd9.Soluong, 0) AS INT) as ton_kho')
+        )
+        ->get()
+        ->keyBy('Ma_hh');
+
     // ===== KIỂM TRA XUẤT DƯ VẬT TƯ =====
     $xuatDuVatTu = [];
     foreach ($allSoDh as $soDh) {
@@ -327,7 +355,8 @@ class TiviController extends Controller
     return response()->json([
         'data' => $data,
         'totalBySoct' => $totalBySoct,
-        'statusMap' => $statusMap
+        'statusMap' => $statusMap,
+        'tonKho' => $tonKho
     ]);
 }
 
