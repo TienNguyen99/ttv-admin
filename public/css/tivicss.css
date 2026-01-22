@@ -709,3 +709,164 @@ body {
         padding: 1.25rem;
     }
 }
+
+/* ============================================
+   FILTER SECTIONS - Enhanced
+   ============================================ */
+
+/* Filter Container */
+.dashboard-header .row {
+    margin-bottom: 1rem;
+}
+
+.dashboard-header .row:last-child {
+    margin-bottom: 0;
+}
+
+/* Input Groups Styling */
+.dashboard-header .input-group-sm .form-control,
+.dashboard-header .input-group-sm .btn {
+    border-radius: var(--radius);
+    border: 1.5px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.dashboard-header .input-group-sm .form-control {
+    background-color: rgba(255, 255, 255, 0.95);
+    color: var(--text-main);
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+.dashboard-header .input-group-sm .form-control:focus {
+    border-color: var(--dribbble-pink);
+    box-shadow: 0 0 0 3px rgba(234, 76, 137, 0.1);
+}
+
+.dashboard-header .input-group-sm .btn-outline-light {
+    color: var(--gray-600);
+    border-color: var(--border-color);
+}
+
+.dashboard-header .input-group-sm .btn-outline-light:hover {
+    background-color: var(--gray-100);
+    border-color: var(--border-color);
+    color: var(--text-main);
+}
+
+/* Button Group Styling */
+.dashboard-header .btn-group-sm {
+    gap: 6px;
+}
+
+.dashboard-header .btn-group-sm .btn-outline-light {
+    padding: 0.45rem 1rem;
+    font-weight: 600;
+    font-size: 0.8rem;
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.dashboard-header .btn-group-sm .btn-outline-light:hover {
+    background-color: var(--gray-100);
+    color: var(--text-main);
+    border-color: var(--dribbble-pink);
+}
+
+.dashboard-header .btn-group-sm .btn-check:checked+.btn-outline-light {
+    background-color: var(--dribbble-pink);
+    color: var(--white);
+    border-color: var(--dribbble-pink);
+}
+
+/* Filter Buttons */
+.dashboard-header .btn-sm.filter-btn {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: var(--radius);
+    transition: all 0.2s ease;
+    border: 1.5px solid var(--border-color);
+}
+
+.dashboard-header .btn-sm.filter-btn.active {
+    background-color: var(--dribbble-pink);
+    color: var(--white);
+    border-color: var(--dribbble-pink);
+    box-shadow: var(--shadow-sm);
+}
+
+.dashboard-header .btn-sm.filter-btn:not(.active):hover {
+    border-color: var(--dribbble-pink);
+    color: var(--dribbble-pink);
+}
+
+/* Collapse Toggle Button */
+.dashboard-header [data-bs-toggle="collapse"] {
+    padding: 0.5rem 1rem;
+    font-weight: 600;
+    border-radius: var(--radius);
+    border: 1.5px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.dashboard-header [data-bs-toggle="collapse"]:hover {
+    background-color: var(--gray-100);
+    border-color: var(--dribbble-pink);
+    color: var(--dribbble-pink);
+}
+
+/* Filter Section with Collapse */
+#filterCollapse {
+    margin-top: 0.75rem;
+    padding: 1rem;
+    background-color: var(--gray-100);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+}
+
+#filterCollapse .btn-group {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* Badge Styling */
+.dashboard-header .badge {
+    font-weight: 600;
+    font-size: 0.7rem;
+    padding: 0.35rem 0.55rem;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .dashboard-header .row {
+        margin-bottom: 0.75rem;
+    }
+
+    .dashboard-header .input-group-sm {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .dashboard-header .input-group-sm .form-control {
+        font-size: 0.8rem;
+    }
+
+    .dashboard-header .btn-sm.filter-btn {
+        padding: 0.35rem 0.7rem;
+        font-size: 0.75rem;
+    }
+
+    #filterCollapse {
+        margin-top: 0.5rem;
+        padding: 0.75rem;
+    }
+
+    #filterCollapse .btn-group {
+        gap: 0.35rem;
+    }
+}
+
+```

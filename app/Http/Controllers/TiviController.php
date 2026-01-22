@@ -187,14 +187,15 @@ class TiviController extends Controller
         'DataKetoanData.Tien_vnd',
         'DataKetoanData.DgiaiV',
         DB::raw('go.So_dh as So_ct_go'),
-        DB::raw('go.Soluong_go as Soluong_go')
+        DB::raw('go.Soluong_go as Soluong_go'),
+        DB::raw('go.Soseri_go as Soseri_go')
     )
     ->leftJoin(DB::raw("
         (
-            SELECT So_ct, So_dh, SUM(Soluong) AS Soluong_go
+            SELECT So_ct, So_dh, SUM(Soluong) AS Soluong_go, Soseri AS Soseri_go
             FROM DataKetoanData
             WHERE Ma_ct = 'GO'
-            GROUP BY So_ct, So_dh
+            GROUP BY So_ct, So_dh, Soseri
         ) AS go
     "), 'go.So_ct', '=', 'DataKetoanData.So_dh')
     ->where('DataKetoanData.Ma_ct', '=', 'SX')
@@ -360,6 +361,42 @@ class TiviController extends Controller
     ]);
 }
 
+    // API lọc dữ liệu theo DgiaiV (Phiếu chuyển kho nội bộ)
+    public function getDataByDgiaiV(Request $request)
+    {
+        $dgiaiV = $request->get('dgiaiV', '');
+        
+        if (empty($dgiaiV)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Vui lòng nhập DgiaiV',
+                'data' => []
+            ]);
+        }
+
+        $data = DataKetoan2025::select(
+                'Ma_hh',
+                'Soluong',
+                'So_dh',
+                'Ngay_ct',
+                'DgiaiV'
+            )
+            ->where('Ma_ct', 'CK')
+            ->where('DgiaiV', 'like', '%' . $dgiaiV . '%')
+            ->orderBy('Ngay_ct')
+            ->get()
+            ->map(function ($item, $index) {
+                $item->Stt = $index + 1;
+                return $item;
+            });
+
+        return response()->json([
+            'success' => true,
+            'count' => $data->count(),
+            'data' => $data
+        ]);
+    }
+
     // API hiển thị Tivi
     public function getTiviData(Request $request)
     {
@@ -410,5 +447,53 @@ class TiviController extends Controller
             'nhapKho'=>$nhapKho,
             'nhaptpketoan'=>$nhaptpketoan
         ]);
+    }
+
+    public function exportTonKho(Request $request)
+    {
+        try {
+            // ===== KIỂM TRA TỒN KHO (cd 09 - cd 06) =====
+            $tonKho = DB::query()
+                ->fromSub(
+                    DB::table('DataKetoanData')
+                        ->select('Ma_hh', DB::raw('SUM(Soluong) as Soluong'))
+                        ->where('Ma_ko', '09')
+                        ->groupBy('Ma_hh'),
+                    'cd9'
+                )
+                ->rightJoinSub(
+                    DB::table('DataKetoanData')
+                        ->select('Ma_hh', DB::raw('SUM(Soluong) as Soluong'))
+                        ->where('Ma_ko', '06')
+                        ->groupBy('Ma_hh'),
+                    'cd6',
+                    'cd9.Ma_hh',
+                    '=',
+                    'cd6.Ma_hh'
+                )
+                ->leftJoin('CodeHangHoa', function($join) {
+                    $join->on(DB::raw('COALESCE(cd9.Ma_hh, cd6.Ma_hh)'), '=', 'CodeHangHoa.Ma_hh');
+                })
+                ->select(
+                    DB::raw('COALESCE(cd9.Ma_hh, cd6.Ma_hh) as Ma_hh'),
+                    'CodeHangHoa.Ten_hh',
+                    DB::raw('COALESCE(cd9.Soluong, 0) as xuat_kho'),
+                    DB::raw('COALESCE(cd6.Soluong, 0) as nhap_kho'),
+                    DB::raw('CAST(COALESCE(cd6.Soluong, 0) - COALESCE(cd9.Soluong, 0) AS INT) as ton_kho')
+                )
+                ->orderBy('Ma_hh')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $tonKho,
+                'count' => $tonKho->count()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

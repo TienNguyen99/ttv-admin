@@ -36,20 +36,20 @@ class ClientHomeController extends Controller
             ->orderby('Ngay_ct', 'asc') 
             ->get();
 
-        // Chỉ show data Ma_ct = GO và Ma_kh = 'KHTN001024'
-        $dataunipax = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
-            ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
-            ->where('Ma_ct', '=', 'GO')
-            ->where('Ma_kh', '=', 'KHTN001024')
-            ->orderby('Ngay_ct', 'asc')
-            ->get();
-        // Chỉ show data MA_ct = GO và Loaisx = 'G'
-        $datagrs = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
-            ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
-            ->where('Ma_ct', '=', 'GO')
-            ->where('Loaisx', '=', 'G')
-            ->orderby('Ngay_ct', 'asc')
-            ->get();
+        // // Chỉ show data Ma_ct = GO và Ma_kh = 'KHTN001024'
+        // $dataunipax = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
+        //     ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
+        //     ->where('Ma_ct', '=', 'GO')
+        //     ->where('Ma_kh', '=', 'KHTN001024')
+        //     ->orderby('Ngay_ct', 'asc')
+        //     ->get();
+        // // Chỉ show data MA_ct = GO và Loaisx = 'G'
+        // $datagrs = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
+        //     ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
+        //     ->where('Ma_ct', '=', 'GO')
+        //     ->where('Loaisx', '=', 'G')
+        //     ->orderby('Ngay_ct', 'asc')
+        //     ->get();
         $sumSoLuong = DB::table('DataKetoanData')
             ->select('So_ct', DB::raw('SUM(Soluong) as total'))
             ->where('Ma_ct', '=', 'GO')
@@ -186,7 +186,7 @@ class ClientHomeController extends Controller
             $datamahhketoan[$item->Ma_vv][] = $item->Ma_sp;
         }
                 // Lấy mã HH kế toán chỗ xuất bán thành phẩm
-        $rawDataXuat = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        $rawDataXuat = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_vv', 'Ma_hh')
             ->where('Ma_ct', '=', 'XU')
             ->distinct()
@@ -239,8 +239,8 @@ class ClientHomeController extends Controller
             'xuatkhotheomavvketoan' => $xuatkhotheomavvketoan,
             
             'lastChange' => $lastChange,
-            'dataunipax' => $dataunipax,
-            'datagrs' => $datagrs,
+            // 'dataunipax' => $dataunipax,
+            // 'datagrs' => $datagrs,
         ]);
     }
     // API riêng lấy chi tiết nhập kho

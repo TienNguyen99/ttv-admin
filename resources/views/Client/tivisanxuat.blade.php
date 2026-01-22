@@ -23,75 +23,112 @@
             <h1 class="text-center mb-3">
                 BẢNG THEO DÕI LỆNH ĐANG SẢN XUẤT
             </h1>
-            <div class="text-center mb-3">
+            <div class="text-center mb-2">
                 <span class="update-info">
                     <i class="bi bi-arrow-clockwise"></i>
                     Lần cập nhật cuối: <strong id="lastUpdate">---</strong>
                 </span>
             </div>
 
-            <!-- Time Range Switch -->
-            <div class="text-center mb-3">
-                <div class="btn-group time-range-switch" role="group">
-                    <input type="radio" class="btn-check" name="timeRange" id="time24h" value="24h" checked
-                        autocomplete="off">
-                    <label class="btn btn-outline-light btn-sm" for="time24h">
-                        <i class="bi bi-clock-history"></i> 24 Giờ
-                    </label>
-
-                    <input type="radio" class="btn-check" name="timeRange" id="timeAll" value="all"
-                        autocomplete="off">
-                    <label class="btn btn-outline-light btn-sm" for="timeAll">
-                        <i class="bi bi-infinity"></i> Toàn Bộ
-                    </label>
+            <!-- Section 1: Time Range & Quick Search -->
+            <div class="row g-2 mb-3" style="max-width: 100%; margin: 0 auto;">
+                <div class="col-auto ms-auto">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <input type="radio" class="btn-check" name="timeRange" id="time24h" value="24h" checked
+                            autocomplete="off">
+                        <label class="btn btn-outline-light" for="time24h" title="Hiển thị 24 giờ">
+                            <i class="bi bi-clock-history"></i> Đang sản xuất
+                        </label>
+                        <input type="radio" class="btn-check" name="timeRange" id="timeAll" value="all"
+                            autocomplete="off">
+                        <label class="btn btn-outline-light" for="timeAll" title="Hiển thị toàn bộ">
+                            <i class="bi bi-infinity"></i> Tất cả
+                        </label>
+                    </div>
+                </div>
+                <div class="col-auto me-auto">
+                    <div class="input-group input-group-sm" style="max-width: 250px;">
+                        <input type="text" class="form-control" id="searchOrderInput" placeholder="Tìm số lệnh..."
+                            style="background-color: rgba(255,255,255,0.95); color: #333; border-color: #ddd; font-weight: 600;">
+                        <button class="btn btn-outline-light" type="button" id="clearSearchBtn" style="display:none;"
+                            title="Xóa">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <!-- Search by Order Number -->
-            <div class="text-center mb-3">
-                <div class="input-group" style="max-width: 300px; margin: 0 auto;">
-                    <input type="text" class="form-control" id="searchOrderInput"
-                        placeholder="Nhập số lệnh (VD: 4858)..."
-                        style="background-color: rgba(255,255,255,0.95); color: #333; border-color: #ddd; font-weight: 600;">
-                    <button class="btn btn-outline-light" type="button" id="clearSearchBtn" style="display:none;">
-                        <i class="bi bi-x-circle"></i> Xóa
+            <!-- Section 2: Advanced Filters -->
+            <div class="row g-2 mb-3 align-items-center">
+                <div class="col-12 col-md-auto">
+                    <div class="input-group input-group-sm" style="max-width: 220px;">
+                        <input type="text" class="form-control" id="searchSoseriInput" placeholder="Tìm mã hàng"
+                            style="background-color: rgba(255,255,255,0.95); color: #333; border-color: #ddd; font-weight: 600;">
+                        <button class="btn btn-outline-light" type="button" id="clearSoseriBtn" style="display:none;"
+                            title="Xóa">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-12 col-md-auto">
+                    <button type="button" class="btn btn-sm btn-outline-info w-100" id="openDgiaiVModalBtn"
+                        title="Tìm phiếu xuất vật tư">
+                        <i class="bi bi-funnel"></i> Tìm phiếu xuất vật tư
+                    </button>
+                </div>
+                <div class="col-12 col-md-auto">
+                    <button type="button" class="btn btn-sm btn-outline-success w-100" id="exportTonKhoBtn"
+                        title="Xuất danh sách tồn kho">
+                        <i class="bi bi-download"></i> Xuất tồn kho
                     </button>
                 </div>
             </div>
 
-            <!-- Filter Buttons -->
+            <!-- Section 3: Status Filters -->
             <div class="text-center">
-                <div class="btn-group flex-wrap" role="group" aria-label="Filter buttons">
-                    <button type="button" class="btn btn-sm btn-outline-light filter-btn active" data-filter="all">
-                        <i class="bi bi-grid-3x3-gap"></i> Tất cả
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger filter-btn"
-                        data-filter="chua-phan-tich">
-                        <i class="bi bi-exclamation-circle"></i> Chưa phân tích
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger filter-btn"
-                        data-filter="chua-xuat-vat-tu">
-                        <i class="bi bi-box-arrow-right"></i> Chưa xuất vật tư
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger filter-btn" data-filter="chua-nhap-kho">
-                        <i class="bi bi-box-arrow-in-down"></i> Chưa nhập kho
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger filter-btn" data-filter="chua-xuat-kho">
-                        <i class="bi bi-truck"></i> Chưa xuất kho
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-warning filter-btn"
-                        data-filter="xuat-du-vat-tu">
-                        <i class="bi bi-arrow-up-circle"></i> Xuất dư vật tư
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger filter-btn" data-filter="thieu-hang">
-                        <i class="bi bi-exclamation-diamond-fill"></i> Thiếu hàng
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-success filter-btn" data-filter="du-hang">
-                        <i class="bi bi-check2-circle"></i> Dư hàng
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-success filter-btn" data-filter="hoan-tat">
-                        <i class="bi bi-check-circle-fill"></i> Hoàn tất
-                    </button>
+                <button class="btn btn-sm btn-outline-secondary mb-2" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#filterCollapse" aria-expanded="false" aria-controls="filterCollapse">
+                    <i class="bi bi-sliders"></i> Lọc theo trạng thái <span class="badge bg-secondary ms-1">10</span>
+                </button>
+                <div class="collapse show" id="filterCollapse">
+                    <div class="btn-group flex-wrap mt-2 d-flex justify-content-center" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-light filter-btn active"
+                            data-filter="all">
+                            <i class="bi bi-grid-3x3-gap"></i> Tất cả
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger filter-btn"
+                            data-filter="chua-phan-tich">
+                            <i class="bi bi-exclamation-circle"></i> Chưa phân tích
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger filter-btn"
+                            data-filter="chua-xuat-vat-tu">
+                            <i class="bi bi-box-arrow-right"></i> Chưa xuất VT
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger filter-btn"
+                            data-filter="chua-nhap-kho">
+                            <i class="bi bi-box-arrow-in-down"></i> Chưa nhập
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger filter-btn"
+                            data-filter="chua-xuat-kho">
+                            <i class="bi bi-truck"></i> Chưa xuất
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning filter-btn"
+                            data-filter="xuat-du-vat-tu">
+                            <i class="bi bi-arrow-up-circle"></i> Xuất dư VT
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger filter-btn"
+                            data-filter="thieu-hang">
+                            <i class="bi bi-exclamation-diamond-fill"></i> Thiếu hàng
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success filter-btn"
+                            data-filter="du-hang">
+                            <i class="bi bi-check2-circle"></i> Dư hàng
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success filter-btn"
+                            data-filter="hoan-tat">
+                            <i class="bi bi-check-circle-fill"></i> Hoàn tất
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -104,6 +141,38 @@
                         <span class="visually-hidden">Đang tải...</span>
                     </div>
                     <p class="mt-3 fs-5" style="color: #2c3e50;">Đang tải dữ liệu...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Lọc theo DgiaiV -->
+    <div class="modal fade" id="dgiaiVModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary">
+                    <h5 class="modal-title text-white">
+                        <i class="bi bi-funnel"></i> Lọc dữ liệu theo DgiaiV
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nhập số phiếu xuất vật tư (ví dụ: 2026/01/013):</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="dgiaiVInput" placeholder="2026/01/013"
+                                style="font-weight: 600;">
+                            <button class="btn btn-primary" type="button" id="searchDgiaiVBtn">
+                                <i class="bi bi-search"></i> Tìm kiếm
+                            </button>
+                            <button class="btn btn-outline-secondary" type="button" id="clearDgiaiVBtn">
+                                <i class="bi bi-x-circle"></i> Xóa
+                            </button>
+                        </div>
+                    </div>
+                    <div id="dgiaiVResultContainer">
+                        <!-- Kết quả sẽ hiển thị ở đây -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -154,11 +223,16 @@
         let currentTimeRange = '24h';
         let allCardsData = [];
         let searchQuery = '';
+        let searchSoseri = '';
         let lastDataHash = null; // Lưu hash dữ liệu cũ để so sánh thay đổi
 
         // Search by order number
         const searchOrderInput = document.getElementById('searchOrderInput');
         const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+        // Search by Soseri
+        const searchSoseriInput = document.getElementById('searchSoseriInput');
+        const clearSoseriBtn = document.getElementById('clearSoseriBtn');
 
         if (searchOrderInput) {
             searchOrderInput.addEventListener('input', function(e) {
@@ -225,6 +299,34 @@
             });
         }
 
+        // Soseri search
+        if (searchSoseriInput) {
+            searchSoseriInput.addEventListener('input', function(e) {
+                searchSoseri = this.value.trim();
+                if (searchSoseri.length > 0) {
+                    clearSoseriBtn.style.display = 'block';
+                    searchSoseriInput.style.borderColor = '#28a745';
+                    searchSoseriInput.style.boxShadow = '0 0 10px rgba(40, 167, 69, 0.3)';
+                } else {
+                    clearSoseriBtn.style.display = 'none';
+                    searchSoseriInput.style.borderColor = 'rgba(255,255,255,0.3)';
+                    searchSoseriInput.style.boxShadow = 'none';
+                }
+                applyFilter();
+            });
+        }
+
+        if (clearSoseriBtn) {
+            clearSoseriBtn.addEventListener('click', function() {
+                searchSoseri = '';
+                searchSoseriInput.value = '';
+                this.style.display = 'none';
+                searchSoseriInput.style.borderColor = 'rgba(255,255,255,0.3)';
+                searchSoseriInput.style.boxShadow = 'none';
+                applyFilter();
+            });
+        }
+
         // Time Range Switch functionality
         document.querySelectorAll('input[name="timeRange"]').forEach(radio => {
             radio.addEventListener('change', function() {
@@ -256,6 +358,7 @@
             cards.forEach(card => {
                 const status = card.getAttribute('data-status');
                 const orderNumber = card.querySelector('.product-order')?.textContent.trim() || '';
+                const soseri = card.getAttribute('data-soseri') || '';
 
                 let shouldShow = true;
 
@@ -269,6 +372,13 @@
                 // Check search query
                 if (shouldShow && searchQuery) {
                     if (!orderNumber.includes(searchQuery)) {
+                        shouldShow = false;
+                    }
+                }
+
+                // Check Soseri filter
+                if (shouldShow && searchSoseri) {
+                    if (!soseri.includes(searchSoseri)) {
                         shouldShow = false;
                     }
                 }
@@ -850,7 +960,7 @@
                         }
 
                         const card = `
-                            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6" data-status="${statusClasses.join(' ')}">
+                            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6" data-status="${statusClasses.join(' ')}" data-soseri="${firstItem.Soseri_go || ''}">
                                 <div class="product-card" onclick="loadDetailLenh('${soDh}')">
                                     <div class="product-image-wrapper">
                                         <img src="/hinh_hh/HH_${firstItem.hang_hoa.Ma_hh}/${firstItem.hang_hoa.Pngpath}" 
@@ -882,12 +992,12 @@
                                                 ${soThieu > 0 ? 'Thiếu' : 'Dư'}: <strong>${Math.abs(soThieu).toLocaleString('vi-VN')}</strong>
                                             </small>
                                             ${tonKho[firstItem.hang_hoa.Ma_hh] ? `
-                                                <div class="mt-2 pt-2 border-top">
-                                                    <small class="text-muted">
-                                                        <i class="bi bi-box-seam"></i> Tồn kho: <strong class="text-info">${Math.round(tonKho[firstItem.hang_hoa.Ma_hh].ton_kho || 0).toLocaleString('vi-VN')}</strong>
-                                                    </small>
-                                                </div>
-                                                ` : ''}
+                                                                                            <div class="mt-2 pt-2 border-top">
+                                                                                                <small class="text-muted">
+                                                                                                    <i class="bi bi-box-seam"></i> Tồn kho: <strong class="text-info">${Math.round(tonKho[firstItem.hang_hoa.Ma_hh].ton_kho || 0).toLocaleString('vi-VN')}</strong>
+                                                                                                </small>
+                                                                                            </div>
+                                                                                            ` : ''}
                                         </div>
                                         <div class="warning-info mt-2">
                                             ${warningHtml}
@@ -933,6 +1043,214 @@
                 clearInterval(refreshInterval);
             }
         });
+
+        // ===== DgiaiV Filter =====
+        const openDgiaiVModalBtn = document.getElementById('openDgiaiVModalBtn');
+        const dgiaiVInput = document.getElementById('dgiaiVInput');
+        const searchDgiaiVBtn = document.getElementById('searchDgiaiVBtn');
+        const clearDgiaiVBtn = document.getElementById('clearDgiaiVBtn');
+        const dgiaiVResultContainer = document.getElementById('dgiaiVResultContainer');
+
+        if (openDgiaiVModalBtn) {
+            openDgiaiVModalBtn.addEventListener('click', function() {
+                const dgiaiVModal = new bootstrap.Modal(document.getElementById('dgiaiVModal'));
+                dgiaiVModal.show();
+                dgiaiVInput.focus();
+            });
+        }
+
+        if (searchDgiaiVBtn) {
+            searchDgiaiVBtn.addEventListener('click', searchDgiaiV);
+            dgiaiVInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    searchDgiaiV();
+                }
+            });
+        }
+
+        if (clearDgiaiVBtn) {
+            clearDgiaiVBtn.addEventListener('click', function() {
+                dgiaiVInput.value = '';
+                dgiaiVResultContainer.innerHTML = '';
+                dgiaiVInput.focus();
+            });
+        }
+
+        async function searchDgiaiV() {
+            const dgiaiV = dgiaiVInput.value.trim();
+
+            if (!dgiaiV) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Cảnh báo',
+                    text: 'Vui lòng nhập DgiaiV'
+                });
+                return;
+            }
+
+            dgiaiVResultContainer.innerHTML = `
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Đang tải...</span>
+                    </div>
+                    <p class="mt-3 text-muted">Đang tìm kiếm...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`/api/tivi/get-data-by-dgiaiV?dgiaiV=${encodeURIComponent(dgiaiV)}`);
+                const result = await response.json();
+
+                if (!result.success || result.data.length === 0) {
+                    dgiaiVResultContainer.innerHTML = `
+                        <div class="alert alert-info text-center">
+                            <i class="bi bi-info-circle"></i> Không tìm thấy dữ liệu cho DgiaiV: <strong>${dgiaiV}</strong>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Hiển thị bảng kết quả
+                let tableHtml = `
+                    <div class="alert alert-success mb-3">
+                        <i class="bi bi-check-circle"></i> Tìm thấy <strong>${result.count}</strong> bản ghi
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover table-striped">
+                            <thead class="table-primary">
+                                <tr>
+                                    <th>Stt</th>
+                                    <th>Ma_hh</th>
+                                    <th>Soluong</th>
+                                    <th>So_dh</th>
+                                    <th>Ngay_ct</th>
+                                    <th>DgiaiV</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                result.data.forEach((item, idx) => {
+                    tableHtml += `
+                        <tr>
+                            <td><span class="badge bg-secondary">${idx + 1}</span></td>
+                            <td><code>${item.Ma_hh}</code></td>
+                            <td><strong class="text-primary">${Number(item.Soluong).toLocaleString('vi-VN')}</strong></td>
+                            <td><strong>${item.So_dh}</strong></td>
+                            <td><small class="text-muted">${item.Ngay_ct}</small></td>
+                            <td><small class="text-info">${item.DgiaiV}</small></td>
+                        </tr>
+                    `;
+                });
+
+                tableHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                dgiaiVResultContainer.innerHTML = tableHtml;
+
+            } catch (err) {
+                console.error('Lỗi:', err);
+                dgiaiVResultContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> Lỗi khi tìm kiếm: ${err.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Export Tồn Kho
+        const exportTonKhoBtn = document.getElementById('exportTonKhoBtn');
+
+        if (exportTonKhoBtn) {
+            exportTonKhoBtn.addEventListener('click', async function() {
+                try {
+                    // Đổi icon thành loading
+                    const originalHtml = exportTonKhoBtn.innerHTML;
+                    exportTonKhoBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Đang xuất...';
+                    exportTonKhoBtn.disabled = true;
+
+                    // Gọi API để lấy dữ liệu tồn kho
+                    const response = await fetch('/api/tivi/export-ton-kho');
+
+                    if (!response.ok) {
+                        throw new Error('Lỗi từ server: ' + response.status);
+                    }
+
+                    // Lấy dữ liệu JSON
+                    const data = await response.json();
+
+                    if (data.success && data.data.length > 0) {
+                        // Xuất ra file CSV
+                        exportToCSV(data.data, 'ton_kho_' + new Date().toISOString().split('T')[0]);
+
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Xuất thành công',
+                            text: `Đã xuất ${data.data.length} bản ghi tồn kho`,
+                            confirmButtonText: 'OK'
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'info',
+                            title: 'Không có dữ liệu',
+                            text: 'Không tìm thấy dữ liệu tồn kho để xuất',
+                            confirmButtonText: 'OK'
+                        });
+                    }
+                } catch (err) {
+                    console.error('Lỗi xuất tồn kho:', err);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Lỗi',
+                        text: 'Lỗi khi xuất dữ liệu: ' + err.message,
+                        confirmButtonText: 'OK'
+                    });
+                } finally {
+                    // Khôi phục nút
+                    exportTonKhoBtn.innerHTML = originalHtml;
+                    exportTonKhoBtn.disabled = false;
+                }
+            });
+        }
+
+        // Hàm xuất CSV
+        function exportToCSV(data, filename) {
+            // Chuẩn bị header
+            const headers = ['Mã hàng hóa', 'Tên hàng hóa', 'Nhập kho', 'Xuất kho', 'Tồn kho'];
+
+            // Chuẩn bị dữ liệu
+            let csvContent = headers.join(';') + '\n';
+
+            data.forEach(item => {
+                const row = [
+                    item.Ma_hh || '',
+                    item.Ten_hh || '',
+                    Math.round(item.nhap_kho || 0),
+                    Math.round(item.xuat_kho || 0),
+                    Math.round(item.ton_kho || 0)
+                ].map(cell => `"${cell}"`).join(';');
+                csvContent += row + '\n';
+            });
+
+            // Thêm BOM UTF-8 để Excel hiểu đúng charset tiếng Việt
+            const BOM = '\uFEFF';
+            const blob = new Blob([BOM + csvContent], {
+                type: 'text/csv;charset=utf-8;'
+            });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename + '.csv');
+            link.style.visibility = 'hidden';
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     </script>
 
 </body>

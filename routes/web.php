@@ -62,6 +62,8 @@ Route::get('/client/tivisanxuat', [TiviController::class, 'tiviSanxuat']);
 // API hiển thị dữ liệu Tivi
 Route::get('/api/tivi', [TiviController::class, 'getTiviData']);
 Route::get('/api/tivi/sx-data', [TiviController::class, 'getSXData']);
+Route::get('/api/tivi/get-data-by-dgiaiV', [TiviController::class, 'getDataByDgiaiV']);
+Route::get('/api/tivi/export-ton-kho', [TiviController::class, 'exportTonKho']);
 // Trong routes/api.php hoặc routes/web.php
 Route::get('/api/tivi/sx-detail/{soCt}', [TiviController::class, 'getSXDetailBySoCt'])
     ->where('soCt', '.*'); // Chấp nhận mọi ký tự kể cả /
