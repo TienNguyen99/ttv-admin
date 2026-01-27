@@ -66,6 +66,14 @@
         <!-- 🔍 Bộ lọc -->
         <div class="row mb-3">
             <div class="col-md-3">
+                <label for="filterFromDate" class="form-label">Từ ngày (dd/mm/yyyy)</label>
+                <input type="text" class="form-control" id="filterFromDate" placeholder="dd/mm/yyyy">
+            </div>
+            <div class="col-md-3">
+                <label for="filterToDate" class="form-label">Đến ngày (dd/mm/yyyy)</label>
+                <input type="text" class="form-control" id="filterToDate" placeholder="dd/mm/yyyy">
+            </div>
+            <div class="col-md-3">
                 <label for="filterKhachHang" class="form-label">Khách hàng</label>
                 <input type="text" class="form-control" id="filterKhachHang" placeholder="Nhập tên khách hàng">
             </div>
@@ -327,7 +335,22 @@
         let dataTable;
 
         function fetchData() {
-            fetch("/api/production-orders")
+            // Lấy giá trị date từ input
+            const fromDate = document.getElementById('filterFromDate').value;
+            const toDate = document.getElementById('filterToDate').value;
+
+            // Xây dựng URL với params
+            let url = "/api/production-orders";
+            const params = new URLSearchParams();
+
+            if (fromDate) params.append('from_date', fromDate);
+            if (toDate) params.append('to_date', toDate);
+
+            if (params.toString()) {
+                url += "?" + params.toString();
+            }
+
+            fetch(url)
                 .then(res => res.json())
                 .then(response => {
                     const {
@@ -499,6 +522,8 @@
                                     dataTable.draw();
                                 });
                         $('#clearFilters').on('click', function() {
+                            $('#filterFromDate').val('');
+                            $('#filterToDate').val('');
                             $('#filterKhachHang').val('');
                             $('#filterMaHH').val('');
                             $('#filterTinhTrang').val('');
@@ -507,7 +532,7 @@
                             $('#filterMaKinhDoanh').val('');
                             $('#filterNgayRaLenh').val('');
                             $('#filterexcludeMaLenh').val('');
-                            dataTable.draw();
+                            fetchData();
                         });
 
                         $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
@@ -795,6 +820,15 @@
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
     {{-- Script copy --}}
     <script>
+        // Event listener cho date filter
+        document.getElementById('filterFromDate').addEventListener('change', () => {
+            fetchData();
+        });
+
+        document.getElementById('filterToDate').addEventListener('change', () => {
+            fetchData();
+        });
+
         $(document).on('click', '.copy-text', function() {
             const text = $(this).data('text');
             const tempInput = document.createElement("input");

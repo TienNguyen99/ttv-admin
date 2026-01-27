@@ -8,6 +8,7 @@ use App\Models\DataKetoanOder;
 use App\Models\DataKetoan2025;
 use App\Models\CodeHangHoa;
 use App\Models\CodeKhachHang;
+use Carbon\Carbon;
 
 use Illuminate\Support\Facades\DB;
 
@@ -26,13 +27,29 @@ class ClientHomeController extends Controller
         return view('client.grs');
     }
 
-    public function getData()
+    public function getData(Request $request)
     {
+        // Lấy ngày từ request, mặc định từ đầu năm hiện tại
+        $fromDate = $request->query('from_date');
+        $toDate = $request->query('to_date');
+        
+        // Nếu không có ngày từ request, dùng default
+        if (empty($fromDate)) {
+            $fromDate = Carbon::now()->startOfYear()->format('Y-m-d');
+        } else {
+            $fromDate = Carbon::createFromFormat('d/m/Y', $fromDate)->format('Y-m-d');
+        }
+        
+        if (empty($toDate)) {
+            $toDate = Carbon::now()->format('Y-m-d');
+        } else {
+            $toDate = Carbon::createFromFormat('d/m/Y', $toDate)->format('Y-m-d');
+        }
+        
         $data = DataKetoanData::with(['khachHang:Ma_kh,Ten_kh', 'hangHoa:Ma_hh,Ten_hh,Dvt,Ma_so'])
             ->select('So_hd', 'So_ct', 'So_dh', 'Ma_kh', 'Ma_hh', 'Soseri', 'Msize','Ma_ch', 'Dgbannte', 'Ngay_ct', 'Date')
             ->where('Ma_ct', '=', 'GO')
-            ->where('Ngay_ct', '>=', '2026-01-01') 
-            // ->whereBetween('Ngay_ct', ['2025-01-01', '2025-12-31'])
+            ->whereBetween('Ngay_ct', [$fromDate, $toDate])
             ->orderby('Ngay_ct', 'asc') 
             ->get();
 
@@ -218,6 +235,8 @@ class ClientHomeController extends Controller
 
         return response()->json([
             'data' => $data,
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
             'sumSoLuong' => $sumSoLuong,
             'cd1' => $cd1,
             'cd2' => $cd2,
