@@ -59,9 +59,12 @@ Route::get('/kho', [PhieuNhapXuatKhoController::class, 'index'])->name('kho');
 Route::get('/client/tivi', [TiviController::class, 'tiviIndex']);
 // Trang TV riêng cho sản xuất
 Route::get('/client/tivisanxuat', [TiviController::class, 'tiviSanxuat']);
+// View xem dữ liệu SX
+Route::get('/client/view-sx-data', [TiviController::class, 'viewSXData']);
 // API hiển thị dữ liệu Tivi
 Route::get('/api/tivi', [TiviController::class, 'getTiviData']);
 Route::get('/api/tivi/sx-data', [TiviController::class, 'getSXData']);
+Route::get('/api/tivi/sx-data-with-average', [TiviController::class, 'getSXDataWithAverage']);
 Route::get('/api/tivi/get-data-by-dgiaiV', [TiviController::class, 'getDataByDgiaiV']);
 Route::get('/api/tivi/export-ton-kho', [TiviController::class, 'exportTonKho']);
 // Trong routes/api.php hoặc routes/web.php

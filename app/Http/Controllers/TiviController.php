@@ -18,6 +18,66 @@ class TiviController extends Controller
     {
         return view('Client.tivisanxuat');
     }
+
+    // View xem dữ liệu SX và tính trung bình Dgbanvnd
+    public function viewSXData()
+    {
+        return view('Client.view-sx-data');
+    }
+
+    // API lấy dữ liệu SX
+    public function getSXDataWithAverage(Request $request)
+    {
+        try {
+            $maHh = $request->get('ma_hh', '');
+
+            $query = DataKetoanData::with([
+                'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
+                'nhanVien:Ma_nv,Ten_nv',
+            ])
+            ->select('DataKetoanData.*')
+            ->where('DataKetoanData.Ma_ct', 'SX')
+            ->where('DataKetoanData.Ngay_ct', '>=', '2026-01-01')
+            ->where('DataKetoanData.Ma_kh', 'LIKE', 'KHNN000053')
+            ->where('DataKetoanData.Ma_ko', '01');
+
+            // Filter theo Ma_hh nếu có
+            if (!empty($maHh)) {
+                $query->where('DataKetoanData.Ma_hh', 'like', '%' . $maHh . '%');
+            }
+
+            $data = $query->orderBy('DataKetoanData.Ma_hh')
+                ->orderBy('DataKetoanData.So_dh')
+                ->get();
+
+            // Tính trung bình Dgbanvnd theo Ma_hh (chia cho 1000 để chuyển từ gram sang kg)
+            $averageByMaHh = $data->groupBy('Ma_hh')->map(function ($items) {
+                return [
+                    'ma_hh' => $items->first()->Ma_hh,
+                    'ten_hh' => $items->first()->hangHoa->Ten_hh ?? '',
+                    'dvt' => $items->first()->hangHoa->Dvt ?? '',
+                    'count' => $items->count(),
+                    'total_dgbanvnd' => round($items->sum('Dgbanvnd') / 1000, 2),
+                    'average_dgbanvnd' => round($items->avg('Dgbanvnd') / 1000, 2),
+                    'min_dgbanvnd' => round($items->min('Dgbanvnd') / 1000, 2),
+                    'max_dgbanvnd' => round($items->max('Dgbanvnd') / 1000, 2),
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'averageByMaHh' => $averageByMaHh,
+                'total_records' => $data->count()
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi: ' . $e->getMessage()
+            ], 500);
+        }
+    }
     
     // API chi tiết lệnh sản xuất
     public function getSXDetailBySoCt(Request $request, $soCt)
