@@ -25,7 +25,13 @@ class TiviController extends Controller
         return view('Client.view-sx-data');
     }
 
-    // API lấy dữ liệu SX
+    // View xem toàn bộ dữ liệu SX
+    public function viewAllSXData()
+    {
+        return view('Client.view-all-sx-data');
+    }
+
+    // API lấy dữ liệu SX SIV ANH TÚ
     public function getSXDataWithAverage(Request $request)
     {
         try {
@@ -259,7 +265,7 @@ class TiviController extends Controller
         ) AS go
     "), 'go.So_ct', '=', 'DataKetoanData.So_dh')
     ->where('DataKetoanData.Ma_ct', '=', 'SX')
-    ->where('DataKetoanData.Ngay_ct', '>=', '2026-01-01')
+    // ->where('DataKetoanData.Ngay_ct', '>=', '2026-01-01')
     ->orderBy('DataKetoanData.So_dh')
     ->get();
 
@@ -507,6 +513,106 @@ class TiviController extends Controller
             'nhapKho'=>$nhapKho,
             'nhaptpketoan'=>$nhaptpketoan
         ]);
+    }
+
+    // API lấy toàn bộ dữ liệu SX từ 2026-01-01 đến nay để làm nhập phiếu 
+    public function getAllSXData(Request $request)
+    {
+        try {
+            $data = DataKetoanData::with([
+                'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
+                'nhanVien:Ma_nv,Ten_nv',
+                'khachHang:Ma_kh,Ten_kh'
+            ])
+            ->select('DataKetoanData.*')
+            ->where('DataKetoanData.Ma_ct', '=', 'SX')
+            ->where('DataKetoanData.Ngay_ct', '>=', '2026-01-01')
+            ->where('DataKetoanData.Ma_ko', '=', '06')
+            ->orderBy('DataKetoanData.Ngay_ct', 'asc')
+            ->orderBy('DataKetoanData.So_dh')
+            ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'total_records' => $data->count()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // View hiển thị phân tích (NX)
+    public function viewNXData()
+    {
+        return view('Client.view-nx-data');
+    }
+
+    // API lấy dữ liệu phân tích (NX - PHÂN TÍCH ĐỊNH MỨC)
+    public function getNXData(Request $request)
+    {
+        try {
+            $data = DataKetoanData::with([
+                'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
+                'nhanVien:Ma_nv,Ten_nv',
+                'khachHang:Ma_kh,Ten_kh'
+            ])
+            ->select(
+                'DataKetoanData.So_dh',
+                'DataKetoanData.Ma_hh',
+                'DataKetoanData.Ma_nv',
+                'DataKetoanData.Soluong',
+                'DataKetoanData.Soseri',
+                'DataKetoanData.Ma_ko',
+                'DataKetoanData.Ngay_ct',
+                'DataKetoanData.Ghichu',
+                'DataKetoanData.Ma_kh',
+                DB::raw('go.Soseri as Soseri_go'),
+                DB::raw('go.Soluong as Soluong_go')
+            )
+            ->leftJoin(DB::raw("
+                (
+                    SELECT So_ct, Soseri, SUM(Soluong) AS Soluong
+                    FROM DataKetoanData
+                    WHERE Ma_ct = 'GO'
+                    GROUP BY So_ct, Soseri
+                ) AS go
+            "), 'go.So_ct', '=', 'DataKetoanData.So_dh')
+            ->where('DataKetoanData.Ma_ct', '=', 'NX')
+            ->where('DataKetoanData.Ngay_ct', '>=', '2026-01-01')
+            ->orderBy('DataKetoanData.So_dh')
+            ->orderBy('DataKetoanData.Ma_hh')
+            ->get()
+            ->map(function ($item) {
+                $item->Soluong_go = $item->Soluong_go ?? 0;
+                $item->Soseri = $item->Soseri_go ?? $item->Soseri;
+                return $item;
+            });
+
+            // Tính tổng định mức theo lệnh
+            $summaryBySoDh = $data->groupBy('So_dh')->map(function ($items) {
+                return [
+                    'so_dh' => $items->first()->So_dh,
+                    'total_items' => $items->count(),
+                    'total_soluong' => $items->sum('Soluong'),
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'summaryBySoDh' => $summaryBySoDh,
+                'total_records' => $data->count()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function exportTonKho(Request $request)
