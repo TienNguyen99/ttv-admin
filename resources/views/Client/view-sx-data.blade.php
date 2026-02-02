@@ -238,6 +238,8 @@
                                 <th>Tên NV</th>
                                 <th class="text-center">Số lượng</th>
                                 <th class="text-end">Số đã sản xuất</th>
+                                <th class="text-end">Định mức</th>
+                                <th class="text-end">Số yard/mét</th>
                                 {{-- <th class="text-end">Tien_vnd</th> --}}
                                 <th>Ngày CT</th>
                             </tr>
@@ -349,11 +351,12 @@
             tbody.innerHTML = '';
 
             if (allData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="no-data">Không tìm thấy dữ liệu</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="12" class="no-data">Không tìm thấy dữ liệu</td></tr>';
                 return;
             }
 
             allData.forEach((item, index) => {
+                const soPhatSinhRam = parseFloat(item.Dgbanvnd) / 1000;
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td class="text-center">${index + 1}</td>
@@ -363,12 +366,33 @@
                     <td>${item.Ma_nv}</td>
                     <td>${item.nhanVien?.Ten_nv || '-'}</td>
                     <td class="text-center">${item.Soluong}</td>
-                    <td class="text-end">${(parseFloat(item.Dgbanvnd) / 1000).toLocaleString('vi-VN', {maximumFractionDigits: 2})}</td>
-                    
+                    <td class="text-end">${soPhatSinhRam.toLocaleString('vi-VN', {maximumFractionDigits: 2})}</td>
+                    <td class="text-end"><input type="number" class="form-control form-control-sm norm-input" data-index="${index}" step="0.01" min="0" placeholder="Nhập định mức"></td>
+                    <td class="text-end"><span class="yard-result" data-index="${index}">-</span></td>
                     <td>${item.Ngay_ct ? new Date(item.Ngay_ct).toLocaleDateString('vi-VN') : '-'}</td>
                 `;
                 tbody.appendChild(row);
             });
+
+            // Add event listeners for norm inputs
+            document.querySelectorAll('.norm-input').forEach(input => {
+                input.addEventListener('change', calculateYard);
+                input.addEventListener('input', calculateYard);
+            });
+        }
+
+        // Calculate Yard for individual row
+        function calculateYard(e) {
+            const index = e.target.dataset.index;
+            const norm = parseFloat(e.target.value) || 0;
+            const soPhatSinhRam = parseFloat(allData[index].Dgbanvnd) / 1000;
+            const soYard = norm > 0 ? (soPhatSinhRam / norm).toFixed(2) : '-';
+            const yardSpan = document.querySelector(`.yard-result[data-index="${index}"]`);
+            if (yardSpan) {
+                yardSpan.textContent = soYard !== '-' ? parseFloat(soYard).toLocaleString('vi-VN', {
+                    maximumFractionDigits: 2
+                }) : '-';
+            }
         }
 
         // Show No Data
@@ -376,7 +400,7 @@
             document.getElementById('averageTableBody').innerHTML =
                 '<tr><td colspan="9" class="no-data">Không tìm thấy dữ liệu</td></tr>';
             document.getElementById('detailTableBody').innerHTML =
-                '<tr><td colspan="10" class="no-data">Không tìm thấy dữ liệu</td></tr>';
+                '<tr><td colspan="12" class="no-data">Không tìm thấy dữ liệu</td></tr>';
             document.getElementById('summaryBox').style.display = 'none';
         }
 
