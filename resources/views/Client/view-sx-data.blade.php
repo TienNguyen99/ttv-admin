@@ -238,7 +238,7 @@
                                 <th>Tên NV</th>
                                 <th class="text-center">Số lượng</th>
                                 <th class="text-end">Số đã sản xuất</th>
-                                <th class="text-end">Tien_vnd</th>
+                                {{-- <th class="text-end">Tien_vnd</th> --}}
                                 <th>Ngày CT</th>
                             </tr>
                         </thead>
@@ -364,7 +364,7 @@
                     <td>${item.nhanVien?.Ten_nv || '-'}</td>
                     <td class="text-center">${item.Soluong}</td>
                     <td class="text-end">${(parseFloat(item.Dgbanvnd) / 1000).toLocaleString('vi-VN', {maximumFractionDigits: 2})}</td>
-                    <td class="text-end">${parseFloat(item.Tien_vnd).toLocaleString('vi-VN', {maximumFractionDigits: 2})}</td>
+                    
                     <td>${item.Ngay_ct ? new Date(item.Ngay_ct).toLocaleDateString('vi-VN') : '-'}</td>
                 `;
                 tbody.appendChild(row);
