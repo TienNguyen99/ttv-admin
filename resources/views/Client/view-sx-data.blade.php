@@ -237,7 +237,7 @@
                                 <th>Mã NV</th>
                                 <th>Tên NV</th>
                                 <th class="text-center">Số lượng</th>
-                                <th class="text-end">Dgbanvnd</th>
+                                <th class="text-end">Số đã sản xuất</th>
                                 <th class="text-end">Tien_vnd</th>
                                 <th>Ngày CT</th>
                             </tr>

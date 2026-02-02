@@ -44,7 +44,10 @@ class TiviController extends Controller
             ->select('DataKetoanData.*')
             ->where('DataKetoanData.Ma_ct', 'SX')
             ->where('DataKetoanData.Ngay_ct', '>=', '2026-01-01')
-            ->where('DataKetoanData.Ma_kh', 'LIKE', 'KHNN000053')
+            ->whereIn('DataKetoanData.Ma_kh', ['KHNN000053', 'KHTN000015'])
+            ->whereHas('hangHoa', function ($query) {
+                $query->where('Nhom1', 'like', '%THUNBAN%');
+            })
             ->where('DataKetoanData.Ma_ko', '01');
 
             // Filter theo Ma_hh nếu có
@@ -571,14 +574,15 @@ class TiviController extends Controller
                 'DataKetoanData.Ghichu',
                 'DataKetoanData.Ma_kh',
                 DB::raw('go.Soseri as Soseri_go'),
-                DB::raw('go.Soluong as Soluong_go')
+                DB::raw('go.Soluong as Soluong_go'),
+                DB::raw('go.So_dh as So_dh_go')
             )
             ->leftJoin(DB::raw("
                 (
-                    SELECT So_ct, Soseri, SUM(Soluong) AS Soluong
+                    SELECT So_ct, Soseri, SUM(Soluong) AS Soluong,So_dh
                     FROM DataKetoanData
                     WHERE Ma_ct = 'GO'
-                    GROUP BY So_ct, Soseri
+                    GROUP BY So_ct, Soseri, So_dh
                 ) AS go
             "), 'go.So_ct', '=', 'DataKetoanData.So_dh')
             ->where('DataKetoanData.Ma_ct', '=', 'NX')
@@ -589,6 +593,7 @@ class TiviController extends Controller
             ->map(function ($item) {
                 $item->Soluong_go = $item->Soluong_go ?? 0;
                 $item->Soseri = $item->Soseri_go ?? $item->Soseri;
+                $item->So_dh = $item->So_dh_go ?? $item->So_dh;
                 return $item;
             });
 

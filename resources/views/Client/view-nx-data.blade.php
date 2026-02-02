@@ -64,17 +64,15 @@
                                 <thead class="table-dark">
                                     <tr>
                                         <th>STT</th>
-                                        <th>Ngày CT</th>
-                                        <th>Số Đơn Hàng</th>
-                                        <th>Số Seri</th>
-                                        <th>Số Lượng GO</th>
-                                        <th>Số Lượng NX</th>
+                                        {{-- <th>Ngày nhập phân tích</th> --}}
+                                        <th>Mã lệnh phần mềm</th>
+                                        <th>Mã Kinh doanh</th>
+                                        <th>Số lượng đơn hàng</th>
+                                        <th>Định mức</th>
+                                        <th>Đơn vị</th>
                                         <th>Mã Hàng Hóa</th>
                                         <th>Tên Hàng Hóa</th>
-                                        <th>DVT</th>
-                                        <th>Mã NV</th>
-                                        <th>Tên NV</th>
-                                        <th>Mã Công Đoạn</th>
+
                                         <th>Ghi Chú</th>
                                     </tr>
                                 </thead>
@@ -135,17 +133,16 @@
                 // Xử lý dữ liệu thành rows
                 const rows = data.map((row, index) => [
                     index + 1,
-                    row.Ngay_ct ? new Date(row.Ngay_ct).toLocaleDateString('vi-VN') : '-',
-                    row.So_dh || '-',
+                    // row.Ngay_ct ? new Date(row.Ngay_ct).toLocaleDateString('vi-VN') : '-',
+                    row.So_dh_go || '-',
                     row.Soseri || '-',
-                    row.Soluong_go ? Number(row.Soluong_go).toFixed(3).toLocaleString('vi-VN') : '-',
+                    row.Soluong_go ? Number(row.Soluong_go).toFixed(0).toLocaleString('vi-VN') : '-',
                     row.Soluong ? Number(row.Soluong).toFixed(3).toLocaleString('vi-VN') : '-',
+                    row.hang_hoa?.Dvt || '-',
                     row.Ma_hh || '-',
                     row.hang_hoa?.Ten_hh || '-',
-                    row.hang_hoa?.Dvt || '-',
-                    row.Ma_nv || '-',
-                    row.nhan_vien?.Ten_nv || '-',
-                    row.Ma_ko || '-',
+
+
                     row.Ghichu || '-'
                 ]);
 
