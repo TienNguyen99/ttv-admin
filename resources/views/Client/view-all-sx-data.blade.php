@@ -219,14 +219,10 @@
                         <tr>
                             <th>#</th>
                             <th>Lệnh SX</th>
+                            <th>Lệnh GO</th>
                             <th>Mã HH</th>
-                            <th>Tên Hàng Hóa</th>
-                            <th>Công Đoạn</th>
+
                             <th>Số Lượng</th>
-                            <th>Đơn Vị</th>
-                            <th>Khách Hàng</th>
-                            <th>Nhân Viên</th>
-                            <th>Ngày Tạo</th>
                             <th>Ghi Chú</th>
                         </tr>
                     </thead>
@@ -245,6 +241,7 @@
 
     <script>
         let allData = [];
+        let originalData = [];
         let dataTable = null;
 
         $(document).ready(function() {
@@ -264,6 +261,7 @@
                 success: function(response) {
                     if (response.success) {
                         allData = response.data;
+                        originalData = JSON.parse(JSON.stringify(response.data));
                         updateStatistics();
                         populateFilters();
                         renderTable();
@@ -325,14 +323,11 @@
                     <tr>
                         <td>${index + 1}</td>
                         <td><strong>${item.So_dh || ''}</strong></td>
+                        <td><strong>${item.So_dh_go || ''}</strong></td>
                         <td>${item.Ma_hh || ''}</td>
-                        <td>${item.hangHoa?.Ten_hh || ''}</td>
-                        <td><span class="badge bg-info">${item.Ma_ko || ''}</span></td>
-                        <td class="text-end">${(item.Soluong || 0).toLocaleString()}</td>
-                        <td>${item.hangHoa?.Dvt || ''}</td>
-                        <td>${item.khachHang?.Ten_kh || ''}</td>
-                        <td>${item.nhanVien?.Ten_nv || ''}</td>
-                        <td>${formatDate(item.Ngay_ct) || ''}</td>
+
+                        <td class="text-center">${Math.round(item.Soluong).toLocaleString()}</td>
+
                         <td>${item.DgiaiV || ''}</td>
                     </tr>
                 `;
@@ -360,7 +355,7 @@
             const maKo = $('#filterMaKo').val();
             const maKh = $('#filterMaKh').val();
 
-            let filtered = allData.filter(item => {
+            allData = originalData.filter(item => {
                 let match = true;
 
                 if (maHh && !item.Ma_hh.toLowerCase().includes(maHh)) {
@@ -376,7 +371,6 @@
                 return match;
             });
 
-            allData = filtered;
             renderTable();
         }
 
@@ -386,10 +380,11 @@
             $('#filterMaKh').on('change', applyFilters);
 
             $('#resetFilter').on('click', function() {
-                loadData();
                 $('#filterMaHh').val('');
                 $('#filterMaKo').val('');
                 $('#filterMaKh').val('');
+                allData = JSON.parse(JSON.stringify(originalData));
+                renderTable();
             });
 
             $('#exportBtn').on('click', exportToExcel);
@@ -404,6 +399,7 @@
             const ws = XLSX.utils.json_to_sheet(allData.map((item, index) => ({
                 'STT': index + 1,
                 'Lệnh SX': item.So_dh,
+                'Lệnh GO': item.So_dh_go || '',
                 'Mã HH': item.Ma_hh,
                 'Tên Hàng Hóa': item.hangHoa?.Ten_hh || '',
                 'Công Đoạn': item.Ma_ko,

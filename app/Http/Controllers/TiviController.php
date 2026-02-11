@@ -31,11 +31,12 @@ class TiviController extends Controller
         return view('Client.view-all-sx-data');
     }
 
-    // API lấy dữ liệu SX SIV ANH TÚ
+    // API lấy dữ liệu SX SIV và UNIQLO ANH TÚ
     public function getSXDataWithAverage(Request $request)
     {
         try {
             $maHh = $request->get('ma_hh', '');
+            $soDhGo = $request->get('so_dh_go', '');
 
             $query = DataKetoanData::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
@@ -45,26 +46,65 @@ class TiviController extends Controller
             ->where('DataKetoanData.Ma_ct', 'SX')
             ->where('DataKetoanData.Ngay_ct', '>=', '2026-01-01')
             ->whereIn('DataKetoanData.Ma_kh', ['KHNN000053', 'KHTN000015'])
+            ->whereIn('DataKetoanData.Ma_ko', ['01', '02','05'])
+            
             ->whereHas('hangHoa', function ($query) {
                 $query->where('Nhom1', 'like', '%THUNBAN%');
-            })
-            ->where('DataKetoanData.Ma_ko', '01');
+            });
+            // ->where('DataKetoanData.Ma_ko', '01');
 
             // Filter theo Ma_hh nếu có
             if (!empty($maHh)) {
                 $query->where('DataKetoanData.Ma_hh', 'like', '%' . $maHh . '%');
             }
 
+            // Filter theo So_dh_go nếu có (join với bảng GO)
+            if (!empty($soDhGo)) {
+                $query->whereHas('dataKetoan', function ($subQuery) use ($soDhGo) {
+                    // Hoặc nếu không có relation, dùng direct query:
+                })->whereExists(function ($subQuery) use ($soDhGo) {
+                    $subQuery->selectRaw('1')
+                        ->from('DataKetoanData as go')
+                        ->whereRaw('go.So_ct = DataKetoanData.So_dh')
+                        ->where('go.Ma_ct', 'GO')
+                        ->where('go.So_dh', 'like', '%' . $soDhGo . '%');
+                });
+            }
+
             $data = $query->orderBy('DataKetoanData.Ma_hh')
                 ->orderBy('DataKetoanData.So_dh')
-                ->get();
+                ->get()
+                ->sortBy(function ($item) {
+                    // Sắp xếp theo ngày từ DgiaiV (dd/mm/yyyy)
+                    // Nếu không hợp lệ, xếp xuống cuối cùng
+                    if (empty($item->DgiaiV)) {
+                        return '9999-12-31';
+                    }
+                    $pattern = '/^\d{1,2}\/\d{1,2}\/\d{4}$/';
+                    if (!preg_match($pattern, $item->DgiaiV)) {
+                        return '9999-12-31';
+                    }
+                    list($day, $month, $year) = explode('/', $item->DgiaiV);
+                    return "{$year}-{$month}-{$day}";
+                })
+                ->values();
+
+
+            // Lấy So_dh từ bảng GO (Ma_ct = 'GO', So_ct = So_dh của SX)
+            $soDhList = $data->pluck('So_dh')->unique();
+            $goData = DataKetoanData::select('So_ct', 'So_dh')
+                ->where('Ma_ct', 'GO')
+                ->whereIn('So_ct', $soDhList)
+                ->get()
+                ->keyBy('So_ct');
 
             // Tính trung bình Dgbanvnd theo Ma_hh (chia cho 1000 để chuyển từ gram sang kg)
             $averageByMaHh = $data->groupBy('Ma_hh')->map(function ($items) {
+                $hangHoa = $items->first()->hangHoa;
                 return [
                     'ma_hh' => $items->first()->Ma_hh,
-                    'ten_hh' => $items->first()->hangHoa->Ten_hh ?? '',
-                    'dvt' => $items->first()->hangHoa->Dvt ?? '',
+                    'ten_hh' => ($hangHoa && isset($hangHoa->Ten_hh)) ? $hangHoa->Ten_hh : '',
+                    'dvt' => ($hangHoa && isset($hangHoa->Dvt)) ? $hangHoa->Dvt : '',
                     'count' => $items->count(),
                     'total_dgbanvnd' => round($items->sum('Dgbanvnd') / 1000, 2),
                     'average_dgbanvnd' => round($items->avg('Dgbanvnd') / 1000, 2),
@@ -73,9 +113,36 @@ class TiviController extends Controller
                 ];
             })->values();
 
+            // Format data để đảm bảo relationships được include
+            $formattedData = $data->map(function ($item) use ($goData) {
+                $hangHoa = $item->hangHoa;
+                $nhanVien = $item->nhanVien;
+                $soDhGo = isset($goData[$item->So_dh]) ? $goData[$item->So_dh]->So_dh : null;
+                
+                return [
+                    'Ma_hh' => $item->Ma_hh,
+                    'So_dh' => $item->So_dh,
+                    'So_dh_go' => $soDhGo,
+                    'Ma_nv' => $item->Ma_nv,
+                    'Ma_ko' => $item->Ma_ko ?? null,
+                    'Ma3ko' => $item->Ma3ko ?? null,
+                    'Dgbanvnd' => $item->Dgbanvnd,
+                    'Ngay_ct' => $item->Ngay_ct,
+                    'DgiaiV' => $item->DgiaiV,
+                    'hangHoa' => [
+                        'Ma_hh' => ($hangHoa && isset($hangHoa->Ma_hh)) ? $hangHoa->Ma_hh : null,
+                        'Ten_hh' => ($hangHoa && isset($hangHoa->Ten_hh)) ? $hangHoa->Ten_hh : null,
+                    ],
+                    'nhanVien' => [
+                        'Ma_nv' => ($nhanVien && isset($nhanVien->Ma_nv)) ? $nhanVien->Ma_nv : null,
+                        'Ten_nv' => ($nhanVien && isset($nhanVien->Ten_nv)) ? $nhanVien->Ten_nv : null,
+                    ],
+                ];
+            });
+
             return response()->json([
                 'success' => true,
-                'data' => $data,
+                'data' => $formattedData,
                 'averageByMaHh' => $averageByMaHh,
                 'total_records' => $data->count()
             ]);
@@ -454,6 +521,20 @@ class TiviController extends Controller
             ->where('DgiaiV', 'like', '%' . $dgiaiV . '%')
             ->orderBy('Ngay_ct')
             ->get()
+            ->sortBy(function ($item) {
+                // Sắp xếp theo ngày từ DgiaiV (dd/mm/yyyy)
+                // Nếu không hợp lệ, xếp xuống cuối cùng
+                if (empty($item->DgiaiV)) {
+                    return '9999-12-31';
+                }
+                $pattern = '/^\d{1,2}\/\d{1,2}\/\d{4}$/';
+                if (!preg_match($pattern, $item->DgiaiV)) {
+                    return '9999-12-31';
+                }
+                list($day, $month, $year) = explode('/', $item->DgiaiV);
+                return "{$year}-{$month}-{$day}";
+            })
+            ->values()
             ->map(function ($item, $index) {
                 $item->Stt = $index + 1;
                 return $item;
@@ -527,10 +608,37 @@ class TiviController extends Controller
                 'nhanVien:Ma_nv,Ten_nv',
                 'khachHang:Ma_kh,Ten_kh'
             ])
-            ->select('DataKetoanData.*')
+            ->select(
+                'DataKetoanData.So_dh',
+                'DataKetoanData.Ma_hh',
+                'DataKetoanData.Ma_ct',
+                'DataKetoanData.Ngay_ct',
+                'DataKetoanData.Ma_ko',
+                'DataKetoanData.Soluong',
+                'DataKetoanData.Ma_nv',
+                'DataKetoanData.Ma_kh',
+                'DataKetoanData.Soseri',
+                'DataKetoanData.DgiaiV',
+                'DataKetoanData.UserNgE',
+                'DataKetoanData.Date',
+                DB::raw('go.So_dh as So_dh_go')
+            )
+            ->leftJoin(DB::raw("
+                (
+                    SELECT So_ct, So_dh
+                    FROM DataKetoanData
+                    WHERE Ma_ct = 'GO'
+                    GROUP BY So_ct, So_dh
+                ) AS go
+            "), 'go.So_ct', '=', 'DataKetoanData.So_dh')
             ->where('DataKetoanData.Ma_ct', '=', 'SX')
             ->where('DataKetoanData.Ngay_ct', '>=', '2026-01-01')
             ->where('DataKetoanData.Ma_ko', '=', '06')
+            ->groupBy('DataKetoanData.So_dh', 'DataKetoanData.Ma_hh', 'DataKetoanData.Ma_ct', 
+                      'DataKetoanData.Ngay_ct', 'DataKetoanData.Ma_ko', 'DataKetoanData.Soluong',
+                      'DataKetoanData.Ma_nv', 'DataKetoanData.Ma_kh',
+                      'DataKetoanData.Soseri', 'DataKetoanData.DgiaiV', 'DataKetoanData.UserNgE',
+                      'DataKetoanData.Date', 'go.So_dh')
             ->orderBy('DataKetoanData.Ngay_ct', 'asc')
             ->orderBy('DataKetoanData.So_dh')
             ->get();

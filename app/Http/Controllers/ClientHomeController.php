@@ -124,7 +124,7 @@ class ClientHomeController extends Controller
             ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_sp);        
 
 
-        // $nhaptpketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        // $nhaptpketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
         //     ->selectdistinct('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
         //     ->where('Ma_ct', '=', 'NX')
         //     ->groupBy('Ma_vv', 'Ma_sp')
@@ -132,7 +132,7 @@ class ClientHomeController extends Controller
         //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
         //Phan ke toan
         //Nhập thành phẩm kế toán ( DÙNG CÁI NÀY KHI LẤY DATABASE KẾ TOÁN)
-        $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
             ->where('Ma_ct', '=', 'NX')
             ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
@@ -164,7 +164,7 @@ class ClientHomeController extends Controller
             ->groupBy('Ma_sp')
             ->get()
             ->keyBy('Ma_sp');
-        $tongxuatkhoketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        $tongxuatkhoketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_hh', DB::raw('SUM(Soluong) as totalxuatkho_ketoan'))
             ->where('Ma_ct', '=', 'XU')
             // ->where('Ma_ko', '=', 'KTPHAM') // kHO THÀNH PHẨM
@@ -181,7 +181,7 @@ class ClientHomeController extends Controller
             ->get()
             ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_so);
             //Dùng cái này khi đổi database Kế toán
-        // $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        // $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
         // ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))
         //     ->where('Ma_ct', '=', 'XU')
         //     ->groupBy('Ma_vv', 'Ma_hh')
@@ -190,7 +190,7 @@ class ClientHomeController extends Controller
         // Chi tiết xuất kho API
 
         // Lấy mã HH kế toán chỗ nhập thành phẩm
-        $rawData = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        $rawData = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_vv', 'Ma_sp')
             ->where('Ma_ct', '=', 'NX')
             ->distinct()
@@ -216,7 +216,7 @@ class ClientHomeController extends Controller
             $datamahhketoanxuat[$item->Ma_vv][] = $item->Ma_hh;
         }
         // Mã hh thay đổi gần nhất
-        $lastChange = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        $lastChange = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             
             ->select('Ma_vv', 'Ma_sp', 'UserNg0','Ma_hh','Noluong','Ngay_ct','Soluong','So_ct') // giả sử có cột updated_at
             ->where('Ma_ct', '=', 'NX')
@@ -284,7 +284,7 @@ class ClientHomeController extends Controller
     $ma_hh = urldecode($request->query('ma_hh'));
 
     // Lấy chi tiết xuất kho
-    $details = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+    $details = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
         ->select('Ngay_ct', 'So_ct', 'Ma_hh', 'Soluong', 'Dgvonvnd', 'Dgbanvnd', 'Dgbannte')
         ->where('Ma_ct', '=', 'XU')
         ->where('Ma_hh', $ma_hh)
@@ -292,7 +292,7 @@ class ClientHomeController extends Controller
         ->get();
 
     // Lấy thông tin nhập kho để so sánh (dùng subquery để DISTINCT trước)
-    $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+    $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
         ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
         ->where('Ma_ct', '=', 'NX')
         // ->where('Ma3ko', '=', 'KTPHAM')
@@ -327,7 +327,7 @@ class ClientHomeController extends Controller
     {
         $ma_vv = urldecode($request->query('ma_vv'));
         //DATABASE KẾ TOÁN
-        $vattu = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2025')
+        $vattu = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_vv', 'Ma_sp', 'Ma_hh', 'Soluong', 'DgiaiV', 'Noluong', 'Ngay_ct')
             ->where('Ma_ct', '=', 'NX')
             ->where('Ma_vv', $ma_vv)         // lọc theo số đơn hàng
