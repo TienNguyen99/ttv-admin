@@ -109,37 +109,30 @@ class ClientHomeController extends Controller
         //     ->groupBy('So_dh', 'Ma_hh')
         //     ->get()
         //     ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
-        //Nhập thành phẩm sản xuất ( DÙNG CÁI NÀY KHI LẤY DATABASE SẢN XUẤT)
-                $sub = DB::table('TSoft_NhanTG_SX.dbo.DataKetoan2025')
-            ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN','So_dh')
+        // Nhập thành phẩm sản xuất (DÙNG CÁI NÀY KHI LẤY DATABASE SẢN XUẤT)
+        $subNhapKho = DB::table('TSoft_NhanTG_SX.dbo.DataKetoan2026')
+            ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN', 'So_dh')
             ->where('Ma_ct', '=', 'NX')
             ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
             ->distinct();
 
         $nhapKho = DB::query()
-            ->fromSub($sub, 'sub')
+            ->fromSub($subNhapKho, 'sub')
             ->select('So_dh', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhap'))
             ->groupBy('So_dh', 'Ma_sp')
             ->get()
-            ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_sp);        
+            ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_sp);
 
-
-        // $nhaptpketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
-        //     ->selectdistinct('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
-        //     ->where('Ma_ct', '=', 'NX')
-        //     ->groupBy('Ma_vv', 'Ma_sp')
-        //     ->get()
-        //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
-        //Phan ke toan
-        //Nhập thành phẩm kế toán ( DÙNG CÁI NÀY KHI LẤY DATABASE KẾ TOÁN)
-        $sub = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
+        // Phần kế toán
+        // Nhập thành phẩm kế toán (DÙNG CÁI NÀY KHI LẤY DATABASE KẾ TOÁN)
+        $subNhapTPKeToan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
             ->where('Ma_ct', '=', 'NX')
             ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
             ->distinct();
 
         $nhaptpketoan = DB::query()
-            ->fromSub($sub, 'sub')
+            ->fromSub($subNhapTPKeToan, 'sub')
             ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(Noluong) as total_nhaptpketoan'))
             ->groupBy('Ma_vv', 'Ma_sp')
             ->get()
@@ -158,8 +151,8 @@ class ClientHomeController extends Controller
         //     ->get()
         //     ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_sp);
         // Tổng tồn kế toán theo Ma_sp
-        $tongnhapkhoketoan = DB::table(DB::raw("({$sub->toSql()}) as sub"))
-            ->mergeBindings($sub)
+        $tongnhapkhoketoan = DB::table(DB::raw("({$subNhapTPKeToan->toSql()}) as sub"))
+            ->mergeBindings($subNhapTPKeToan)
             ->select('Ma_sp', DB::raw('SUM(Noluong) as totalnhapkho_ketoan'))
             ->groupBy('Ma_sp')
             ->get()
@@ -167,19 +160,18 @@ class ClientHomeController extends Controller
         $tongxuatkhoketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_hh', DB::raw('SUM(Soluong) as totalxuatkho_ketoan'))
             ->where('Ma_ct', '=', 'XU')
-            // ->where('Ma_ko', '=', 'KTPHAM') // kHO THÀNH PHẨM
             ->groupBy('Ma_hh')
             ->get()
             ->keyBy('Ma_hh');
 
         // dùng cái này khi database sản xuất
-        $xuatkhotheomavvketoan = DB::table('DataKetoan2025 as dk')
+        $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_SX.dbo.DataKetoan2026 as dk')
             ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
-            ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
+            ->select('dk.So_dh', 'dk.Ma_hh', DB::raw('SUM(dk.Soluong) as xuatkhotheomavv_ketoan'))
             ->where('dk.Ma_ct', '=', 'XU')
-            ->groupBy('dk.Ma_vv', 'hh.Ma_so')
+            ->groupBy('dk.So_dh', 'dk.Ma_hh')
             ->get()
-            ->keyBy(fn($i) => $i->Ma_vv . '|' . $i->Ma_so);
+            ->keyBy(fn($i) => $i->So_dh . '|' . $i->Ma_hh);
             //Dùng cái này khi đổi database Kế toán
         // $xuatkhotheomavvketoan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
         // ->select('Ma_vv', 'Ma_hh', DB::raw('SUM(Soluong) as xuatkhotheomavv_ketoan'))

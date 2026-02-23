@@ -396,7 +396,8 @@
                         tbodyLast.innerHTML = `<tr><td colspan="4" class="text-center">Không có dữ liệu</td></tr>`;
                     }
                     const rows = data.map((row, index) => {
-                        const key = `${row.So_ct}|${row.Ma_hh}`;
+                        // const key = `${row.So_ct}|${row.Ma_hh}`;
+                        const key = `${row.So_ct}|${row.hang_hoa?.Ma_so}`;
                         const keyketoan = `${row.So_dh}|${row.Ma_hh}`;
                         const keyketoan2 = `${row.So_dh}|${row.hang_hoa?.Ma_so}`;
                         const cdSteps = [cd1, cd2, cd3, cd4, cd5, cd6, cd7, cd8, cd9];
@@ -414,7 +415,7 @@
                         const nhaptp = Math.round(nhaptpketoan[keyketoan2]?.total_nhaptpketoan ?? 0);
                         // const xuat = Math.round(xuatKho[key]?.total_xuat ?? 0);
                         // Xuất kho kế toán theo Ma_vv và Ma_hh
-                        const xuatkhomavvkt = Math.round(xuatkhotheomavvketoan[keyketoan2]
+                        const xuatkhomavvkt = Math.round(xuatkhotheomavvketoan[key]
                             ?.xuatkhotheomavv_ketoan ?? 0);
                         const tongnhap = Math.round(tongnhapkhoketoan[row.Ma_hh]?.totalnhapkho_ketoan ?? 0);
                         const tongxuat = Math.round(tongxuatkhoketoan[row.Ma_hh]?.totalxuatkho_ketoan ?? 0);
