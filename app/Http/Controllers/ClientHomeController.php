@@ -97,7 +97,7 @@ class ClientHomeController extends Controller
             ->pluck('So_dh')
             ->toArray();
 
-        $xv = DB::table('DataKetoan2025')
+        $xv = DB::table('TSoft_NhanTG_SX.dbo.DataKetoan2026')
             ->where('Ma_ct', '=', 'CK')
             ->pluck('So_dh')
             ->toArray();
@@ -113,7 +113,7 @@ class ClientHomeController extends Controller
         $subNhapKho = DB::table('TSoft_NhanTG_SX.dbo.DataKetoan2026')
             ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN', 'So_dh')
             ->where('Ma_ct', '=', 'NX')
-            ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
+            // ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
             ->distinct();
 
         $nhapKho = DB::query()
@@ -128,7 +128,7 @@ class ClientHomeController extends Controller
         $subNhapTPKeToan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_vv', 'Ma_sp', 'Noluong', 'SttRecN')
             ->where('Ma_ct', '=', 'NX')
-            ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
+            // ->where('Ma3ko', '=', 'KTPHAM') // kho thành phẩm
             ->distinct();
 
         $nhaptpketoan = DB::query()
@@ -427,7 +427,7 @@ public function getXuatVatTu(Request $request)
         ->pluck('Soluong', 'Ma_hh');
 
     // 3️⃣ Lấy danh sách xuất vật tư (CK) + join đơn vị tính từ CodeHangHoa
-    $dsXuat = DB::table('DataKetoan2025 as d')
+    $dsXuat = DB::table('TSoft_NhanTG_SX.dbo.DataKetoan2026 as d')
         ->select('d.Ngay_ct', 'd.So_ct', 'd.Ma_ko', 'd.Ma3ko', 'd.Ma_hh', 'd.Soluong', 'c.Dvt','c.Ten_hh')
         ->leftJoin('CodeHangHoa as c', 'd.Ma_hh', '=', 'c.Ma_hh')
         ->where('d.Ma_ct', '=', 'CK')
