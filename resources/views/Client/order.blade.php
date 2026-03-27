@@ -13,7 +13,13 @@
     <script src="https://cdn.datatables.net/2.0.8/js/dataTables.min.js"></script>
 
     <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
         body {
             font-family: 'Inter', sans-serif;
@@ -56,7 +62,7 @@
         .card {
             background: #fff;
             border-radius: 16px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
             overflow: hidden;
         }
 
@@ -83,8 +89,13 @@
             white-space: nowrap;
         }
 
-        table.dataTable thead th:first-child { border-radius: 8px 0 0 0; }
-        table.dataTable thead th:last-child { border-radius: 0 8px 0 0; }
+        table.dataTable thead th:first-child {
+            border-radius: 8px 0 0 0;
+        }
+
+        table.dataTable thead th:last-child {
+            border-radius: 0 8px 0 0;
+        }
 
         table.dataTable tbody td {
             padding: 12px 12px !important;
@@ -125,7 +136,7 @@
 
         .dt-search input:focus {
             border-color: #1a73e8 !important;
-            box-shadow: 0 0 0 3px rgba(26,115,232,0.12) !important;
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.12) !important;
         }
 
         .dt-search label {
@@ -198,9 +209,9 @@
 
         /* Processing indicator */
         .dt-processing {
-            background: rgba(255,255,255,0.95) !important;
+            background: rgba(255, 255, 255, 0.95) !important;
             border: none !important;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
             border-radius: 12px !important;
             padding: 20px 32px !important;
             font-size: 14px;
@@ -225,11 +236,12 @@
             cursor: pointer;
             transition: transform 0.2s;
         }
+
         .order-img:hover {
             transform: scale(2.5);
             z-index: 100;
             position: relative;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
         }
     </style>
 </head>
@@ -291,9 +303,14 @@
                 columns: fields.map(f => ({
                     data: f
                 })),
-                columnDefs: [
-                    { defaultContent: '', targets: '_all' },
-                    { orderable: false, targets: nonSortable },
+                columnDefs: [{
+                        defaultContent: '',
+                        targets: '_all'
+                    },
+                    {
+                        orderable: false,
+                        targets: nonSortable
+                    },
                     {
                         targets: 0,
                         render: function(data, type, row) {
