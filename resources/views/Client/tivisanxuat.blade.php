@@ -10,6 +10,50 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="{{ asset('css/tivicss.css') }}" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        .mini-timeline {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e9ecef;
+        }
+        .mini-timeline .step {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #e9ecef;
+            color: #adb5bd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            z-index: 2;
+            transition: all 0.3s;
+        }
+        .mini-timeline .step.active {
+            background: #10b981;
+            color: white;
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+        }
+        .mini-timeline .step.partial {
+            background: #f59e0b;
+            color: white;
+            box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+        }
+        .mini-timeline .step-line {
+            flex-grow: 1;
+            height: 2px;
+            background: #e9ecef;
+            margin: 0 -4px;
+            z-index: 1;
+            transition: all 0.3s;
+        }
+        .mini-timeline .step-line.active {
+            background: #10b981;
+        }
+    </style>
 </head>
 
 <body>
@@ -959,6 +1003,44 @@
                             statusClasses.push('hoan-tat');
                         }
 
+                        // Lấy công đoạn cuối cùng
+                        let maxMaKo = '';
+                        rows.forEach(r => {
+                            if (r.Ma_ko && r.Ma_ko > maxMaKo) {
+                                maxMaKo = r.Ma_ko;
+                            }
+                        });
+                        const congDoanCuoi = getCongDoanName(maxMaKo) || 'SX';
+
+                        const timelineHtml = `
+                            <div class="mini-timeline mt-2">
+                                <div class="step ${status.co_dinh_muc ? 'active' : ''}" title="Định mức">
+                                    <i class="bi bi-file-earmark-text"></i>
+                                </div>
+                                <div class="step-line ${status.co_dinh_muc && status.da_xuat_vat_tu ? 'active' : ''}"></div>
+                                
+                                <div class="step ${status.da_xuat_vat_tu ? 'active' : ''}" title="Kho Vật Tư">
+                                    <i class="bi bi-box-seam"></i>
+                                </div>
+                                <div class="step-line ${status.da_xuat_vat_tu && tongSX > 0 ? 'active' : ''}"></div>
+                                
+                                <div class="step ${soThieu <= 0 ? 'active' : (tongSX > 0 ? 'partial' : '')}" title="Sản Xuất">
+                                    <i class="bi bi-gear"></i>
+                                </div>
+                                <div class="step-line ${soThieu <= 0 && status.da_nhap_kho ? 'active' : ''}"></div>
+                                
+                                <div class="step ${status.da_xuat_kho ? 'active' : (status.da_nhap_kho ? 'partial' : '')}" title="Kho Thành Phẩm">
+                                    <i class="bi bi-building"></i>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted" style="font-size: 10.5px; margin-top: 6px; font-weight: 500;">
+                                <span>Đ.Mức</span>
+                                <span>Kho VT</span>
+                                <span>C.Đ: <span class="text-primary">${congDoanCuoi}</span></span>
+                                <span>Kho TP</span>
+                            </div>
+                        `;
+
                         const card = `
                             <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6" data-status="${statusClasses.join(' ')}" data-soseri="${firstItem.Soseri_go || ''}">
                                 <div class="product-card" onclick="loadDetailLenh('${soDh}')">
@@ -992,13 +1074,13 @@
                                                 ${soThieu > 0 ? 'Thiếu' : 'Dư'}: <strong>${Math.abs(soThieu).toLocaleString('vi-VN')}</strong>
                                             </small>
                                             ${tonKho[firstItem.hang_hoa.Ma_hh] ? `
-                                                                                            <div class="mt-2 pt-2 border-top">
-                                                                                                <small class="text-muted">
-                                                                                                    <i class="bi bi-box-seam"></i> Tồn kho: <strong class="text-info">${Math.round(tonKho[firstItem.hang_hoa.Ma_hh].ton_kho || 0).toLocaleString('vi-VN')}</strong>
-                                                                                                </small>
-                                                                                            </div>
-                                                                                            ` : ''}
+                                            <div class="mt-2 pt-2 border-top">
+                                                <small class="text-muted">
+                                                    <i class="bi bi-box-seam"></i> Tồn kho: <strong class="text-info">${Math.round(tonKho[firstItem.hang_hoa.Ma_hh].ton_kho || 0).toLocaleString('vi-VN')}</strong>
+                                                </small>
+                                            </div>` : ''}
                                         </div>
+                                        ${timelineHtml}
                                         <div class="warning-info mt-2">
                                             ${warningHtml}
                                         </div>
