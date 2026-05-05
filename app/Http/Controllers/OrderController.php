@@ -30,15 +30,15 @@ class OrderController extends Controller
 
         // Map column index → cột có thể sort trên DB
         $sortableColumns = [
-            0 => 'Ngay_ct',
-            1 => 'So_ct',
-            2 => 'Soseri',
-            3 => 'DgiaiV',
-            5 => 'Ma_hh',
-            7 => 'Ma_ch',
-            8 => 'Msize',
-            9 => 'Ma_so',
-            11 => 'Soluong',
+            1 => 'Ngay_ct',
+            2 => 'So_ct',
+            3 => 'Soseri',
+            4 => 'DgiaiV',
+            6 => 'Ma_hh',
+            8 => 'Ma_ch',
+            9 => 'Msize',
+            10 => 'Ma_so',
+            12 => 'Soluong',
         ];
 
         $baseQuery = DataKetoanOder::where('Ngay_ct', '>=', '2025-11-01');
@@ -57,7 +57,8 @@ class OrderController extends Controller
                   ->orWhere('Msize', 'like', "%{$search}%")
                   ->orWhere('Ma_so', 'like', "%{$search}%")
                   ->orWhereHas('khachHang', fn($sub) => $sub->where('Ten_kh', 'like', "%{$search}%"))
-                  ->orWhereHas('hangHoa', fn($sub) => $sub->where('Ten_hh', 'like', "%{$search}%"));
+                  ->orWhereHas('hangHoa', fn($sub) => $sub->where('Ten_hh', 'like', "%{$search}%"))
+                  ->orWhereHas('lenhSanxuat', fn($sub) => $sub->where('So_dh', 'like', "%{$search}%")->orWhere('So_ct', 'like', "%{$search}%"));
             });
         }
 
