@@ -9,11 +9,7 @@ use Illuminate\Http\Request;
 
 class TiviController extends Controller
 {
-    public function tiviIndex()
-    {
-        return view('Client.tivi');
-    }
-    
+
     public function tiviSanxuat()
     {
         return view('Client.tivisanxuat');
@@ -431,48 +427,59 @@ class TiviController extends Controller
         ->get()
         ->keyBy('Ma_hh');
 
-    // ===== KIỂM TRA XUẤT DƯ VẬT TƯ =====
+    // ===== KIỂM TRA XUẤT DƯ VẬT TƯ (OPTIMIZED) =====
     $xuatDuVatTu = [];
-    foreach ($allSoDh as $soDh) {
-        // Lấy số lượng đơn
-        $soLuongDon = DB::table('DataKetoanData')
+    if ($allSoDh->isNotEmpty()) {
+        // 1. Lấy số lượng đơn cho tất cả các lệnh
+        $soLuongDonMap = DB::table('DataKetoanData')
             ->where('Ma_ct', 'GO')
-            ->where('So_ct', $soDh)
-            ->sum('Soluong');
+            ->whereIn('So_ct', $allSoDh)
+            ->groupBy('So_ct')
+            ->select('So_ct', DB::raw('SUM(Soluong) as total_soluong'))
+            ->pluck('total_soluong', 'So_ct');
 
-        if ($soLuongDon > 0) {
-            // Lấy định mức
-            $dinhMuc = DB::table('DataKetoanData')
-                ->select('Ma_hh', DB::raw('SUM(Soluong) as total_dinh_muc'))
-                ->where('Ma_ct', 'NX')
-                ->where('So_dh', $soDh)
-                ->groupBy('Ma_hh')
-                ->get()
-                ->keyBy('Ma_hh');
+        // 2. Lấy định mức cho tất cả các lệnh
+        $dinhMucData = DB::table('DataKetoanData')
+            ->where('Ma_ct', 'NX')
+            ->whereIn('So_dh', $allSoDh)
+            ->groupBy('So_dh', 'Ma_hh')
+            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_dinh_muc'))
+            ->get()
+            ->groupBy('So_dh');
 
-            // Lấy đã xuất
-            $daXuat = DB::table('DataKetoan2025')
-                ->select('Ma_hh', DB::raw('SUM(Soluong) as total_xuat'))
-                ->where('Ma_ct', 'CK')
-                ->where('So_dh', $soDh)
-                ->groupBy('Ma_hh')
-                ->get()
-                ->keyBy('Ma_hh');
+        // 3. Lấy đã xuất cho tất cả các lệnh
+        $daXuatData = DB::table('DataKetoan2025')
+            ->where('Ma_ct', 'CK')
+            ->whereIn('So_dh', $allSoDh)
+            ->groupBy('So_dh', 'Ma_hh')
+            ->select('So_dh', 'Ma_hh', DB::raw('SUM(Soluong) as total_xuat'))
+            ->get()
+            ->groupBy('So_dh');
 
-            // Kiểm tra có xuất dư không
-            $coDu = false;
-            foreach ($daXuat as $maHh => $xuat) {
-                $dinhMucDeXuat = ($dinhMuc[$maHh]->total_dinh_muc ?? 0) * $soLuongDon;
-                $daXuatTotal = $xuat->total_xuat ?? 0;
-                
-                if ($daXuatTotal > $dinhMucDeXuat) {
-                    $coDu = true;
-                    break;
-                }
-            }
+        foreach ($allSoDh as $soDh) {
+            $soLuongDon = $soLuongDonMap[$soDh] ?? 0;
             
-            if ($coDu) {
-                $xuatDuVatTu[] = $soDh;
+            if ($soLuongDon > 0) {
+                $dinhMucBySoDh = $dinhMucData[$soDh] ?? collect();
+                $dinhMuc = $dinhMucBySoDh->keyBy('Ma_hh');
+                
+                $daXuatBySoDh = $daXuatData[$soDh] ?? collect();
+                
+                $coDu = false;
+                foreach ($daXuatBySoDh as $xuat) {
+                    $maHh = $xuat->Ma_hh;
+                    $dinhMucDeXuat = ($dinhMuc[$maHh]->total_dinh_muc ?? 0) * $soLuongDon;
+                    $daXuatTotal = $xuat->total_xuat ?? 0;
+                    
+                    if ($daXuatTotal > $dinhMucDeXuat) {
+                        $coDu = true;
+                        break;
+                    }
+                }
+                
+                if ($coDu) {
+                    $xuatDuVatTu[] = $soDh;
+                }
             }
         }
     }

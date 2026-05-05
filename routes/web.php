@@ -55,8 +55,6 @@ Route::get('/kho', [PhieuNhapXuatKhoController::class, 'index'])->name('kho');
 
 
 // Client Route //
-// Routeu for Hiển thị Tivi trên Client
-Route::get('/client/tivi', [TiviController::class, 'tiviIndex']);
 // Trang TV riêng cho sản xuất
 Route::get('/client/tivisanxuat', [TiviController::class, 'tiviSanxuat']);
 // View xem dữ liệu SX
