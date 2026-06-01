@@ -146,6 +146,7 @@
 </head>
 
 <body>
+    @include('layouts.partials.sidebar')
     <div class="container-fluid py-4">
         <!-- Header -->
         <div class="header-section">

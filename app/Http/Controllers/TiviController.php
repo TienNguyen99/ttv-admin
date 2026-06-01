@@ -15,147 +15,20 @@ class TiviController extends Controller
         return view('Client.tivisanxuat');
     }
 
-    // View xem dữ liệu SX và tính trung bình Dgbanvnd
-    public function viewSXData()
-    {
-        return view('Client.view-sx-data');
-    }
 
-    // View xem toàn bộ dữ liệu SX
+    // View xem toÃ n bá»™ dá»¯ liá»‡u SX
     public function viewAllSXData()
     {
         return view('Client.view-all-sx-data');
     }
 
-    // API lấy dữ liệu SX SIV và UNIQLO ANH TÚ
-    public function getSXDataWithAverage(Request $request)
-    {
-        try {
-            $maHh = $request->get('ma_hh', '');
-            $soDhGo = $request->get('so_dh_go', '');
 
-            $query = DataKetoanData::with([
-                'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
-                'nhanVien:Ma_nv,Ten_nv',
-            ])
-            ->select('DataKetoanData.*')
-            ->where('DataKetoanData.Ma_ct', 'SX')
-            ->where('DataKetoanData.Ngay_ct', '>=', '2026-01-01')
-            ->whereIn('DataKetoanData.Ma_kh', ['KHNN000053', 'KHTN000015'])
-            ->whereIn('DataKetoanData.Ma_ko', ['01', '02','05'])
-            
-            ->whereHas('hangHoa', function ($query) {
-                $query->where('Nhom1', 'like', '%THUNBAN%');
-            });
-            // ->where('DataKetoanData.Ma_ko', '01');
-
-            // Filter theo Ma_hh nếu có
-            if (!empty($maHh)) {
-                $query->where('DataKetoanData.Ma_hh', 'like', '%' . $maHh . '%');
-            }
-
-            // Filter theo So_dh_go nếu có (join với bảng GO)
-            if (!empty($soDhGo)) {
-                $query->whereHas('dataKetoan', function ($subQuery) use ($soDhGo) {
-                    // Hoặc nếu không có relation, dùng direct query:
-                })->whereExists(function ($subQuery) use ($soDhGo) {
-                    $subQuery->selectRaw('1')
-                        ->from('DataKetoanData as go')
-                        ->whereRaw('go.So_ct = DataKetoanData.So_dh')
-                        ->where('go.Ma_ct', 'GO')
-                        ->where('go.So_dh', 'like', '%' . $soDhGo . '%');
-                });
-            }
-
-            $data = $query->orderBy('DataKetoanData.Ma_hh')
-                ->orderBy('DataKetoanData.So_dh')
-                ->get()
-                ->sortBy(function ($item) {
-                    // Sắp xếp theo ngày từ DgiaiV (dd/mm/yyyy)
-                    // Nếu không hợp lệ, xếp xuống cuối cùng
-                    if (empty($item->DgiaiV)) {
-                        return '9999-12-31';
-                    }
-                    $pattern = '/^\d{1,2}\/\d{1,2}\/\d{4}$/';
-                    if (!preg_match($pattern, $item->DgiaiV)) {
-                        return '9999-12-31';
-                    }
-                    list($day, $month, $year) = explode('/', $item->DgiaiV);
-                    return "{$year}-{$month}-{$day}";
-                })
-                ->values();
-
-
-            // Lấy So_dh từ bảng GO (Ma_ct = 'GO', So_ct = So_dh của SX)
-            $soDhList = $data->pluck('So_dh')->unique();
-            $goData = DataKetoanData::select('So_ct', 'So_dh')
-                ->where('Ma_ct', 'GO')
-                ->whereIn('So_ct', $soDhList)
-                ->get()
-                ->keyBy('So_ct');
-
-            // Tính trung bình Dgbanvnd theo Ma_hh (chia cho 1000 để chuyển từ gram sang kg)
-            $averageByMaHh = $data->groupBy('Ma_hh')->map(function ($items) {
-                $hangHoa = $items->first()->hangHoa;
-                return [
-                    'ma_hh' => $items->first()->Ma_hh,
-                    'ten_hh' => ($hangHoa && isset($hangHoa->Ten_hh)) ? $hangHoa->Ten_hh : '',
-                    'dvt' => ($hangHoa && isset($hangHoa->Dvt)) ? $hangHoa->Dvt : '',
-                    'count' => $items->count(),
-                    'total_dgbanvnd' => round($items->sum('Dgbanvnd') / 1000, 2),
-                    'average_dgbanvnd' => round($items->avg('Dgbanvnd') / 1000, 2),
-                    'min_dgbanvnd' => round($items->min('Dgbanvnd') / 1000, 2),
-                    'max_dgbanvnd' => round($items->max('Dgbanvnd') / 1000, 2),
-                ];
-            })->values();
-
-            // Format data để đảm bảo relationships được include
-            $formattedData = $data->map(function ($item) use ($goData) {
-                $hangHoa = $item->hangHoa;
-                $nhanVien = $item->nhanVien;
-                $soDhGo = isset($goData[$item->So_dh]) ? $goData[$item->So_dh]->So_dh : null;
-                
-                return [
-                    'Ma_hh' => $item->Ma_hh,
-                    'So_dh' => $item->So_dh,
-                    'So_dh_go' => $soDhGo,
-                    'Ma_nv' => $item->Ma_nv,
-                    'Ma_ko' => $item->Ma_ko ?? null,
-                    'Ma3ko' => $item->Ma3ko ?? null,
-                    'Dgbanvnd' => $item->Dgbanvnd,
-                    'Ngay_ct' => $item->Ngay_ct,
-                    'DgiaiV' => $item->DgiaiV,
-                    'hangHoa' => [
-                        'Ma_hh' => ($hangHoa && isset($hangHoa->Ma_hh)) ? $hangHoa->Ma_hh : null,
-                        'Ten_hh' => ($hangHoa && isset($hangHoa->Ten_hh)) ? $hangHoa->Ten_hh : null,
-                    ],
-                    'nhanVien' => [
-                        'Ma_nv' => ($nhanVien && isset($nhanVien->Ma_nv)) ? $nhanVien->Ma_nv : null,
-                        'Ten_nv' => ($nhanVien && isset($nhanVien->Ten_nv)) ? $nhanVien->Ten_nv : null,
-                    ],
-                ];
-            });
-
-            return response()->json([
-                'success' => true,
-                'data' => $formattedData,
-                'averageByMaHh' => $averageByMaHh,
-                'total_records' => $data->count()
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Lỗi: ' . $e->getMessage()
-            ], 500);
-        }
-    }
     
-    // API chi tiết lệnh sản xuất
+    // API chi tiáº¿t lá»‡nh sáº£n xuáº¥t
     public function getSXDetailBySoCt(Request $request, $soCt)
     {
         try {
-            // Lấy thông tin lệnh GO (Đơn hàng gốc)
+            // Láº¥y thÃ´ng tin lá»‡nh GO (ÄÆ¡n hÃ ng gá»‘c)
             $orderInfo = DataKetoanData::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'khachHang:Ma_kh,Ten_kh'
@@ -167,11 +40,11 @@ class TiviController extends Controller
             if (!$orderInfo) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Không tìm thấy lệnh'
+                    'message' => 'KhÃ´ng tÃ¬m tháº¥y lá»‡nh'
                 ], 404);
             }
             
-            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = NX (PHÂN TÍCH - ĐỊNH MỨC)
+            // Láº¥y táº¥t cáº£ chi tiáº¿t sáº£n xuáº¥t cá»§a lá»‡nh nÃ y MA_CT = NX (PHÃ‚N TÃCH - Äá»ŠNH Má»¨C)
             $nxDetails = DataKetoanData::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
@@ -181,7 +54,7 @@ class TiviController extends Controller
             ->where('DataKetoanData.So_dh', $soCt)
             ->get();
            
-            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = CK (PHIẾU CHUYỂN KHO NỘI BỘ - ĐÃ XUẤT VẬT TƯ)
+            // Láº¥y táº¥t cáº£ chi tiáº¿t sáº£n xuáº¥t cá»§a lá»‡nh nÃ y MA_CT = CK (PHIáº¾U CHUYá»‚N KHO Ná»˜I Bá»˜ - ÄÃƒ XUáº¤T Váº¬T TÆ¯)
             $ckDetails = DataKetoan2025::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
@@ -191,8 +64,8 @@ class TiviController extends Controller
             ->where('DataKetoan2026.So_dh', $soCt)
             ->get();
             
-            // ===== FIX: LẤY "ĐÃ SỬ DỤNG VẬT TƯ" =====
-            // Query từ DataKetoan2025 với Ma_ct = 'NX' (Phiếu xuất sử dụng nội bộ)
+            // ===== FIX: Láº¤Y "ÄÃƒ Sá»¬ Dá»¤NG Váº¬T TÆ¯" =====
+            // Query tá»« DataKetoan2025 vá»›i Ma_ct = 'NX' (Phiáº¿u xuáº¥t sá»­ dá»¥ng ná»™i bá»™)
             $daSuDungVatTu = DataKetoan2025::select(
                     'Ma_hh',
                     DB::raw('SUM(Soluong) as total_su_dung')
@@ -202,7 +75,7 @@ class TiviController extends Controller
                 ->groupBy('Ma_hh')
                 ->get();
             
-            // LẤY "ĐÃ NHẬP KHO THÀNH PHẨM" (từ DB Kế Toán)
+            // Láº¤Y "ÄÃƒ NHáº¬P KHO THÃ€NH PHáº¨M" (tá»« DB Káº¿ ToÃ¡n)
             $nhapTPKeToan = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
                 ->select('Ma_vv', 'Ma_sp', DB::raw('SUM(DISTINCT Noluong) as Noluong'))
                 ->where('Ma_ct', 'NX')
@@ -210,7 +83,7 @@ class TiviController extends Controller
                 ->groupBy('Ma_vv', 'Ma_sp')
                 ->get();
 
-            // LẤY "ĐÃ XUẤT KHO BÁN HÀNG"
+            // Láº¤Y "ÄÃƒ XUáº¤T KHO BÃN HÃ€NG"
             $xuDetails2025 = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026 as dk')
                 ->join('CodeHangHoa as hh', 'dk.Ma_hh', '=', 'hh.Ma_hh')
                 ->select('dk.Ma_vv', 'hh.Ma_so', DB::raw('SUM(dk.Soluong) as Soluong'))
@@ -219,7 +92,7 @@ class TiviController extends Controller
                 ->groupBy('dk.Ma_vv', 'hh.Ma_so')
                 ->get();
                 
-            // Lấy tất cả chi tiết sản xuất của lệnh này MA_CT = SX (PHIẾU SẢN XUẤT)
+            // Láº¥y táº¥t cáº£ chi tiáº¿t sáº£n xuáº¥t cá»§a lá»‡nh nÃ y MA_CT = SX (PHIáº¾U Sáº¢N XUáº¤T)
             $sxDetails = DataKetoanData::with([
                 'hangHoa:Ma_hh,Ten_hh,Dvt,Pngpath,Ma_so',
                 'nhanVien:Ma_nv,Ten_nv',
@@ -230,7 +103,7 @@ class TiviController extends Controller
             ->orderBy('DataKetoanData.Ma_ko')
             ->get();
 
-            // Tính tổng sản xuất theo công đoạn
+            // TÃ­nh tá»•ng sáº£n xuáº¥t theo cÃ´ng Ä‘oáº¡n
             $summaryByCongDoan = $sxDetails->groupBy('Ma_ko')->map(function ($items) {
                 return [
                     'Ma_ko' => $items->first()->Ma_ko,
@@ -241,20 +114,20 @@ class TiviController extends Controller
                 ];
             })->values();
             
-            // Tính tổng xuất kho (XU)
+            // TÃ­nh tá»•ng xuáº¥t kho (XU)
             $totalXuatKho = $xuDetails2025->sum('Soluong') ?? 0;
             
-            // Tính tổng nhập kho (NX trong ketoan DB)
+            // TÃ­nh tá»•ng nháº­p kho (NX trong ketoan DB)
             $totalNhapKho = $nhapTPKeToan->sum('Noluong') ?? 0;
             
-            // Lấy công đoạn cuối cùng
+            // Láº¥y cÃ´ng Ä‘oáº¡n cuá»‘i cÃ¹ng
             $congDoanCuoi = $summaryByCongDoan->sortByDesc('Ma_ko')->first();
             
-            // Tổng sản xuất
+            // Tá»•ng sáº£n xuáº¥t
             $totalSX = is_array($congDoanCuoi) ? ($congDoanCuoi['total_sx'] ?? 0) : 0;
             $totalLoi = $sxDetails->sum('Tien_vnd');
             
-            // Tính % hoàn thành
+            // TÃ­nh % hoÃ n thÃ nh
             $soluongDon = DataKetoanData::where('Ma_ct', 'GO')
                 ->where('So_ct', $soCt)
                 ->sum('Soluong');
@@ -285,8 +158,8 @@ class TiviController extends Controller
                     ],
                     'nxDetails' => $nxDetails,
                     'ckDetails' => $ckDetails,
-                    'daSuDungVatTu' => $daSuDungVatTu, // ← FIX: Đổi tên rõ ràng hơn
-                    'nhapTPKeToan' => $nhapTPKeToan,   // ← FIX: Đổi tên rõ ràng hơn
+                    'daSuDungVatTu' => $daSuDungVatTu, // â† FIX: Äá»•i tÃªn rÃµ rÃ ng hÆ¡n
+                    'nhapTPKeToan' => $nhapTPKeToan,   // â† FIX: Äá»•i tÃªn rÃµ rÃ ng hÆ¡n
                     'xuDetails2025' => $xuDetails2025
                 ]
             ]);
@@ -294,7 +167,7 @@ class TiviController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Lỗi: ' . $e->getMessage()
+                'message' => 'Lá»—i: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -335,7 +208,7 @@ class TiviController extends Controller
     ->orderBy('DataKetoanData.So_dh')
     ->get();
 
-    // Tính tổng theo lệnh - CHỈ LẤY CÔNG ĐOẠN CUỐI (OPTIMIZED: single query)
+    // TÃ­nh tá»•ng theo lá»‡nh - CHá»ˆ Láº¤Y CÃ”NG ÄOáº N CUá»I (OPTIMIZED: single query)
     $totalBySoct = DB::table('DataKetoanData as dkd1')
         ->select(
             'dkd1.So_dh',
@@ -359,11 +232,11 @@ class TiviController extends Controller
             return [$item->So_dh => $item->total_sx];
         });
 
-    // ===== KIỂM TRA TRẠNG THÁI =====
+    // ===== KIá»‚M TRA TRáº NG THÃI =====
     
     $allSoDh = $data->pluck('So_dh')->unique();
     
-    // Kiểm tra có định mức (NX trong DataKetoanData)
+    // Kiá»ƒm tra cÃ³ Ä‘á»‹nh má»©c (NX trong DataKetoanData)
     $dinhMucStatus = DataKetoanData::select('So_dh')
         ->where('Ma_ct', 'NX')
         ->whereIn('So_dh', $allSoDh)
@@ -372,7 +245,7 @@ class TiviController extends Controller
         ->flip()
         ->toArray();
     
-    // Kiểm tra đã xuất vật tư (CK trong DataKetoan2025)
+    // Kiá»ƒm tra Ä‘Ã£ xuáº¥t váº­t tÆ° (CK trong DataKetoan2025)
     $xuatVatTuStatus = DataKetoan2025::select('So_dh')
         ->where('Ma_ct', 'CK')
         ->whereIn('So_dh', $allSoDh)
@@ -381,7 +254,7 @@ class TiviController extends Controller
         ->flip()
         ->toArray();
     
-    // Kiểm tra đã nhập kho (Ma_ko = 6 trong DataKetoanData)
+    // Kiá»ƒm tra Ä‘Ã£ nháº­p kho (Ma_ko = 6 trong DataKetoanData)
     $nhapKhoStatus = DataKetoanData::select('So_dh')
         ->where('Ma_ko', '06')
         ->whereIn('So_dh', $allSoDh)
@@ -390,7 +263,7 @@ class TiviController extends Controller
         ->flip()
         ->toArray();
     
-    // Kiểm tra đã xuất kho (Ma_ko = 9 trong DataKetoanData)
+    // Kiá»ƒm tra Ä‘Ã£ xuáº¥t kho (Ma_ko = 9 trong DataKetoanData)
     $xuatKhoStatus = DataKetoanData::select('So_dh')
         ->where('Ma_ko', '09')
         ->whereIn('So_dh', $allSoDh)
@@ -399,7 +272,7 @@ class TiviController extends Controller
         ->flip()
         ->toArray();
 
-    // ===== KIỂM TRA TỒN KHO (cd 09 - cd 06) =====
+    // ===== KIá»‚M TRA Tá»’N KHO (cd 09 - cd 06) =====
     $tonKho = DB::query()
         ->fromSub(
             DB::table('DataKetoanData')
@@ -427,10 +300,10 @@ class TiviController extends Controller
         ->get()
         ->keyBy('Ma_hh');
 
-    // ===== KIỂM TRA XUẤT DƯ VẬT TƯ (OPTIMIZED) =====
+    // ===== KIá»‚M TRA XUáº¤T DÆ¯ Váº¬T TÆ¯ (OPTIMIZED) =====
     $xuatDuVatTu = [];
     if ($allSoDh->isNotEmpty()) {
-        // 1. Lấy số lượng đơn cho tất cả các lệnh
+        // 1. Láº¥y sá»‘ lÆ°á»£ng Ä‘Æ¡n cho táº¥t cáº£ cÃ¡c lá»‡nh
         $soLuongDonMap = DB::table('DataKetoanData')
             ->where('Ma_ct', 'GO')
             ->whereIn('So_ct', $allSoDh)
@@ -438,7 +311,7 @@ class TiviController extends Controller
             ->select('So_ct', DB::raw('SUM(Soluong) as total_soluong'))
             ->pluck('total_soluong', 'So_ct');
 
-        // 2. Lấy định mức cho tất cả các lệnh
+        // 2. Láº¥y Ä‘á»‹nh má»©c cho táº¥t cáº£ cÃ¡c lá»‡nh
         $dinhMucData = DB::table('DataKetoanData')
             ->where('Ma_ct', 'NX')
             ->whereIn('So_dh', $allSoDh)
@@ -447,7 +320,7 @@ class TiviController extends Controller
             ->get()
             ->groupBy('So_dh');
 
-        // 3. Lấy đã xuất cho tất cả các lệnh
+        // 3. Láº¥y Ä‘Ã£ xuáº¥t cho táº¥t cáº£ cÃ¡c lá»‡nh
         $daXuatData = DB::table('DataKetoan2025')
             ->where('Ma_ct', 'CK')
             ->whereIn('So_dh', $allSoDh)
@@ -484,7 +357,7 @@ class TiviController extends Controller
         }
     }
     
-    // Tạo map trạng thái cho từng lệnh
+    // Táº¡o map tráº¡ng thÃ¡i cho tá»«ng lá»‡nh
     $statusMap = [];
     foreach ($allSoDh as $soDh) {
         $statusMap[$soDh] = [
@@ -504,7 +377,7 @@ class TiviController extends Controller
     ]);
 }
 
-    // API lọc dữ liệu theo DgiaiV (Phiếu chuyển kho nội bộ)
+    // API lá»c dá»¯ liá»‡u theo DgiaiV (Phiáº¿u chuyá»ƒn kho ná»™i bá»™)
     public function getDataByDgiaiV(Request $request)
     {
         $dgiaiV = $request->get('dgiaiV', '');
@@ -512,7 +385,7 @@ class TiviController extends Controller
         if (empty($dgiaiV)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Vui lòng nhập DgiaiV',
+                'message' => 'Vui lÃ²ng nháº­p DgiaiV',
                 'data' => []
             ]);
         }
@@ -529,8 +402,8 @@ class TiviController extends Controller
             ->orderBy('Ngay_ct')
             ->get()
             ->sortBy(function ($item) {
-                // Sắp xếp theo ngày từ DgiaiV (dd/mm/yyyy)
-                // Nếu không hợp lệ, xếp xuống cuối cùng
+                // Sáº¯p xáº¿p theo ngÃ y tá»« DgiaiV (dd/mm/yyyy)
+                // Náº¿u khÃ´ng há»£p lá»‡, xáº¿p xuá»‘ng cuá»‘i cÃ¹ng
                 if (empty($item->DgiaiV)) {
                     return '9999-12-31';
                 }
@@ -554,7 +427,7 @@ class TiviController extends Controller
         ]);
     }
 
-    // API hiển thị Tivi
+    // API hiá»ƒn thá»‹ Tivi
     public function getTiviData(Request $request)
     {
         $range = $request->get('range','7');
@@ -606,7 +479,7 @@ class TiviController extends Controller
         ]);
     }
 
-    // API lấy toàn bộ dữ liệu SX từ 2026-01-01 đến nay để làm nhập phiếu 
+    // API láº¥y toÃ n bá»™ dá»¯ liá»‡u SX tá»« 2026-01-01 Ä‘áº¿n nay Ä‘á»ƒ lÃ m nháº­p phiáº¿u 
     public function getAllSXData(Request $request)
     {
         try {
@@ -658,18 +531,18 @@ class TiviController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Lỗi: ' . $e->getMessage()
+                'message' => 'Lá»—i: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    // View hiển thị phân tích (NX)
+    // View hiá»ƒn thá»‹ phÃ¢n tÃ­ch (NX)
     public function viewNXData()
     {
         return view('Client.view-nx-data');
     }
 
-    // API lấy dữ liệu phân tích (NX - PHÂN TÍCH ĐỊNH MỨC)
+    // API láº¥y dá»¯ liá»‡u phÃ¢n tÃ­ch (NX - PHÃ‚N TÃCH Äá»ŠNH Má»¨C)
     public function getNXData(Request $request)
     {
         try {
@@ -712,7 +585,7 @@ class TiviController extends Controller
                 return $item;
             });
 
-            // Tính tổng định mức theo lệnh
+            // TÃ­nh tá»•ng Ä‘á»‹nh má»©c theo lá»‡nh
             $summaryBySoDh = $data->groupBy('So_dh')->map(function ($items) {
                 return [
                     'so_dh' => $items->first()->So_dh,
@@ -730,7 +603,7 @@ class TiviController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Lỗi: ' . $e->getMessage()
+                'message' => 'Lá»—i: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -738,7 +611,7 @@ class TiviController extends Controller
     public function exportTonKho(Request $request)
     {
         try {
-            // ===== KIỂM TRA TỒN KHO (cd 09 - cd 06) =====
+            // ===== KIá»‚M TRA Tá»’N KHO (cd 09 - cd 06) =====
             $tonKho = DB::query()
                 ->fromSub(
                     DB::table('DataKetoanData')
@@ -778,7 +651,7 @@ class TiviController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Lỗi: ' . $e->getMessage()
+                'message' => 'Lá»—i: ' . $e->getMessage()
             ], 500);
         }
     }

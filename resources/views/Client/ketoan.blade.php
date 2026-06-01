@@ -15,6 +15,7 @@
 </head>
 
 <body>
+    @include('layouts.partials.sidebar')
     <div class="container-fluid mt-4">
         <h3 class="mb-3">Bảng dữ liệu kế toán (rút gọn) - Phiên bản tối ưu</h3>
 

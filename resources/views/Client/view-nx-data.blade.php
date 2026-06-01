@@ -31,6 +31,7 @@
 </head>
 
 <body>
+    @include('layouts.partials.sidebar')
     <div class="container-fluid mt-4">
         <div class="row mb-3">
             <div class="col-12">

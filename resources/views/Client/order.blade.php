@@ -434,6 +434,7 @@
 </head>
 
 <body>
+    @include('layouts.partials.sidebar')
     <div class="page-wrapper">
         <div class="page-header">
             <div class="header-title">

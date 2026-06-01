@@ -40,6 +40,7 @@
 </head>
 
 <body>
+    @include('layouts.partials.sidebar')
     <div class="container-fluid mt-4">
         <h3 class="mb-4">BẢNG THEO DÕI LỆNH SẢN XUẤT TAGTIME</h3>
         <!-- Danh sách 10 thay đổi gần nhất -->
