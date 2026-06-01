@@ -214,4 +214,29 @@ class KeToanController extends Controller
             ],
         ]);
     }
+
+    public function getThanhPhamSuggestions(Request $request)
+    {
+        $keyword = trim((string) $request->query('keyword', ''));
+
+        if ($keyword === '') {
+            return response()->json(['data' => []]);
+        }
+
+        $data = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026 as d')
+            ->leftJoin('TSoft_NhanTG_kt_new.dbo.CodeHanghoa as c', 'd.Ma_sp', '=', 'c.Ma_hh')
+            ->where('d.Ma_ct', '=', 'NX')
+            ->whereNotNull('d.Ma_sp')
+            ->where(function ($query) use ($keyword) {
+                $query->where('d.Ma_sp', 'like', '%' . $keyword . '%')
+                    ->orWhere('c.Ten_hh', 'like', '%' . $keyword . '%');
+            })
+            ->select('d.Ma_sp', 'c.Ten_hh', 'c.Dvt')
+            ->distinct()
+            ->orderBy('d.Ma_sp')
+            ->limit(20)
+            ->get();
+
+        return response()->json(['data' => $data]);
+    }
 }

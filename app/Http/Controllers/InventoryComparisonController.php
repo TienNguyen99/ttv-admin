@@ -67,7 +67,25 @@ class InventoryComparisonController extends Controller
             ->get()
             ->groupBy(fn ($item) => $item->ma_sp . '|' . $item->ma_ko);
 
-        $data = $source->map(function ($item) use ($internal) {
+        $mapDetails = function ($details) {
+            return $details->map(function ($detail) {
+                return [
+                    'id' => $detail->id,
+                    'internal_item_code' => $detail->internal_item_code,
+                    'size' => $detail->size,
+                    'color' => $detail->color,
+                    'side' => $detail->side,
+                    'counted_quantity' => (float) $detail->counted_quantity,
+                    'note' => $detail->note,
+                ];
+            })->values();
+        };
+
+        $sourceKeys = $source->mapWithKeys(function ($item) {
+            return [$item->Ma_sp . '|' . $item->Ma_ko => true];
+        });
+
+        $data = $source->map(function ($item) use ($internal, $mapDetails) {
             $details = $internal->get($item->Ma_sp . '|' . $item->Ma_ko, collect());
             $countedQuantity = $details->isEmpty() ? null : (float) $details->sum('counted_quantity');
             $sourceQuantity = (float) $item->source_quantity;
@@ -82,19 +100,38 @@ class InventoryComparisonController extends Controller
                 'source_quantity' => $sourceQuantity,
                 'counted_quantity' => $countedQuantity,
                 'difference' => $countedQuantity === null ? null : $countedQuantity - $sourceQuantity,
-                'details' => $details->map(function ($detail) {
-                    return [
-                        'id' => $detail->id,
-                        'internal_item_code' => $detail->internal_item_code,
-                        'size' => $detail->size,
-                        'color' => $detail->color,
-                        'side' => $detail->side,
-                        'counted_quantity' => (float) $detail->counted_quantity,
-                        'note' => $detail->note,
-                    ];
-                })->values(),
+                'internal_only' => false,
+                'details' => $mapDetails($details),
             ];
         });
+
+        foreach ($internal as $key => $details) {
+            if ($sourceKeys->has($key)) {
+                continue;
+            }
+
+            [$maSp, $maKo] = array_pad(explode('|', $key, 2), 2, '');
+            $countedQuantity = (float) $details->sum('counted_quantity');
+
+            $data->push([
+                'ma_sp' => $maSp,
+                'ma_ko' => $maKo,
+                'ten_hh' => null,
+                'dvt' => null,
+                'tong_nhap' => 0,
+                'tong_xuat' => 0,
+                'source_quantity' => 0,
+                'counted_quantity' => $countedQuantity,
+                'difference' => $countedQuantity,
+                'internal_only' => true,
+                'details' => $mapDetails($details),
+            ]);
+        }
+
+        $data = $data->sortBy([
+            ['ma_sp', 'asc'],
+            ['ma_ko', 'asc'],
+        ])->values();
 
         return response()->json([
             'checked_at' => $checkedAt,
@@ -131,14 +168,14 @@ class InventoryComparisonController extends Controller
             [
                 'ma_sp' => $data['ma_sp'],
                 'ma_ko' => $data['ma_ko'],
+                'internal_item_code' => $data['internal_item_code'],
                 'size' => $data['size'],
                 'color' => $data['color'],
+                'side' => $data['side'],
                 'checked_at' => $data['checked_at'],
             ],
             [
                 'counted_quantity' => $data['counted_quantity'],
-                'internal_item_code' => $data['internal_item_code'],
-                'side' => $data['side'],
                 'note' => $data['note'] ?? null,
             ]
         );

@@ -24,6 +24,7 @@
                 <div class="text-muted">Kế toán lưu tổng. Nội bộ tách size, màu và cộng lại để đối chiếu.</div>
             </div>
             <div class="d-flex gap-2">
+                <span id="refreshStatus" class="align-self-center text-muted small"></span>
                 <button id="exportBtn" type="button" class="btn btn-success">Xuất Excel</button>
                 <button id="reloadBtn" type="button" class="btn btn-primary">Tải lại</button>
             </div>
@@ -117,7 +118,7 @@
             rowsEl.innerHTML = rows.filter(row => `${row.ma_sp} ${row.ma_ko} ${row.ten_hh || ''}`.toLowerCase().includes(keyword)).map(row => {
                 const differenceClass = row.difference === null || Number(row.difference) === 0 ? '' : 'text-danger fw-bold';
                 return `<tr>
-                    <td>${esc(row.ma_sp)}</td><td>${esc(row.ten_hh)}</td><td>${esc(row.ma_ko)}</td><td>${esc(row.dvt)}</td>
+                    <td>${esc(row.ma_sp)}${row.internal_only ? '<div><span class="badge text-bg-warning">Chỉ có nội bộ</span></div>' : ''}</td><td>${esc(row.ten_hh)}</td><td>${esc(row.ma_ko)}</td><td>${esc(row.dvt)}</td>
                     <td class="text-end">${num(row.tong_nhap)}</td><td class="text-end">${num(row.tong_xuat)}</td>
                     <td class="text-end">${num(row.source_quantity)}</td><td class="text-end">${num(row.counted_quantity)}</td>
                     <td class="text-end ${differenceClass}">${num(row.difference)}</td>
@@ -136,6 +137,7 @@
         }
 
         function loadData() {
+            document.getElementById('refreshStatus').textContent = 'Đang cập nhật...';
             fetch(`/api/doi-chieu-ton?checked_at=${encodeURIComponent(checkedAtEl.value)}`)
                 .then(response => { if (!response.ok) throw new Error('Không tải được dữ liệu'); return response.json(); })
                 .then(result => {
@@ -148,8 +150,12 @@
                         selectedRow = rows.find(row => rowKey(row) === rowKey(selectedRow));
                         if (selectedRow) renderDetails();
                     }
+                    document.getElementById('refreshStatus').textContent = `Cập nhật ${new Date().toLocaleTimeString('vi-VN')}`;
                 })
-                .catch(error => alert(error.message));
+                .catch(error => {
+                    document.getElementById('refreshStatus').textContent = 'Không cập nhật được';
+                    alert(error.message);
+                });
         }
 
         rowsEl.addEventListener('click', event => {
@@ -210,6 +216,9 @@
         checkedAtEl.addEventListener('change', loadData);
         keywordEl.addEventListener('input', renderRows);
         loadData();
+        setInterval(() => {
+            if (!document.hidden) loadData();
+        }, 10000);
     </script>
 </body>
 </html>
