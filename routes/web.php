@@ -131,9 +131,11 @@ Route::get('/get-khomuc', [QuyDoiMucController::class, 'getKhomuc'])->name('getK
 // DATABASE KE TOAN
 Route::get('/client/ketoan', [App\Http\Controllers\KeToanController::class, 'index']);
 Route::get('/client/ketoan-ton', [App\Http\Controllers\KeToanController::class, 'tonKho']);
+Route::get('/client/phieu-nhap-thanh-pham', [App\Http\Controllers\KeToanController::class, 'nhapThanhPham']);
 // API DATABASE KETOAN  
 Route::get('/api/ketoan-today', [App\Http\Controllers\KeToanController::class, 'getDataToday']);
 Route::get('/api/ketoan-ton', [App\Http\Controllers\KeToanController::class, 'getTonKho']);
+Route::get('/api/phieu-nhap-thanh-pham', [App\Http\Controllers\KeToanController::class, 'getNhapThanhPham']);
 
 
 // Route riêng dành cho tool Unipax

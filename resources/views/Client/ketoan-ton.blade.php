@@ -9,10 +9,7 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
     <style>
-        body {
-            background: #f6f7f9;
-        }
-
+        body { background: #f6f7f9; }
         .summary-card {
             background: #fff;
             border: 1px solid #e6e8ec;
@@ -20,17 +17,8 @@
             padding: 14px 16px;
             height: 100%;
         }
-
-        .summary-label {
-            color: #6c757d;
-            font-size: 0.875rem;
-        }
-
-        .summary-value {
-            font-size: 1.4rem;
-            font-weight: 700;
-        }
-
+        .summary-label { color: #6c757d; font-size: 0.875rem; }
+        .summary-value { font-size: 1.4rem; font-weight: 700; }
         .table-wrap {
             background: #fff;
             border: 1px solid #e6e8ec;
@@ -90,7 +78,18 @@
         </div>
 
         <div class="row g-3 mb-3">
-            <div class="col-md-4">
+            <div class="col-md-3">
+                <label for="fromDate" class="form-label">Từ ngày</label>
+                <input type="date" id="fromDate" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label for="toDate" class="form-label">Đến ngày</label>
+                <input type="date" id="toDate" class="form-control">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button id="clearDateBtn" type="button" class="btn btn-outline-secondary w-100">Tất cả ngày</button>
+            </div>
+            <div class="col-md-3">
                 <label for="filterStatus" class="form-label">Trạng thái tồn</label>
                 <select id="filterStatus" class="form-select">
                     <option value="">Tất cả</option>
@@ -147,9 +146,7 @@
         let statusFilter = '';
 
         function formatNumber(value) {
-            return Number(value || 0).toLocaleString('vi-VN', {
-                maximumFractionDigits: 2
-            });
+            return Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 });
         }
 
         function rawNumber(value) {
@@ -173,6 +170,18 @@
             if (statusFilter === 'zero') return ton === 0;
             return true;
         });
+
+        function buildApiUrl() {
+            const params = new URLSearchParams();
+            const fromDate = $('#fromDate').val();
+            const toDate = $('#toDate').val();
+
+            if (fromDate) params.set('from_date', fromDate);
+            if (toDate) params.set('to_date', toDate);
+
+            const query = params.toString();
+            return query ? `/api/ketoan-ton?${query}` : '/api/ketoan-ton';
+        }
 
         function updateSummary(summary) {
             $('#totalItems').text(formatNumber(summary.total_items));
@@ -205,7 +214,7 @@
         function loadData() {
             $('#reloadBtn').prop('disabled', true).text('Đang tải...');
 
-            fetch('/api/ketoan-ton')
+            fetch(buildApiUrl())
                 .then(response => response.json())
                 .then(result => {
                     updateSummary(result.summary || {});
@@ -215,9 +224,7 @@
                         dataTable = $('#ton-table').DataTable({
                             data: rows,
                             pageLength: 50,
-                            order: [
-                                [6, 'desc']
-                            ],
+                            order: [[6, 'desc']],
                             dom: 'Bfrtip',
                             buttons: [{
                                 extend: 'excelHtml5',
@@ -248,9 +255,7 @@
                                 const api = this.api();
                                 const sumColumn = function(index) {
                                     let total = 0;
-                                    api.column(index, {
-                                        search: 'applied'
-                                    }).data().each(function(value) {
+                                    api.column(index, { search: 'applied' }).data().each(function(value) {
                                         total += Number(value || 0);
                                     });
                                     return total;
@@ -287,6 +292,12 @@
         }
 
         $('#reloadBtn').on('click', loadData);
+        $('#fromDate, #toDate').on('change', loadData);
+        $('#clearDateBtn').on('click', function() {
+            $('#fromDate').val('');
+            $('#toDate').val('');
+            loadData();
+        });
         loadData();
     </script>
 </body>
