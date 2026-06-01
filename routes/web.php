@@ -14,6 +14,7 @@ use App\Http\Controllers\PhieuUnipax;
 use App\Http\Controllers\QuyDoiMucController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\Tool;
+use App\Http\Controllers\InventoryComparisonController;
 use Google\Service\Dfareporting\Order;
 
 
@@ -134,6 +135,10 @@ Route::get('/client/phieu-nhap-thanh-pham', [App\Http\Controllers\KeToanControll
 Route::get('/api/ketoan-today', [App\Http\Controllers\KeToanController::class, 'getDataToday']);
 Route::get('/api/ketoan-ton', [App\Http\Controllers\KeToanController::class, 'getTonKho']);
 Route::get('/api/phieu-nhap-thanh-pham', [App\Http\Controllers\KeToanController::class, 'getNhapThanhPham']);
+Route::get('/client/doi-chieu-ton', [InventoryComparisonController::class, 'index']);
+Route::get('/api/doi-chieu-ton', [InventoryComparisonController::class, 'data']);
+Route::post('/api/doi-chieu-ton', [InventoryComparisonController::class, 'store']);
+Route::delete('/api/doi-chieu-ton/{inventoryCount}', [InventoryComparisonController::class, 'destroy']);
 
 
 // Route riêng dành cho tool Unipax

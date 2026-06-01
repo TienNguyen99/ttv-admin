@@ -63,6 +63,22 @@ return [
             ]) : [],
         ],
 
+        'internal' => [
+            'driver' => 'mysql',
+            'host' => env('INTERNAL_DB_HOST', '127.0.0.1'),
+            'port' => env('INTERNAL_DB_PORT', '3306'),
+            'database' => env('INTERNAL_DB_DATABASE', 'ttv_internal'),
+            'username' => env('INTERNAL_DB_USERNAME', 'root'),
+            'password' => env('INTERNAL_DB_PASSWORD', ''),
+            'unix_socket' => env('INTERNAL_DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DATABASE_URL'),

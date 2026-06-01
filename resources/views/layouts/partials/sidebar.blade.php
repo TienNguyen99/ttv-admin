@@ -113,6 +113,7 @@
     <a class="summary-sidebar__link {{ request()->is('client/ketoan') ? 'is-active' : '' }}" href="{{ url('/client/ketoan') }}">Xuất kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/ketoan-ton') ? 'is-active' : '' }}" href="{{ url('/client/ketoan-ton') }}">Tồn mã hàng</a>
     <a class="summary-sidebar__link {{ request()->is('client/phieu-nhap-thanh-pham') ? 'is-active' : '' }}" href="{{ url('/client/phieu-nhap-thanh-pham') }}">Phiếu nhập TP</a>
+    <a class="summary-sidebar__link {{ request()->is('client/doi-chieu-ton') ? 'is-active' : '' }}" href="{{ url('/client/doi-chieu-ton') }}">Đối chiếu tồn</a>
 </aside>
 
 <script>
