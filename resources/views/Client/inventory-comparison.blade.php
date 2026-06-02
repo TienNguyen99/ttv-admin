@@ -25,6 +25,8 @@
             </div>
             <div class="d-flex gap-2">
                 <span id="refreshStatus" class="align-self-center text-muted small"></span>
+                <button id="missingReceiptBtn" type="button" class="btn btn-outline-warning">Xuất chưa có nhập <span id="missingReceiptBadge" class="badge text-bg-warning ms-1">0</span></button>
+                <a href="/client/phieu-nhap-thanh-pham" class="btn btn-outline-secondary">Phiếu nhập TP</a>
                 <button id="exportBtn" type="button" class="btn btn-success">Xuất Excel</button>
                 <button id="reloadBtn" type="button" class="btn btn-primary">Tải lại</button>
             </div>
@@ -97,6 +99,35 @@
         </div>
     </div>
 
+    <div class="modal fade" id="receiptModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title">Tạo phiếu nhập thành phẩm</h5>
+                        <div class="text-muted small">Phiếu nội bộ để in và bàn giao kế toán nhập phần mềm.</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Mã thành phẩm</label><input id="receiptMaSp" class="form-control" readonly></div>
+                    <div class="mb-3"><label class="form-label">Tên hàng</label><input id="receiptTenHh" class="form-control" readonly></div>
+                    <div class="row g-2">
+                        <div class="col-md-6"><label class="form-label">Kho nhận</label><input id="receiptMaKo" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">Ngày phiếu</label><input id="receiptDate" type="date" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">ĐVT</label><input id="receiptDvt" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">Số lượng nhập</label><input id="receiptQuantity" type="number" min="0.001" step="0.001" class="form-control"></div>
+                    </div>
+                    <div class="mt-3"><label class="form-label">Ghi chú</label><input id="receiptNote" class="form-control" maxlength="500" value="Bổ sung phiếu nhập theo rà soát xuất kho chưa có nhập."></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button id="createReceiptBtn" type="button" class="btn btn-primary">Tạo và in phiếu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
@@ -106,8 +137,11 @@
         const rowsEl = document.getElementById('comparisonRows');
         const detailRowsEl = document.getElementById('detailRows');
         const detailModal = new bootstrap.Modal('#detailModal');
+        const receiptModal = new bootstrap.Modal('#receiptModal');
         let rows = [];
         let selectedRow = null;
+        let receiptRow = null;
+        let missingReceiptOnly = false;
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => value === null || value === undefined ? '' : Number(value).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
@@ -115,14 +149,20 @@
 
         function renderRows() {
             const keyword = keywordEl.value.trim().toLowerCase();
-            rowsEl.innerHTML = rows.filter(row => `${row.ma_sp} ${row.ma_ko} ${row.ten_hh || ''}`.toLowerCase().includes(keyword)).map(row => {
+            rowsEl.innerHTML = rows.filter(row => {
+                if (missingReceiptOnly && !row.missing_receipt) return false;
+                return `${row.ma_sp} ${row.ma_ko} ${row.ten_hh || ''}`.toLowerCase().includes(keyword);
+            }).map(row => {
                 const differenceClass = row.difference === null || Number(row.difference) === 0 ? '' : 'text-danger fw-bold';
                 return `<tr>
-                    <td>${esc(row.ma_sp)}${row.internal_only ? '<div><span class="badge text-bg-warning">Chỉ có nội bộ</span></div>' : ''}</td><td>${esc(row.ten_hh)}</td><td>${esc(row.ma_ko)}</td><td>${esc(row.dvt)}</td>
+                    <td>${esc(row.ma_sp)}${row.internal_only ? '<div><span class="badge text-bg-warning">Chỉ có nội bộ</span></div>' : ''}${row.missing_receipt ? '<div><span class="badge text-bg-danger">Xuất chưa có nhập</span></div>' : ''}</td><td>${esc(row.ten_hh)}</td><td>${esc(row.ma_ko)}</td><td>${esc(row.dvt)}</td>
                     <td class="text-end">${num(row.tong_nhap)}</td><td class="text-end">${num(row.tong_xuat)}</td>
                     <td class="text-end">${num(row.source_quantity)}</td><td class="text-end">${num(row.counted_quantity)}</td>
                     <td class="text-end ${differenceClass}">${num(row.difference)}</td>
-                    <td><button class="btn btn-sm btn-outline-primary detail-btn" data-key="${esc(rowKey(row))}">Chi tiết</button></td>
+                    <td class="text-nowrap">
+                        ${row.missing_receipt ? `<button class="btn btn-sm btn-outline-danger receipt-btn" data-key="${esc(rowKey(row))}">Tạo phiếu nhập</button>` : ''}
+                        <button class="btn btn-sm btn-outline-primary detail-btn" data-key="${esc(rowKey(row))}">Chi tiết</button>
+                    </td>
                 </tr>`;
             }).join('');
         }
@@ -145,6 +185,7 @@
                     document.getElementById('totalItems').textContent = num(result.summary?.total_items || 0);
                     document.getElementById('checkedItems').textContent = num(result.summary?.checked_items || 0);
                     document.getElementById('differentItems').textContent = num(result.summary?.different_items || 0);
+                    document.getElementById('missingReceiptBadge').textContent = num(result.summary?.missing_receipt_items || 0);
                     renderRows();
                     if (selectedRow) {
                         selectedRow = rows.find(row => rowKey(row) === rowKey(selectedRow));
@@ -159,11 +200,46 @@
         }
 
         rowsEl.addEventListener('click', event => {
+            const receiptButton = event.target.closest('.receipt-btn');
+            if (receiptButton) {
+                receiptRow = rows.find(row => rowKey(row) === receiptButton.dataset.key);
+                document.getElementById('receiptMaSp').value = receiptRow.ma_sp || '';
+                document.getElementById('receiptTenHh').value = receiptRow.ten_hh || '';
+                document.getElementById('receiptMaKo').value = receiptRow.ma_ko || '';
+                document.getElementById('receiptDvt').value = receiptRow.dvt || '';
+                document.getElementById('receiptQuantity').value = receiptRow.tong_xuat || '';
+                document.getElementById('receiptDate').value = new Date().toISOString().slice(0, 10);
+                receiptModal.show();
+                return;
+            }
             const button = event.target.closest('.detail-btn');
             if (!button) return;
             selectedRow = rows.find(row => rowKey(row) === button.dataset.key);
             renderDetails();
             detailModal.show();
+        });
+
+        document.getElementById('createReceiptBtn').addEventListener('click', () => {
+            if (!receiptRow) return;
+            fetch('/api/phieu-nhap-thanh-pham-noi-bo', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({
+                    receipt_date: document.getElementById('receiptDate').value,
+                    ma_sp: document.getElementById('receiptMaSp').value,
+                    ma_ko: document.getElementById('receiptMaKo').value,
+                    ten_hh: document.getElementById('receiptTenHh').value,
+                    dvt: document.getElementById('receiptDvt').value,
+                    quantity: document.getElementById('receiptQuantity').value,
+                    note: document.getElementById('receiptNote').value
+                })
+            }).then(response => {
+                if (!response.ok) return response.json().then(result => { throw new Error(result.message || 'Không tạo được phiếu nhập'); });
+                return response.json();
+            }).then(result => {
+                receiptModal.hide();
+                window.open(result.print_url, '_blank');
+            }).catch(error => alert(error.message));
         });
 
         document.getElementById('addDetailBtn').addEventListener('click', () => {
@@ -213,6 +289,12 @@
         });
 
         document.getElementById('reloadBtn').addEventListener('click', loadData);
+        document.getElementById('missingReceiptBtn').addEventListener('click', function() {
+            missingReceiptOnly = !missingReceiptOnly;
+            this.classList.toggle('btn-warning', missingReceiptOnly);
+            this.classList.toggle('btn-outline-warning', !missingReceiptOnly);
+            renderRows();
+        });
         checkedAtEl.addEventListener('change', loadData);
         keywordEl.addEventListener('input', renderRows);
         loadData();

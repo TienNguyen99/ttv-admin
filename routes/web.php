@@ -16,6 +16,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\Tool;
 use App\Http\Controllers\InventoryComparisonController;
 use App\Http\Controllers\WarehouseCountController;
+use App\Http\Controllers\InternalFinishedGoodsReceiptController;
 use Google\Service\Dfareporting\Order;
 
 
@@ -141,10 +142,13 @@ Route::get('/client/doi-chieu-ton', [InventoryComparisonController::class, 'inde
 Route::get('/api/doi-chieu-ton', [InventoryComparisonController::class, 'data']);
 Route::post('/api/doi-chieu-ton', [InventoryComparisonController::class, 'store']);
 Route::delete('/api/doi-chieu-ton/{inventoryCount}', [InventoryComparisonController::class, 'destroy']);
+Route::post('/api/phieu-nhap-thanh-pham-noi-bo', [InternalFinishedGoodsReceiptController::class, 'store']);
+Route::get('/client/phieu-nhap-thanh-pham-noi-bo/{receipt}/in', [InternalFinishedGoodsReceiptController::class, 'print']);
 Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
 Route::get('/client/kiem-ton-kho/vi-tri/{warehouseLocation}', [WarehouseCountController::class, 'showLocation']);
 Route::get('/api/kiem-ton-kho/vi-tri', [WarehouseCountController::class, 'locations']);
 Route::post('/api/kiem-ton-kho/vi-tri', [WarehouseCountController::class, 'storeLocation']);
+Route::delete('/api/kiem-ton-kho/vi-tri/{warehouseLocation}', [WarehouseCountController::class, 'destroyLocation']);
 Route::get('/api/kiem-ton-kho/kien', [WarehouseCountController::class, 'packages']);
 Route::post('/api/kiem-ton-kho/kien', [WarehouseCountController::class, 'storePackage']);
 Route::delete('/api/kiem-ton-kho/kien/{inventoryPackage}', [WarehouseCountController::class, 'destroyPackage']);

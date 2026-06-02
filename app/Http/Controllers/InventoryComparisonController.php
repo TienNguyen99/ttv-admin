@@ -89,6 +89,7 @@ class InventoryComparisonController extends Controller
             $details = $internal->get($item->Ma_sp . '|' . $item->Ma_ko, collect());
             $countedQuantity = $details->isEmpty() ? null : (float) $details->sum('counted_quantity');
             $sourceQuantity = (float) $item->source_quantity;
+            $missingReceipt = (float) $item->tong_xuat > 0 && (float) $item->tong_nhap <= 0;
 
             return [
                 'ma_sp' => $item->Ma_sp,
@@ -100,6 +101,7 @@ class InventoryComparisonController extends Controller
                 'source_quantity' => $sourceQuantity,
                 'counted_quantity' => $countedQuantity,
                 'difference' => $countedQuantity === null ? null : $countedQuantity - $sourceQuantity,
+                'missing_receipt' => $missingReceipt,
                 'internal_only' => false,
                 'details' => $mapDetails($details),
             ];
@@ -123,6 +125,7 @@ class InventoryComparisonController extends Controller
                 'source_quantity' => 0,
                 'counted_quantity' => $countedQuantity,
                 'difference' => $countedQuantity,
+                'missing_receipt' => false,
                 'internal_only' => true,
                 'details' => $mapDetails($details),
             ]);
@@ -140,6 +143,7 @@ class InventoryComparisonController extends Controller
                 'total_items' => $data->count(),
                 'checked_items' => $data->whereNotNull('counted_quantity')->count(),
                 'different_items' => $data->where('difference', '!=', 0)->count(),
+                'missing_receipt_items' => $data->where('missing_receipt', true)->count(),
             ],
         ]);
     }

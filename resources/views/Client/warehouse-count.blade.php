@@ -43,7 +43,20 @@
         .product-option:hover, .product-option:focus { background: #eff6ff; outline: 0; }
         .product-option-code { color: #1d4ed8; font-size: 13px; font-weight: 700; }
         .product-option-name { color: var(--muted); font-size: 12px; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+        .kpi-item { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+        .kpi-icon { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 7px; background: #eff6ff; color: #1d4ed8; }
+        .kpi-icon svg { width: 18px; height: 18px; }
+        .kpi-value { font-size: 19px; font-weight: 800; line-height: 1; }
+        .kpi-label { margin-top: 4px; color: var(--muted); font-size: 12px; }
+        .view-tabs { display: flex; gap: 4px; margin-bottom: 14px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+        .view-tab { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 7px 11px; border: 0; border-radius: 5px; background: transparent; color: #475569; font-size: 13px; font-weight: 700; }
+        .view-tab svg { width: 16px; height: 16px; }
+        .view-tab:hover { background: #f8fafc; }
+        .view-tab.is-active { background: #eff6ff; color: #1d4ed8; }
+        .section-hint { color: var(--muted); font-size: 12px; }
         @media (max-width: 1100px) { .workspace-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 700px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .view-tabs { overflow-x: auto; } .view-tab { white-space: nowrap; } }
         @media (max-width: 991.98px) { .page-shell { padding: 62px 12px 16px; } }
     </style>
 </head>
@@ -52,11 +65,21 @@
     <main class="page-shell">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
             <div>
-                <h1 class="page-title mb-1">Kiểm tồn kho</h1>
-                <div class="page-subtitle">Quét vị trí, ghi nhận kiện và kiểm tra hàng đang chứa.</div>
+                <h1 class="page-title mb-1">Quản lý kho</h1>
+                <div class="page-subtitle">Theo dõi vị trí, ghi nhận kiện và kiểm soát tồn nội bộ.</div>
             </div>
-            <button type="button" class="btn btn-primary btn-icon" onclick="openLocationModal()"><i data-lucide="map-pin-plus"></i>Thêm vị trí</button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-primary btn-icon" onclick="openLocationModal()"><i data-lucide="map-pin-plus"></i>Thêm vị trí</button>
+                <button type="button" class="btn btn-primary btn-icon" onclick="switchWorkspace('entry')"><i data-lucide="package-plus"></i>Ghi nhận kiện</button>
+            </div>
         </div>
+
+        <section class="kpi-grid">
+            <div class="kpi-item"><div class="kpi-icon"><i data-lucide="map-pinned"></i></div><div><div id="kpiLocations" class="kpi-value">0</div><div class="kpi-label">Vị trí kho</div></div></div>
+            <div class="kpi-item"><div class="kpi-icon"><i data-lucide="scan-line"></i></div><div><div id="kpiCountingLocations" class="kpi-value">0</div><div class="kpi-label">Vị trí đang kiểm</div></div></div>
+            <div class="kpi-item"><div class="kpi-icon"><i data-lucide="package-check"></i></div><div><div id="kpiPackages" class="kpi-value">0</div><div class="kpi-label">Kiện trong ngày</div></div></div>
+            <div class="kpi-item"><div class="kpi-icon"><i data-lucide="boxes"></i></div><div><div id="kpiQuantity" class="kpi-value">0</div><div class="kpi-label">Số lượng trong ngày</div></div></div>
+        </section>
 
         <section class="panel context-bar mb-3">
             <div class="row g-2 align-items-end">
@@ -68,7 +91,13 @@
             <datalist id="locationOptions"></datalist>
         </section>
 
-        <div class="workspace-grid mb-3">
+        <nav class="view-tabs" aria-label="Khu vực quản lý kho">
+            <button type="button" class="view-tab is-active" data-workspace-view="overview" onclick="switchWorkspace('overview')"><i data-lucide="layout-dashboard"></i>Tổng quan vị trí</button>
+            <button type="button" class="view-tab" data-workspace-view="entry" onclick="switchWorkspace('entry')"><i data-lucide="package-plus"></i>Ghi nhận kiện</button>
+            <button type="button" class="view-tab" data-workspace-view="history" onclick="switchWorkspace('history')"><i data-lucide="history"></i>Lịch sử kiện</button>
+        </nav>
+
+        <div id="overviewPanel" data-workspace-panel="overview" class="workspace-grid mb-3">
             <section class="panel">
                 <div class="panel-header">
                     <h2 class="panel-title">Danh sách vị trí</h2>
@@ -97,8 +126,8 @@
             </section>
         </div>
 
-        <section class="panel mb-3">
-            <div class="panel-header"><h2 class="panel-title">Ghi nhận kiện hàng</h2></div>
+        <section id="entryPanel" data-workspace-panel="entry" class="panel mb-3 d-none">
+            <div class="panel-header"><div><h2 class="panel-title">Ghi nhận kiện hàng</h2><div id="entryLocationContext" class="section-hint mt-1">Chọn vị trí đang kiểm trước khi nhập kiện.</div></div></div>
             <div class="panel-body"><div class="row g-2">
                 <div class="col-md-3 product-search"><label class="form-label">Mã TP kế toán</label><input id="maSp" class="form-control" autocomplete="off" placeholder="Gõ mã hoặc tên hàng"><div id="maSpResults" class="product-results d-none"></div></div>
                 <div class="col-md-3"><label class="form-label">Mã hàng nội bộ</label><input id="internalItemCode" class="form-control"></div>
@@ -111,7 +140,7 @@
             </div></div>
         </section>
 
-        <section class="panel">
+        <section id="historyPanel" data-workspace-panel="history" class="panel d-none">
             <div class="panel-header"><h2 class="panel-title">Kiện vừa nhập</h2></div>
             <div class="table-responsive">
                 <table class="table align-middle">
@@ -135,6 +164,7 @@
                     <div id="locationSaveStatus" class="small text-muted"></div>
                 </div>
                 <div class="modal-footer">
+                    <button id="deleteLocationBtn" type="button" class="btn btn-outline-danger btn-icon me-auto d-none"><i data-lucide="trash-2"></i>Xóa vị trí</button>
                     <button id="useLocationBtn" type="button" class="btn btn-outline-primary btn-icon"><i data-lucide="package-plus"></i>Nhập hàng tại vị trí này</button>
                     <button id="printLocationBtn" type="button" class="btn btn-outline-secondary btn-icon"><i data-lucide="printer"></i>In tem QR</button>
                     <button id="saveLocationBtn" type="button" class="btn btn-primary btn-icon"><i data-lucide="save"></i>Lưu vị trí</button>
@@ -149,11 +179,26 @@
         const value = id => document.getElementById(id).value.trim();
         const locationModal = new bootstrap.Modal(document.getElementById('locationModal'));
         let locations = [];
+        let editingLocationId = null;
         let selectedAccountingProduct = '';
         let productSearchTimer;
 
         function refreshIcons() {
             if (window.lucide) lucide.createIcons();
+        }
+
+        function formatNumber(value) {
+            return Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
+        }
+
+        function switchWorkspace(view) {
+            document.querySelectorAll('[data-workspace-panel]').forEach(panel => {
+                panel.classList.toggle('d-none', panel.dataset.workspacePanel !== view);
+            });
+            document.querySelectorAll('[data-workspace-view]').forEach(tab => {
+                tab.classList.toggle('is-active', tab.dataset.workspaceView === view);
+            });
+            if (view === 'entry') document.getElementById('maSp').focus();
         }
 
         function escapeHtml(text) {
@@ -209,6 +254,7 @@
             if (!location) return;
             document.getElementById('locationCode').value = location.location_code;
             document.getElementById('warehouseCode').value = location.warehouse_code || '';
+            document.getElementById('entryLocationContext').textContent = `Đang nhập tại ${location.location_code} · Kho ${location.warehouse_code || '-'}`;
         }
 
         function setLocationStatus(message, isError = false) {
@@ -230,8 +276,18 @@
                 locations = result.data || [];
                 document.getElementById('locationOptions').innerHTML = locations.map(x => `<option value="${x.location_code}">${x.location_name || ''}</option>`).join('');
                 document.getElementById('locationCount').textContent = `${locations.length} vị trí`;
+                document.getElementById('kpiLocations').textContent = formatNumber(locations.length);
+                document.getElementById('kpiCountingLocations').textContent = formatNumber(locations.filter(x => x.status === 'counting').length);
                 renderLocations();
                 fillSelectedLocation();
+            });
+        }
+
+        function loadWarehouseStats() {
+            const params = new URLSearchParams({ checked_at: value('checkedAt') });
+            return fetch(`/api/kiem-ton-kho/kien?${params}`).then(r => r.json()).then(result => {
+                document.getElementById('kpiPackages').textContent = formatNumber(result.summary?.package_count);
+                document.getElementById('kpiQuantity').textContent = formatNumber(result.summary?.total_quantity);
             });
         }
 
@@ -263,9 +319,14 @@
 
         function openLocationModal(locationCode = '') {
             const location = locations.find(item => item.location_code === locationCode) || selectedLocation();
+            editingLocationId = location?.id || null;
+            document.getElementById('locationModalTitle').textContent = location ? 'Chỉnh sửa vị trí kho' : 'Thêm vị trí kho';
             document.getElementById('editLocationCode').value = location?.location_code || '';
             document.getElementById('editWarehouseCode').value = location?.warehouse_code || value('warehouseCode');
             document.getElementById('editLocationName').value = location?.location_name || '';
+            document.getElementById('deleteLocationBtn').classList.toggle('d-none', !location);
+            document.getElementById('useLocationBtn').classList.toggle('d-none', !location);
+            document.getElementById('printLocationBtn').classList.toggle('d-none', !location);
             setLocationStatus('');
             locationModal.show();
         }
@@ -323,6 +384,27 @@
                   document.getElementById('warehouseCode').value = result.data.warehouse_code || '';
                   loadLocations();
                   loadPackages();
+                  loadWarehouseStats();
+                  loadLocationContents();
+              }).catch(e => { setLocationStatus(e.message, true); alert(e.message); });
+        });
+
+        document.getElementById('deleteLocationBtn').addEventListener('click', () => {
+            const code = value('editLocationCode').toUpperCase();
+            if (!editingLocationId || !confirm(`Xóa vị trí ${code}?`)) return;
+            fetch(`/api/kiem-ton-kho/vi-tri/${editingLocationId}`, {
+                method: 'DELETE', headers: {'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
+            }).then(r => jsonOrError(r, 'Không xóa được vị trí'))
+              .then(() => {
+                  if (value('locationCode').toUpperCase() === code) {
+                      document.getElementById('locationCode').value = '';
+                      document.getElementById('warehouseCode').value = '';
+                  }
+                  editingLocationId = null;
+                  locationModal.hide();
+                  loadLocations();
+                  loadPackages();
+                  loadWarehouseStats();
                   loadLocationContents();
               }).catch(e => { setLocationStatus(e.message, true); alert(e.message); });
         });
@@ -343,6 +425,8 @@
                   window.open(result.print_url, '_blank');
                   ['internalItemCode','size','color','side','quantity','note'].forEach(id => document.getElementById(id).value = '');
                   loadPackages();
+                  loadLocations();
+                  loadWarehouseStats();
                   loadLocationContents();
               }).catch(e => alert(e.message));
         });
@@ -353,7 +437,7 @@
             fetch(`/api/kiem-ton-kho/kien/${button.dataset.id}`, {
                 method: 'DELETE', headers: {'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
             }).then(r => jsonOrError(r, 'Không xóa được kiện'))
-              .then(() => { loadPackages(); loadLocationContents(); })
+              .then(() => { loadPackages(); loadLocations(); loadWarehouseStats(); loadLocationContents(); })
               .catch(e => alert(e.message));
         });
 
@@ -369,7 +453,7 @@
             if (!location) return alert('Lưu vị trí trước khi nhập hàng.');
             selectLocation(location.location_code);
             locationModal.hide();
-            document.getElementById('internalItemCode').focus();
+            switchWorkspace('entry');
         });
         document.getElementById('locationCode').addEventListener('change', () => { fillSelectedLocation(); renderLocations(); loadPackages(); loadLocationContents(); });
         document.getElementById('locationSearch').addEventListener('input', renderLocations);
@@ -377,10 +461,10 @@
         document.addEventListener('click', event => {
             if (!event.target.closest('.product-search')) hideProductResults();
         });
-        document.getElementById('checkedAt').addEventListener('change', () => { loadPackages(); loadLocationContents(); });
+        document.getElementById('checkedAt').addEventListener('change', () => { loadPackages(); loadWarehouseStats(); loadLocationContents(); });
         const requestedLocation = new URLSearchParams(window.location.search).get('location_code');
         if (requestedLocation) document.getElementById('locationCode').value = requestedLocation.toUpperCase();
-        loadLocations().then(() => { loadPackages(); loadLocationContents(); });
+        loadLocations().then(() => { loadPackages(); loadWarehouseStats(); loadLocationContents(); });
         refreshIcons();
     </script>
 </body>

@@ -53,6 +53,21 @@ class WarehouseCountController extends Controller
         return response()->json(['data' => $location]);
     }
 
+    public function destroyLocation(WarehouseLocation $warehouseLocation)
+    {
+        if (InventoryPackage::query()->where('warehouse_location_id', $warehouseLocation->id)->exists()) {
+            return response()->json([
+                'message' => 'Vị trí còn kiện hàng. Xóa các kiện trong vị trí trước khi xóa vị trí.',
+            ], 422);
+        }
+
+        $warehouseLocation->delete();
+
+        return response()->json([
+            'message' => 'Đã xóa vị trí kho.',
+        ]);
+    }
+
     public function packages(Request $request)
     {
         $query = InventoryPackage::query()
@@ -69,7 +84,15 @@ class WarehouseCountController extends Controller
             $query->whereDate('checked_at', $request->query('checked_at'));
         }
 
-        return response()->json(['data' => $query->limit(100)->get()]);
+        $summaryQuery = clone $query;
+
+        return response()->json([
+            'data' => $query->limit(100)->get(),
+            'summary' => [
+                'package_count' => $summaryQuery->count(),
+                'total_quantity' => (float) (clone $summaryQuery)->sum('quantity'),
+            ],
+        ]);
     }
 
     public function locationContents(Request $request)
