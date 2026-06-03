@@ -46,9 +46,10 @@
         </div>
 
         <div class="row g-3 mb-3">
-            <div class="col-md-4"><div class="panel"><div class="text-muted">Tổng mã theo kho</div><div id="totalItems" class="metric">0</div></div></div>
-            <div class="col-md-4"><div class="panel"><div class="text-muted">Đã kiểm kê</div><div id="checkedItems" class="metric text-success">0</div></div></div>
-            <div class="col-md-4"><div class="panel"><div class="text-muted">Có chênh lệch</div><div id="differentItems" class="metric text-danger">0</div></div></div>
+            <div class="col-md-3"><div class="panel"><div class="text-muted">Mã hàng duy nhất</div><div id="uniqueItems" class="metric">0</div></div></div>
+            <div class="col-md-3"><div class="panel"><div class="text-muted">Dòng mã + kho</div><div id="totalItems" class="metric">0</div></div></div>
+            <div class="col-md-3"><div class="panel"><div class="text-muted">Đã kiểm kê</div><div id="checkedItems" class="metric text-success">0</div></div></div>
+            <div class="col-md-3"><div class="panel"><div class="text-muted">Có chênh lệch</div><div id="differentItems" class="metric text-danger">0</div></div></div>
         </div>
 
         <div class="panel">
@@ -182,6 +183,7 @@
                 .then(response => { if (!response.ok) throw new Error('Không tải được dữ liệu'); return response.json(); })
                 .then(result => {
                     rows = result.data || [];
+                    document.getElementById('uniqueItems').textContent = num(result.summary?.unique_items || 0);
                     document.getElementById('totalItems').textContent = num(result.summary?.total_items || 0);
                     document.getElementById('checkedItems').textContent = num(result.summary?.checked_items || 0);
                     document.getElementById('differentItems').textContent = num(result.summary?.different_items || 0);

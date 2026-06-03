@@ -166,7 +166,8 @@ class KeToanController extends Controller
                     ->orWhere('d.Chungtu', 'like', '%' . $keyword . '%')
                     ->orWhere('d.Ma_vv', 'like', '%' . $keyword . '%')
                     ->orWhere('d.Ma_sp', 'like', '%' . $keyword . '%')
-                    ->orWhere('d.Ma_ko', 'like', '%' . $keyword . '%');
+                    ->orWhere('d.Ma_ko', 'like', '%' . $keyword . '%')
+                    ->orWhere('d.Ma3ko', 'like', '%' . $keyword . '%');
             });
         }
 

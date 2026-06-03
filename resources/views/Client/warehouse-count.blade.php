@@ -55,7 +55,80 @@
         .view-tab:hover { background: #f8fafc; }
         .view-tab.is-active { background: #eff6ff; color: #1d4ed8; }
         .section-hint { color: var(--muted); font-size: 12px; }
+        .warehouse-map { padding: 14px; overflow-x: auto; }
+        .warehouse-blueprint { position: relative; min-width: 980px; padding: 12px 14px 14px; border: 2px solid #cbd5e1; border-radius: 8px; background: #fff; }
+        .blueprint-title { margin: 0 0 10px; text-align: center; color: #334155; font-size: 22px; font-weight: 900; letter-spacing: 0.06em; }
+        .blueprint-top { display: grid; grid-template-columns: 118px 1fr 360px; gap: 10px; margin-bottom: 8px; }
+        .blueprint-main { display: grid; grid-template-columns: 96px minmax(0, 1fr) 96px; gap: 10px; }
+        .blueprint-bottom { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; }
+        .zone-box { display: grid; min-height: 46px; place-items: center; padding: 6px; border: 1px solid #94a3b8; background: rgba(248, 250, 252, 0.85); color: #334155; font-size: 11px; font-weight: 800; text-align: center; text-transform: uppercase; }
+        .zone-stack { display: grid; align-content: space-between; gap: 10px; }
+        .aisle-column { position: relative; min-height: 100%; border-left: 1px dashed #cbd5e1; border-right: 1px dashed #cbd5e1; }
+        .aisle-column::before, .aisle-column::after { position: absolute; left: 50%; transform: translateX(-50%); color: #475569; font-size: 38px; font-weight: 900; line-height: 1; }
+        .aisle-column::before { content: "↓"; top: 12px; }
+        .aisle-column::after { content: "↓"; bottom: 12px; }
+        .shelf-area { display: grid; gap: 8px; }
+        .shelf-row { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px; align-items: stretch; }
+        .shelf-label { display: flex; flex-direction: column; justify-content: center; padding: 10px; border: 1px solid #94a3b8; border-radius: 0; background: rgba(248, 250, 252, 0.9); }
+        .shelf-code { font-size: 18px; font-weight: 900; }
+        .shelf-name { color: var(--muted); font-size: 12px; }
+        .shelf-lanes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .shelf-tier { min-height: 132px; border: 1px solid #94a3b8; border-radius: 0; background: rgba(255, 255, 255, 0.95); }
+        .shelf-tier-title { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 7px 34px; border-bottom: 1px solid #edf2f7; color: #475569; font-size: 12px; font-weight: 800; }
+        .shelf-tier-title::before { content: "←"; position: absolute; left: 10px; top: 4px; color: #475569; font-size: 18px; }
+        .shelf-tier-title::after { content: "→"; position: absolute; right: 10px; top: 4px; color: #475569; font-size: 18px; }
+        .shelf-tier-body { display: grid; gap: 8px; padding: 8px; }
+        .map-card { border: 1px solid var(--line); border-radius: 8px; background: #fff; overflow: hidden; }
+        .map-card.is-selected { border-color: #93c5fd; box-shadow: 0 0 0 3px #dbeafe; }
+        .map-card.is-drop-target { border-color: #22c55e; box-shadow: 0 0 0 3px #dcfce7; }
+        .map-card-header { display: flex; justify-content: space-between; gap: 10px; padding: 9px; border-bottom: 1px solid #edf2f7; background: #f8fafc; }
+        .map-card-code { font-size: 14px; font-weight: 800; }
+        .map-card-name { margin-top: 2px; color: var(--muted); font-size: 11px; }
+        .map-card-summary { color: #1d4ed8; font-size: 11px; font-weight: 700; white-space: nowrap; }
+        .map-package-list { display: grid; gap: 7px; min-height: 54px; padding: 8px; }
+        .map-package { cursor: grab; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; }
+        .map-package:active { cursor: grabbing; }
+        .map-package-code { color: #0f172a; font-size: 12px; font-weight: 800; overflow-wrap: anywhere; }
+        .map-package-meta { margin-top: 2px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+        .map-empty { display: grid; min-height: 80px; place-items: center; color: #94a3b8; font-size: 12px; }
+        .shelf-empty { padding: 16px 8px; color: #94a3b8; font-size: 12px; text-align: center; }
+        .layout-editor-wrap { padding: 14px; overflow: auto; }
+        .layout-editor {
+            position: relative;
+            display: grid;
+            grid-template-columns: repeat(24, 40px);
+            grid-template-rows: repeat(24, 32px);
+            width: 960px;
+            min-height: 768px;
+            border: 1px solid #94a3b8;
+            background-image:
+                linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+                linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+            background-size: 40px 32px;
+            background-color: #fff;
+        }
+        .layout-block {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-width: 0;
+            padding: 7px 8px;
+            border: 1px solid #2563eb;
+            border-radius: 6px;
+            background: #eff6ff;
+            color: #1e3a8a;
+            cursor: move;
+            user-select: none;
+            box-shadow: 0 3px 8px rgba(37, 99, 235, 0.12);
+        }
+        .layout-block.is-dragging { opacity: 0.72; z-index: 5; }
+        .layout-block-code { font-size: 13px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .layout-block-meta { margin-top: 2px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .layout-help { color: var(--muted); font-size: 12px; }
         @media (max-width: 1100px) { .workspace-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 900px) { .shelf-row { grid-template-columns: 1fr; } .shelf-lanes { grid-template-columns: 1fr; } }
         @media (max-width: 700px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .view-tabs { overflow-x: auto; } .view-tab { white-space: nowrap; } }
         @media (max-width: 991.98px) { .page-shell { padding: 62px 12px 16px; } }
     </style>
@@ -92,12 +165,30 @@
         </section>
 
         <nav class="view-tabs" aria-label="Khu vực quản lý kho">
-            <button type="button" class="view-tab is-active" data-workspace-view="overview" onclick="switchWorkspace('overview')"><i data-lucide="layout-dashboard"></i>Tổng quan vị trí</button>
+            <button type="button" class="view-tab is-active" data-workspace-view="map" onclick="switchWorkspace('map')"><i data-lucide="map"></i>Sơ đồ kho</button>
+            <button type="button" class="view-tab" data-workspace-view="editor" onclick="switchWorkspace('editor')"><i data-lucide="grid-3x3"></i>Editor layout</button>
+            <button type="button" class="view-tab" data-workspace-view="overview" onclick="switchWorkspace('overview')"><i data-lucide="layout-dashboard"></i>Tổng quan vị trí</button>
             <button type="button" class="view-tab" data-workspace-view="entry" onclick="switchWorkspace('entry')"><i data-lucide="package-plus"></i>Ghi nhận kiện</button>
             <button type="button" class="view-tab" data-workspace-view="history" onclick="switchWorkspace('history')"><i data-lucide="history"></i>Lịch sử kiện</button>
         </nav>
 
-        <div id="overviewPanel" data-workspace-panel="overview" class="workspace-grid mb-3">
+        <section id="mapPanel" data-workspace-panel="map" class="panel mb-3">
+            <div class="panel-header">
+                <div><h2 class="panel-title">Sơ đồ kho kéo thả</h2><div class="section-hint mt-1">Kéo kiện sang kệ khác để chuyển vị trí trong database nội bộ.</div></div>
+                <input id="mapSearch" class="form-control" style="max-width:280px" placeholder="Tìm kệ hoặc mã kiện">
+            </div>
+            <div id="warehouseMap" class="warehouse-map"></div>
+        </section>
+
+        <section id="editorPanel" data-workspace-panel="editor" class="panel mb-3 d-none">
+            <div class="panel-header">
+                <div><h2 class="panel-title">Editor sơ đồ kho</h2><div class="layout-help mt-1">Kéo vị trí trên lưới để tự dựng mặt bằng. Thả chuột là lưu vào database nội bộ.</div></div>
+                <button type="button" class="btn btn-outline-primary btn-icon" onclick="renderLayoutEditor()"><i data-lucide="refresh-cw"></i>Tải lại</button>
+            </div>
+            <div class="layout-editor-wrap"><div id="layoutEditor" class="layout-editor"></div></div>
+        </section>
+
+        <div id="overviewPanel" data-workspace-panel="overview" class="workspace-grid mb-3 d-none">
             <section class="panel">
                 <div class="panel-header">
                     <h2 class="panel-title">Danh sách vị trí</h2>
@@ -160,6 +251,11 @@
                 <div class="modal-body">
                     <div class="mb-3"><label class="form-label">Vị trí kho</label><input id="editLocationCode" class="form-control" placeholder="TP-A01-T01-O01"></div>
                     <div class="mb-3"><label class="form-label">Mã kho</label><input id="editWarehouseCode" class="form-control" placeholder="KTPHAM"></div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-4"><label class="form-label">Kệ</label><select id="editShelfCode" class="form-select"><option value="">Tự nhận</option><option>A</option><option>B</option><option>C</option><option>D</option><option>F</option><option>G</option></select></div>
+                        <div class="col-4"><label class="form-label">Tầng</label><select id="editTier" class="form-select"><option value="1">Tầng 1</option><option value="2">Tầng 2</option></select></div>
+                        <div class="col-4"><label class="form-label">Ô</label><input id="editBayCode" class="form-control" placeholder="01"></div>
+                    </div>
                     <div class="mb-3"><label class="form-label">Tên vị trí</label><input id="editLocationName" class="form-control" placeholder="Kệ thành phẩm A01"></div>
                     <div id="locationSaveStatus" class="small text-muted"></div>
                 </div>
@@ -172,13 +268,35 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="movePackageModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div><h5 class="modal-title">Chuyển vị trí kiện</h5><div id="movePackageTitle" class="text-muted small"></div></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">Vị trí đích</label>
+                    <select id="moveTargetLocationId" class="form-select"></select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button id="confirmMovePackageBtn" type="button" class="btn btn-primary">Chuyển kiện</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const value = id => document.getElementById(id).value.trim();
         const locationModal = new bootstrap.Modal(document.getElementById('locationModal'));
+        const movePackageModal = new bootstrap.Modal(document.getElementById('movePackageModal'));
         let locations = [];
+        let mapPackages = [];
+        let movingPackageId = null;
+        let draggingLayout = null;
         let editingLocationId = null;
         let selectedAccountingProduct = '';
         let productSearchTimer;
@@ -198,6 +316,7 @@
             document.querySelectorAll('[data-workspace-view]').forEach(tab => {
                 tab.classList.toggle('is-active', tab.dataset.workspaceView === view);
             });
+            if (view === 'editor') renderLayoutEditor();
             if (view === 'entry') document.getElementById('maSp').focus();
         }
 
@@ -279,8 +398,38 @@
                 document.getElementById('kpiLocations').textContent = formatNumber(locations.length);
                 document.getElementById('kpiCountingLocations').textContent = formatNumber(locations.filter(x => x.status === 'counting').length);
                 renderLocations();
+                renderLayoutEditor();
                 fillSelectedLocation();
             });
+        }
+
+        function normalizeLayout(location, index) {
+            return {
+                x: Number(location.grid_x || ((index % 6) * 4 + 1)),
+                y: Number(location.grid_y || (Math.floor(index / 6) * 3 + 1)),
+                w: Number(location.grid_w || 4),
+                h: Number(location.grid_h || 2),
+            };
+        }
+
+        function renderLayoutEditor() {
+            const editor = document.getElementById('layoutEditor');
+            if (!editor) return;
+            editor.innerHTML = locations.map((location, index) => {
+                const layout = normalizeLayout(location, index);
+                return `<div class="layout-block" data-location-id="${location.id}" style="grid-column:${layout.x} / span ${layout.w}; grid-row:${layout.y} / span ${layout.h};">
+                    <div class="layout-block-code">${escapeHtml(location.location_code)}</div>
+                    <div class="layout-block-meta">Kệ ${escapeHtml(location.shelf_code || shelfCodeForLocation(location.location_code))} · Tầng ${escapeHtml(location.tier || 1)}${location.bay_code ? ` · Ô ${escapeHtml(location.bay_code)}` : ''}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function saveLocationLayout(locationId, gridX, gridY, gridW, gridH) {
+            return fetch(`/api/kiem-ton-kho/vi-tri/${locationId}/layout`, {
+                method: 'PATCH',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({ grid_x: gridX, grid_y: gridY, grid_w: gridW, grid_h: gridH })
+            }).then(r => jsonOrError(r, 'Không lưu được layout vị trí'));
         }
 
         function loadWarehouseStats() {
@@ -289,6 +438,131 @@
                 document.getElementById('kpiPackages').textContent = formatNumber(result.summary?.package_count);
                 document.getElementById('kpiQuantity').textContent = formatNumber(result.summary?.total_quantity);
             });
+        }
+
+        const warehouseShelves = [
+            { code: 'G', name: 'GRS' },
+            { code: 'F', name: 'NPL khác' },
+            { code: 'D', name: 'NPL khác' },
+            { code: 'C', name: 'Thành phẩm' },
+            { code: 'B', name: 'Thành phẩm' },
+            { code: 'A', name: 'NPL sợi + su' },
+        ];
+
+        function shelfCodeForLocation(locationCode) {
+            const match = String(locationCode || '').toUpperCase().match(/[A-Z]/);
+            return match ? match[0] : 'KHAC';
+        }
+
+        function shelfForLocation(location) {
+            return location?.shelf_code || shelfCodeForLocation(location?.location_code);
+        }
+
+        function tierForLocationModel(location) {
+            return String(location?.tier || tierForLocation(location?.location_code));
+        }
+
+        function tierForLocation(locationCode) {
+            const code = String(locationCode || '').toUpperCase();
+            return /(^|[-_\s])T?2($|[-_\s])|TANG\s*2|TẦNG\s*2/.test(code) ? '2' : '1';
+        }
+
+        function loadWarehouseMap() {
+            const params = new URLSearchParams({ checked_at: value('checkedAt'), limit: 1000 });
+            return fetch(`/api/kiem-ton-kho/kien?${params}`).then(r => r.json()).then(result => {
+                mapPackages = result.data || [];
+                renderWarehouseMap();
+            });
+        }
+
+        function renderWarehouseMap() {
+            const keyword = value('mapSearch').toUpperCase();
+            const selectedCode = value('locationCode').toUpperCase();
+            const packagesByLocation = mapPackages.reduce((map, item) => {
+                const code = item.location?.location_code || '';
+                if (!map[code]) map[code] = [];
+                map[code].push(item);
+                return map;
+            }, {});
+            const visibleLocations = locations.filter(location => {
+                const packages = packagesByLocation[location.location_code] || [];
+                const text = `${location.location_code} ${location.warehouse_code || ''} ${location.location_name || ''} ${packages.map(item => `${item.package_code} ${item.ma_sp} ${item.internal_item_code}`).join(' ')}`.toUpperCase();
+                return text.includes(keyword);
+            });
+
+            const renderLocationCard = location => {
+                const packages = packagesByLocation[location.location_code] || [];
+                const totalQuantity = packages.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+                return `<article class="map-card ${location.location_code === selectedCode ? 'is-selected' : ''}" data-location-id="${location.id}" data-location-code="${location.location_code}">
+                    <div class="map-card-header">
+                        <button type="button" class="btn p-0 border-0 text-start" onclick="selectLocation('${location.location_code}')">
+                            <div class="map-card-code">${escapeHtml(location.location_code)}</div>
+                            <div class="map-card-name">${escapeHtml(location.warehouse_code || '-')}${location.location_name ? ` · ${escapeHtml(location.location_name)}` : ''}</div>
+                        </button>
+                        <div class="map-card-summary">${packages.length} kiện<br>SL ${formatNumber(totalQuantity)}</div>
+                    </div>
+                    <div class="map-package-list">
+                        ${packages.map(item => `<div class="map-package" draggable="true" data-package-id="${item.id}">
+                            <div class="map-package-code">${escapeHtml(item.internal_item_code || item.ma_sp || item.package_code)}</div>
+                            <div class="map-package-meta">${escapeHtml(item.package_code)} · ${escapeHtml(item.ma_sp)} · SL ${formatNumber(item.quantity)}</div>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="openMovePackageModal('${item.id}')">Chuyển</button>
+                        </div>`).join('') || '<div class="map-empty">Kệ trống</div>'}
+                    </div>
+                </article>`;
+            };
+
+            const rows = warehouseShelves.map(shelf => {
+                const tierOne = visibleLocations.filter(location => shelfForLocation(location) === shelf.code && tierForLocationModel(location) === '1');
+                const tierTwo = visibleLocations.filter(location => shelfForLocation(location) === shelf.code && tierForLocationModel(location) === '2');
+                return `<section class="shelf-row">
+                    <div class="shelf-label"><div class="shelf-code">Kệ ${shelf.code}</div><div class="shelf-name">${shelf.name}</div></div>
+                    <div class="shelf-lanes">
+                        <div class="shelf-tier"><div class="shelf-tier-title"><span>Tầng 1</span><span>${tierOne.length} vị trí</span></div><div class="shelf-tier-body">${tierOne.map(renderLocationCard).join('') || '<div class="shelf-empty">Chưa có vị trí tầng 1</div>'}</div></div>
+                        <div class="shelf-tier"><div class="shelf-tier-title"><span>Tầng 2</span><span>${tierTwo.length} vị trí</span></div><div class="shelf-tier-body">${tierTwo.map(renderLocationCard).join('') || '<div class="shelf-empty">Chưa có vị trí tầng 2</div>'}</div></div>
+                    </div>
+                </section>`;
+            });
+
+            const knownShelfCodes = warehouseShelves.map(shelf => shelf.code);
+            const otherLocations = visibleLocations.filter(location => !knownShelfCodes.includes(shelfForLocation(location)));
+            if (otherLocations.length) {
+                rows.push(`<section class="shelf-row">
+                    <div class="shelf-label"><div class="shelf-code">Khác</div><div class="shelf-name">Chưa phân kệ</div></div>
+                    <div class="shelf-lanes"><div class="shelf-tier" style="grid-column:1 / -1"><div class="shelf-tier-title"><span>Vị trí khác</span><span>${otherLocations.length} vị trí</span></div><div class="shelf-tier-body">${otherLocations.map(renderLocationCard).join('')}</div></div></div>
+                </section>`);
+            }
+
+            document.getElementById('warehouseMap').innerHTML = `<div class="warehouse-blueprint">
+                <h3 class="blueprint-title">SƠ ĐỒ KHO</h3>
+                <div class="blueprint-top">
+                    <div class="zone-box">KV để pallet</div>
+                    <div></div>
+                    <div class="d-grid gap-2" style="grid-template-columns: repeat(3, 1fr)">
+                        <div class="zone-box">Khu vực hàng trả về chờ xử lý</div>
+                        <div class="zone-box">KV vật tư không phù hợp</div>
+                        <div class="zone-box">KV thành phẩm không phù hợp</div>
+                    </div>
+                </div>
+                <div class="blueprint-main">
+                    <aside class="zone-stack">
+                        <div class="aisle-column"></div>
+                        <div class="zone-box">KV để xe nâng</div>
+                        <div class="zone-box">Bảng chờ lệnh kế</div>
+                        <div class="zone-box">Hàng chờ sắp xếp</div>
+                        <div class="zone-box">Bán lẻ</div>
+                    </aside>
+                    <section class="shelf-area">${rows.join('')}</section>
+                    <aside class="zone-stack"><div class="aisle-column"></div></aside>
+                </div>
+                <div class="blueprint-bottom">
+                    <div class="zone-box">TP nhận đợt việt tiến</div>
+                    <div class="zone-box">TP nhận đợt khác</div>
+                    <div class="zone-box">Bàn soạn hàng</div>
+                    <div class="zone-box">Cổng cửa xe</div>
+                    <div class="zone-box">Chi tiết label</div>
+                </div>
+            </div>`;
+            refreshIcons();
         }
 
         function renderLocations() {
@@ -313,6 +587,7 @@
             document.getElementById('locationCode').value = locationCode;
             fillSelectedLocation();
             renderLocations();
+            renderWarehouseMap();
             loadPackages();
             loadLocationContents();
         }
@@ -323,12 +598,31 @@
             document.getElementById('locationModalTitle').textContent = location ? 'Chỉnh sửa vị trí kho' : 'Thêm vị trí kho';
             document.getElementById('editLocationCode').value = location?.location_code || '';
             document.getElementById('editWarehouseCode').value = location?.warehouse_code || value('warehouseCode');
+            document.getElementById('editShelfCode').value = location?.shelf_code || '';
+            document.getElementById('editTier').value = location?.tier || 1;
+            document.getElementById('editBayCode').value = location?.bay_code || '';
             document.getElementById('editLocationName').value = location?.location_name || '';
             document.getElementById('deleteLocationBtn').classList.toggle('d-none', !location);
             document.getElementById('useLocationBtn').classList.toggle('d-none', !location);
             document.getElementById('printLocationBtn').classList.toggle('d-none', !location);
             setLocationStatus('');
             locationModal.show();
+        }
+
+        function openMovePackageModal(packageId) {
+            const item = mapPackages.find(packageItem => String(packageItem.id) === String(packageId));
+            movingPackageId = packageId;
+            document.getElementById('movePackageTitle').textContent = item ? `${item.package_code} · ${item.internal_item_code || item.ma_sp}` : '';
+            document.getElementById('moveTargetLocationId').innerHTML = locations.map(location => `<option value="${location.id}" ${item?.warehouse_location_id === location.id ? 'selected' : ''}>${escapeHtml(location.location_code)} · Kệ ${escapeHtml(location.shelf_code || shelfCodeForLocation(location.location_code))} · Tầng ${escapeHtml(location.tier || tierForLocation(location.location_code))}</option>`).join('');
+            movePackageModal.show();
+        }
+
+        function movePackageToLocation(packageId, locationId) {
+            return fetch(`/api/kiem-ton-kho/kien/${packageId}/chuyen-vi-tri`, {
+                method: 'PATCH',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({ warehouse_location_id: locationId })
+            }).then(r => jsonOrError(r, 'Không chuyển được kiện'));
         }
 
         function loadPackages() {
@@ -376,7 +670,11 @@
         document.getElementById('saveLocationBtn').addEventListener('click', () => {
             fetch('/api/kiem-ton-kho/vi-tri', {
                 method: 'POST', headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
-                body: JSON.stringify({location_code:value('editLocationCode'), warehouse_code:value('editWarehouseCode'), location_name:value('editLocationName')})
+                body: JSON.stringify({
+                    location_code:value('editLocationCode'), warehouse_code:value('editWarehouseCode'),
+                    shelf_code:value('editShelfCode'), tier:value('editTier'), bay_code:value('editBayCode'),
+                    location_name:value('editLocationName')
+                })
             }).then(r => jsonOrError(r, 'Không lưu được vị trí'))
               .then(result => {
                   setLocationStatus(`Đã lưu ${result.data.location_code} / ${result.data.warehouse_code || 'chưa có mã kho'}`);
@@ -385,6 +683,7 @@
                   loadLocations();
                   loadPackages();
                   loadWarehouseStats();
+                  loadWarehouseMap();
                   loadLocationContents();
               }).catch(e => { setLocationStatus(e.message, true); alert(e.message); });
         });
@@ -405,6 +704,7 @@
                   loadLocations();
                   loadPackages();
                   loadWarehouseStats();
+                  loadWarehouseMap();
                   loadLocationContents();
               }).catch(e => { setLocationStatus(e.message, true); alert(e.message); });
         });
@@ -427,6 +727,7 @@
                   loadPackages();
                   loadLocations();
                   loadWarehouseStats();
+                  loadWarehouseMap();
                   loadLocationContents();
               }).catch(e => alert(e.message));
         });
@@ -437,7 +738,7 @@
             fetch(`/api/kiem-ton-kho/kien/${button.dataset.id}`, {
                 method: 'DELETE', headers: {'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
             }).then(r => jsonOrError(r, 'Không xóa được kiện'))
-              .then(() => { loadPackages(); loadLocations(); loadWarehouseStats(); loadLocationContents(); })
+              .then(() => { loadPackages(); loadLocations(); loadWarehouseStats(); loadWarehouseMap(); loadLocationContents(); })
               .catch(e => alert(e.message));
         });
 
@@ -457,14 +758,104 @@
         });
         document.getElementById('locationCode').addEventListener('change', () => { fillSelectedLocation(); renderLocations(); loadPackages(); loadLocationContents(); });
         document.getElementById('locationSearch').addEventListener('input', renderLocations);
+        document.getElementById('mapSearch').addEventListener('input', renderWarehouseMap);
+        document.getElementById('layoutEditor').addEventListener('pointerdown', event => {
+            const block = event.target.closest('.layout-block');
+            if (!block) return;
+            const location = locations.find(item => String(item.id) === String(block.dataset.locationId));
+            if (!location) return;
+            const layout = normalizeLayout(location, 0);
+            draggingLayout = {
+                block,
+                location,
+                startX: event.clientX,
+                startY: event.clientY,
+                gridX: layout.x,
+                gridY: layout.y,
+                gridW: layout.w,
+                gridH: layout.h,
+            };
+            block.classList.add('is-dragging');
+            block.setPointerCapture(event.pointerId);
+        });
+        document.getElementById('layoutEditor').addEventListener('pointermove', event => {
+            if (!draggingLayout) return;
+            const deltaX = Math.round((event.clientX - draggingLayout.startX) / 40);
+            const deltaY = Math.round((event.clientY - draggingLayout.startY) / 32);
+            const nextX = Math.min(24, Math.max(1, draggingLayout.gridX + deltaX));
+            const nextY = Math.min(40, Math.max(1, draggingLayout.gridY + deltaY));
+            draggingLayout.block.style.gridColumn = `${nextX} / span ${draggingLayout.gridW}`;
+            draggingLayout.block.style.gridRow = `${nextY} / span ${draggingLayout.gridH}`;
+        });
+        document.getElementById('layoutEditor').addEventListener('pointerup', event => {
+            if (!draggingLayout) return;
+            const deltaX = Math.round((event.clientX - draggingLayout.startX) / 40);
+            const deltaY = Math.round((event.clientY - draggingLayout.startY) / 32);
+            const nextX = Math.min(24, Math.max(1, draggingLayout.gridX + deltaX));
+            const nextY = Math.min(40, Math.max(1, draggingLayout.gridY + deltaY));
+            const currentDrag = draggingLayout;
+            currentDrag.block.classList.remove('is-dragging');
+            draggingLayout = null;
+            saveLocationLayout(currentDrag.location.id, nextX, nextY, currentDrag.gridW, currentDrag.gridH)
+                .then(result => {
+                    const index = locations.findIndex(item => item.id === result.data.id);
+                    if (index >= 0) locations[index] = result.data;
+                    renderWarehouseMap();
+                })
+                .catch(error => {
+                    alert(error.message);
+                    renderLayoutEditor();
+                });
+        });
+        document.getElementById('warehouseMap').addEventListener('dragstart', event => {
+            const item = event.target.closest('.map-package');
+            if (!item) return;
+            event.dataTransfer.setData('text/plain', item.dataset.packageId);
+            event.dataTransfer.effectAllowed = 'move';
+        });
+        document.getElementById('warehouseMap').addEventListener('dragover', event => {
+            const card = event.target.closest('.map-card');
+            if (!card) return;
+            event.preventDefault();
+            card.classList.add('is-drop-target');
+        });
+        document.getElementById('warehouseMap').addEventListener('dragleave', event => {
+            const card = event.target.closest('.map-card');
+            if (card) card.classList.remove('is-drop-target');
+        });
+        document.getElementById('warehouseMap').addEventListener('drop', event => {
+            const card = event.target.closest('.map-card');
+            const packageId = event.dataTransfer.getData('text/plain');
+            if (!card || !packageId) return;
+            event.preventDefault();
+            card.classList.remove('is-drop-target');
+            movePackageToLocation(packageId, card.dataset.locationId)
+              .then(() => {
+                  selectLocation(card.dataset.locationCode);
+                  loadWarehouseStats();
+                  loadWarehouseMap();
+              }).catch(e => alert(e.message));
+        });
+        document.getElementById('confirmMovePackageBtn').addEventListener('click', () => {
+            const locationId = document.getElementById('moveTargetLocationId').value;
+            const location = locations.find(item => String(item.id) === String(locationId));
+            if (!movingPackageId || !locationId) return;
+            movePackageToLocation(movingPackageId, locationId)
+                .then(() => {
+                    movePackageModal.hide();
+                    selectLocation(location.location_code);
+                    loadWarehouseStats();
+                    loadWarehouseMap();
+                }).catch(e => alert(e.message));
+        });
         document.getElementById('maSp').addEventListener('input', searchAccountingProducts);
         document.addEventListener('click', event => {
             if (!event.target.closest('.product-search')) hideProductResults();
         });
-        document.getElementById('checkedAt').addEventListener('change', () => { loadPackages(); loadWarehouseStats(); loadLocationContents(); });
+        document.getElementById('checkedAt').addEventListener('change', () => { loadPackages(); loadWarehouseStats(); loadWarehouseMap(); loadLocationContents(); });
         const requestedLocation = new URLSearchParams(window.location.search).get('location_code');
         if (requestedLocation) document.getElementById('locationCode').value = requestedLocation.toUpperCase();
-        loadLocations().then(() => { loadPackages(); loadWarehouseStats(); loadLocationContents(); });
+        loadLocations().then(() => { loadPackages(); loadWarehouseStats(); loadWarehouseMap(); loadLocationContents(); });
         refreshIcons();
     </script>
 </body>

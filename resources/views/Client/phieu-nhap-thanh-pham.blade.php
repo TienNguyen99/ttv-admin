@@ -91,8 +91,8 @@
                     <input type="date" id="toDate" class="form-control">
                 </div>
                 <div class="col-md-4">
-                    <label for="keyword" class="form-label">Tìm số phiếu, lệnh, mã TP, mã kho</label>
-                    <input type="text" id="keyword" class="form-control" placeholder="Nhập So_ct, Ma_vv, Ma_sp hoặc Ma_ko">
+                    <label for="keyword" class="form-label">Tìm số phiếu, lệnh, mã TP, kho nhập/xuất</label>
+                    <input type="text" id="keyword" class="form-control" placeholder="Nhập So_ct, Ma_vv, Ma_sp, Ma3ko hoặc Ma_ko">
                 </div>
                 <div class="col-md-2">
                     <button id="clearFilterBtn" type="button" class="btn btn-outline-secondary w-100">Xóa lọc</button>
@@ -112,7 +112,7 @@
                         <th>Số phiếu</th>
                         <th>Chứng từ</th>
                         <th>Lệnh/Vụ việc</th>
-                        <th>Mã kho</th>
+                        <th>Kho nhập</th>
                         <th>Mã TP</th>
                         <th>Tên hàng</th>
                         <th>ĐVT</th>
@@ -199,7 +199,7 @@
                 row.So_ct || '',
                 row.Chungtu || '',
                 row.Ma_vv || '',
-                row.Ma_ko || '',
+                row.Ma3ko || row.Ma_ko || '',
                 row.Ma_sp || '',
                 row.Ten_hh || '',
                 row.Dvt || '',
@@ -283,7 +283,7 @@
             const detailRows = details.map((item, index) => `
                 <tr>
                     <td class="text-center">${index + 1}</td>
-                    <td class="text-center">${escapeHtml(item.Ma_ko || '')}</td>
+                    <td class="text-center">${escapeHtml(item.Ma3ko || item.Ma_ko || '')}</td>
                     <td>${escapeHtml(item.Ma_sp || '')}</td>
                     <td>${escapeHtml(item.Ten_hh || '')}</td>
                     <td class="text-center">${escapeHtml(item.Dvt || '')}</td>
@@ -309,8 +309,8 @@
 
                 <div class="row mb-3">
                     <div class="col-6"><strong>Lệnh/Vụ việc:</strong> ${maVv}</div>
-                    <div class="col-3"><strong>Mã kho:</strong> ${maKho}</div>
-                    <div class="col-3"><strong>Kho 3:</strong> ${ma3Kho}</div>
+                    <div class="col-3"><strong>Kho xuất/nguồn:</strong> ${maKho}</div>
+                    <div class="col-3"><strong>Kho nhập:</strong> ${ma3Kho}</div>
                     <div class="col-12 mt-2"><strong>Diễn giải:</strong> ${dienGiai}</div>
                 </div>
 
@@ -318,7 +318,7 @@
                     <thead>
                         <tr class="text-center">
                             <th style="width: 45px;">STT</th>
-                            <th style="width: 80px;">Mã kho</th>
+                            <th style="width: 80px;">Kho nhập</th>
                             <th>Mã thành phẩm</th>
                             <th>Tên thành phẩm</th>
                             <th style="width: 80px;">ĐVT</th>

@@ -34,23 +34,57 @@ class WarehouseCountController extends Controller
         $data = $request->validate([
             'location_code' => 'required|string|max:100',
             'warehouse_code' => 'nullable|string|max:50',
+            'shelf_code' => 'nullable|string|max:20',
+            'tier' => 'nullable|integer|min:1|max:2',
+            'bay_code' => 'nullable|string|max:50',
+            'grid_x' => 'nullable|integer|min:1|max:24',
+            'grid_y' => 'nullable|integer|min:1|max:40',
+            'grid_w' => 'nullable|integer|min:1|max:24',
+            'grid_h' => 'nullable|integer|min:1|max:10',
             'location_name' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
         ]);
 
         $data['location_code'] = strtoupper(trim($data['location_code']));
         $data['warehouse_code'] = strtoupper(trim($data['warehouse_code'] ?? ''));
+        $data['shelf_code'] = strtoupper(trim($data['shelf_code'] ?? ''));
+        $data['tier'] = (int) ($data['tier'] ?? 1);
+        $data['bay_code'] = strtoupper(trim($data['bay_code'] ?? ''));
 
         $location = WarehouseLocation::query()->updateOrCreate(
             ['location_code' => $data['location_code']],
             [
                 'warehouse_code' => $data['warehouse_code'],
+                'shelf_code' => $data['shelf_code'] ?: $this->inferShelfCode($data['location_code']),
+                'tier' => in_array($data['tier'], [1, 2], true) ? $data['tier'] : 1,
+                'bay_code' => $data['bay_code'] ?: null,
+                'grid_x' => (int) ($data['grid_x'] ?? 1),
+                'grid_y' => (int) ($data['grid_y'] ?? 1),
+                'grid_w' => (int) ($data['grid_w'] ?? 4),
+                'grid_h' => (int) ($data['grid_h'] ?? 2),
                 'location_name' => $data['location_name'] ?? null,
                 'note' => $data['note'] ?? null,
             ]
         );
 
         return response()->json(['data' => $location]);
+    }
+
+    public function updateLocationLayout(Request $request, WarehouseLocation $warehouseLocation)
+    {
+        $data = $request->validate([
+            'grid_x' => 'required|integer|min:1|max:24',
+            'grid_y' => 'required|integer|min:1|max:40',
+            'grid_w' => 'required|integer|min:1|max:24',
+            'grid_h' => 'required|integer|min:1|max:10',
+        ]);
+
+        $warehouseLocation->update($data);
+
+        return response()->json([
+            'message' => 'Đã lưu vị trí trên sơ đồ.',
+            'data' => $warehouseLocation->fresh(),
+        ]);
     }
 
     public function destroyLocation(WarehouseLocation $warehouseLocation)
@@ -86,8 +120,10 @@ class WarehouseCountController extends Controller
 
         $summaryQuery = clone $query;
 
+        $limit = min(max((int) $request->query('limit', 100), 1), 1000);
+
         return response()->json([
-            'data' => $query->limit(100)->get(),
+            'data' => $query->limit($limit)->get(),
             'summary' => [
                 'package_count' => $summaryQuery->count(),
                 'total_quantity' => (float) (clone $summaryQuery)->sum('quantity'),
@@ -251,6 +287,79 @@ class WarehouseCountController extends Controller
         ]);
     }
 
+    public function movePackage(Request $request, InventoryPackage $inventoryPackage)
+    {
+        $data = $request->validate([
+            'warehouse_location_id' => 'required|integer|exists:internal.warehouse_locations,id',
+        ]);
+
+        $targetLocation = WarehouseLocation::query()->findOrFail($data['warehouse_location_id']);
+
+        DB::connection('internal')->transaction(function () use ($inventoryPackage, $targetLocation) {
+            $sourceLocationId = $inventoryPackage->warehouse_location_id;
+            $sourceCount = $inventoryPackage->inventory_count_id
+                ? InternalInventoryCount::query()->lockForUpdate()->find($inventoryPackage->inventory_count_id)
+                : null;
+            $quantity = (float) $inventoryPackage->quantity;
+            $targetWarehouseCode = $targetLocation->warehouse_code ?: $inventoryPackage->ma_ko;
+
+            if ((string) $inventoryPackage->ma_ko !== (string) $targetWarehouseCode) {
+                if ($sourceCount) {
+                    $remainingQuantity = (float) $sourceCount->counted_quantity - $quantity;
+                    $hasOtherPackages = InventoryPackage::query()
+                        ->where('inventory_count_id', $sourceCount->id)
+                        ->where('id', '!=', $inventoryPackage->id)
+                        ->exists();
+
+                    if ($remainingQuantity <= 0 && !$hasOtherPackages) {
+                        $sourceCount->delete();
+                    } else {
+                        $sourceCount->counted_quantity = max(0, $remainingQuantity);
+                        $sourceCount->save();
+                    }
+                }
+
+                $targetCount = InternalInventoryCount::query()->firstOrCreate(
+                    [
+                        'ma_sp' => $inventoryPackage->ma_sp,
+                        'ma_ko' => $targetWarehouseCode,
+                        'internal_item_code' => $inventoryPackage->internal_item_code,
+                        'size' => $inventoryPackage->size,
+                        'color' => $inventoryPackage->color,
+                        'side' => $inventoryPackage->side,
+                        'checked_at' => $inventoryPackage->checked_at,
+                    ],
+                    [
+                        'counted_quantity' => 0,
+                        'note' => $inventoryPackage->note,
+                    ]
+                );
+                $targetCount->counted_quantity = (float) $targetCount->counted_quantity + $quantity;
+                $targetCount->save();
+
+                $inventoryPackage->ma_ko = $targetWarehouseCode;
+                $inventoryPackage->inventory_count_id = $targetCount->id;
+            }
+
+            $inventoryPackage->warehouse_location_id = $targetLocation->id;
+            $inventoryPackage->save();
+
+            $targetLocation->status = 'counting';
+            $targetLocation->save();
+
+            $sourceLocation = WarehouseLocation::query()->find($sourceLocationId);
+            if ($sourceLocation && !InventoryPackage::query()->where('warehouse_location_id', $sourceLocation->id)->exists()) {
+                $sourceLocation->status = 'pending';
+                $sourceLocation->save();
+            }
+        });
+
+        return response()->json([
+            'message' => 'Đã chuyển kiện sang vị trí mới.',
+            'data' => $inventoryPackage->fresh()->load('location:id,location_code'),
+        ]);
+    }
+
     public function printLocation(WarehouseLocation $warehouseLocation)
     {
         return view('client.labels.location', ['location' => $warehouseLocation]);
@@ -267,5 +376,12 @@ class WarehouseCountController extends Controller
         $number = $last ? ((int) substr($last, -5)) + 1 : 1;
 
         return $prefix . str_pad((string) $number, 5, '0', STR_PAD_LEFT);
+    }
+
+    private function inferShelfCode($locationCode)
+    {
+        preg_match('/[A-Z]/', strtoupper((string) $locationCode), $matches);
+
+        return $matches[0] ?? null;
     }
 }

@@ -19,7 +19,7 @@ class InventoryComparisonController extends Controller
         $checkedAt = $request->query('checked_at', now()->format('Y-m-d'));
 
         $subNhap = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
-            ->select('Ma_sp', 'Ma_ko', 'Noluong', 'SttRecN')
+            ->select('Ma_sp', DB::raw("COALESCE(Ma3ko, Ma_ko, '') as Ma_ko"), 'Noluong', 'SttRecN')
             ->where('Ma_ct', '=', 'NX')
             ->whereNotNull('Ma_sp')
             ->distinct();
@@ -30,10 +30,10 @@ class InventoryComparisonController extends Controller
             ->groupBy('Ma_sp', 'Ma_ko');
 
         $xuat = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
-            ->select('Ma_hh as Ma_sp', DB::raw("COALESCE(Ma_ko, '') as Ma_ko"), DB::raw('SUM(Soluong) as tong_xuat'))
+            ->select('Ma_hh as Ma_sp', DB::raw("COALESCE(Ma_ko, Ma3ko, '') as Ma_ko"), DB::raw('SUM(Soluong) as tong_xuat'))
             ->where('Ma_ct', '=', 'XU')
             ->whereNotNull('Ma_hh')
-            ->groupBy('Ma_hh', 'Ma_ko');
+            ->groupBy('Ma_hh', DB::raw("COALESCE(Ma_ko, Ma3ko, '')"));
 
         $maHang = DB::query()
             ->fromSub((clone $nhap)->union(clone $xuat), 'codes')
@@ -141,6 +141,7 @@ class InventoryComparisonController extends Controller
             'data' => $data,
             'summary' => [
                 'total_items' => $data->count(),
+                'unique_items' => $data->pluck('ma_sp')->filter()->unique()->count(),
                 'checked_items' => $data->whereNotNull('counted_quantity')->count(),
                 'different_items' => $data->where('difference', '!=', 0)->count(),
                 'missing_receipt_items' => $data->where('missing_receipt', true)->count(),
