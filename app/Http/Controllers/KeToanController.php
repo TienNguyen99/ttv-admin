@@ -224,17 +224,14 @@ class KeToanController extends Controller
             return response()->json(['data' => []]);
         }
 
-        $data = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026 as d')
-            ->leftJoin('TSoft_NhanTG_kt_new.dbo.CodeHanghoa as c', 'd.Ma_sp', '=', 'c.Ma_hh')
-            ->where('d.Ma_ct', '=', 'NX')
-            ->whereNotNull('d.Ma_sp')
+        $data = DB::table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa as c')
             ->where(function ($query) use ($keyword) {
-                $query->where('d.Ma_sp', 'like', '%' . $keyword . '%')
+                $query->where('c.Ma_hh', 'like', '%' . $keyword . '%')
                     ->orWhere('c.Ten_hh', 'like', '%' . $keyword . '%');
             })
-            ->select('d.Ma_sp', 'c.Ten_hh', 'c.Dvt')
+            ->select('c.Ma_hh as Ma_sp', 'c.Ten_hh', 'c.Dvt')
             ->distinct()
-            ->orderBy('d.Ma_sp')
+            ->orderBy('c.Ma_hh')
             ->limit(20)
             ->get();
 

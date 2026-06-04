@@ -17,6 +17,7 @@ class InventoryComparisonController extends Controller
     public function data(Request $request)
     {
         $checkedAt = $request->query('checked_at', now()->format('Y-m-d'));
+        $keyword = trim((string) $request->query('keyword', ''));
 
         $subNhap = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_sp', DB::raw("COALESCE(Ma3ko, Ma_ko, '') as Ma_ko"), 'Noluong', 'SttRecN')
@@ -129,6 +130,48 @@ class InventoryComparisonController extends Controller
                 'internal_only' => true,
                 'details' => $mapDetails($details),
             ]);
+        }
+
+        if ($keyword !== '') {
+            $existingKeys = $data->mapWithKeys(function ($item) {
+                return [$item['ma_sp'] . '|' . $item['ma_ko'] => true];
+            });
+
+            $catalogItems = DB::table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
+                ->where(function ($query) use ($keyword) {
+                    $query->where('Ma_hh', 'like', '%' . $keyword . '%')
+                        ->orWhere('Ten_hh', 'like', '%' . $keyword . '%');
+                })
+                ->select('Ma_hh', 'Ten_hh', 'Dvt')
+                ->orderBy('Ma_hh')
+                ->limit(50)
+                ->get();
+
+            foreach ($catalogItems as $catalogItem) {
+                $key = $catalogItem->Ma_hh . '|';
+
+                if ($existingKeys->has($key)) {
+                    continue;
+                }
+
+                $data->push([
+                    'ma_sp' => $catalogItem->Ma_hh,
+                    'ma_ko' => '',
+                    'ten_hh' => $catalogItem->Ten_hh,
+                    'dvt' => $catalogItem->Dvt,
+                    'tong_nhap' => 0,
+                    'tong_xuat' => 0,
+                    'source_quantity' => 0,
+                    'counted_quantity' => null,
+                    'difference' => null,
+                    'missing_receipt' => false,
+                    'internal_only' => false,
+                    'catalog_only' => true,
+                    'details' => [],
+                ]);
+
+                $existingKeys->put($key, true);
+            }
         }
 
         $data = $data->sortBy([

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternalInventoryCount;
+use App\Models\InternalMaterialReceipt;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
 use Illuminate\Http\Request;
@@ -13,6 +14,11 @@ class WarehouseCountController extends Controller
     public function index()
     {
         return view('client.warehouse-count');
+    }
+
+    public function stockIndex()
+    {
+        return view('client.internal-stock');
     }
 
     public function showLocation(WarehouseLocation $warehouseLocation)
@@ -131,6 +137,97 @@ class WarehouseCountController extends Controller
         ]);
     }
 
+    public function stockWarehouses()
+    {
+        $fromPackages = InventoryPackage::query()
+            ->select(DB::raw("NULLIF(ma_ko, '') as warehouse_code"))
+            ->whereRaw("NULLIF(ma_ko, '') IS NOT NULL");
+
+        $fromLocations = WarehouseLocation::query()
+            ->select(DB::raw("NULLIF(warehouse_code, '') as warehouse_code"))
+            ->whereRaw("NULLIF(warehouse_code, '') IS NOT NULL");
+
+        $warehouses = DB::connection('internal')
+            ->query()
+            ->fromSub($fromPackages->union($fromLocations), 'warehouses')
+            ->select('warehouse_code')
+            ->whereNotNull('warehouse_code')
+            ->groupBy('warehouse_code')
+            ->orderBy('warehouse_code')
+            ->pluck('warehouse_code');
+
+        return response()->json(['data' => $warehouses]);
+    }
+
+    public function stockData(Request $request)
+    {
+        $warehouseCode = strtoupper(trim((string) $request->query('warehouse_code', '')));
+        $keyword = trim((string) $request->query('keyword', ''));
+
+        $query = InventoryPackage::query()
+            ->join('warehouse_locations as wl', 'inventory_packages.warehouse_location_id', '=', 'wl.id')
+            ->select(
+                DB::raw("COALESCE(NULLIF(inventory_packages.ma_ko, ''), NULLIF(wl.warehouse_code, ''), '') as warehouse_code"),
+                'wl.location_code',
+                'inventory_packages.ma_sp',
+                'inventory_packages.internal_item_code',
+                'inventory_packages.size',
+                'inventory_packages.color',
+                'inventory_packages.side',
+                DB::raw('SUM(inventory_packages.quantity) as total_quantity'),
+                DB::raw('COUNT(*) as package_count'),
+                DB::raw('MAX(inventory_packages.checked_at) as latest_checked_at')
+            )
+            ->where('inventory_packages.quantity', '>', 0);
+
+        if ($warehouseCode !== '') {
+            $query->where(function ($q) use ($warehouseCode) {
+                $q->where('inventory_packages.ma_ko', $warehouseCode)
+                    ->orWhere(function ($sub) use ($warehouseCode) {
+                        $sub->where('inventory_packages.ma_ko', '')
+                            ->where('wl.warehouse_code', $warehouseCode);
+                    });
+            });
+        }
+
+        if ($keyword !== '') {
+            $query->where(function ($q) use ($keyword) {
+                $q->where('inventory_packages.ma_sp', 'like', '%' . $keyword . '%')
+                    ->orWhere('inventory_packages.internal_item_code', 'like', '%' . $keyword . '%')
+                    ->orWhere('inventory_packages.size', 'like', '%' . $keyword . '%')
+                    ->orWhere('inventory_packages.color', 'like', '%' . $keyword . '%')
+                    ->orWhere('wl.location_code', 'like', '%' . $keyword . '%');
+            });
+        }
+
+        $data = $query
+            ->groupBy(
+                'inventory_packages.ma_ko',
+                'wl.warehouse_code',
+                'wl.location_code',
+                'inventory_packages.ma_sp',
+                'inventory_packages.internal_item_code',
+                'inventory_packages.size',
+                'inventory_packages.color',
+                'inventory_packages.side'
+            )
+            ->orderBy('warehouse_code')
+            ->orderBy('wl.location_code')
+            ->orderBy('inventory_packages.ma_sp')
+            ->get();
+
+        return response()->json([
+            'data' => $data,
+            'summary' => [
+                'warehouse_code' => $warehouseCode,
+                'item_count' => $data->pluck('ma_sp')->filter()->unique()->count(),
+                'line_count' => $data->count(),
+                'package_count' => $data->sum('package_count'),
+                'total_quantity' => (float) $data->sum('total_quantity'),
+            ],
+        ]);
+    }
+
     public function locationContents(Request $request)
     {
         $data = InventoryPackage::query()
@@ -172,7 +269,7 @@ class WarehouseCountController extends Controller
     public function storePackage(Request $request)
     {
         $data = $request->validate([
-            'location_code' => 'required|string|max:100',
+            'location_code' => 'nullable|string|max:100',
             'ma_sp' => 'required|string|max:100',
             'ma_ko' => 'nullable|string|max:50',
             'internal_item_code' => 'nullable|string|max:100',
@@ -184,12 +281,28 @@ class WarehouseCountController extends Controller
             'note' => 'nullable|string|max:500',
         ]);
 
-        $locationCode = strtoupper(trim($data['location_code']));
+        $locationCode = strtoupper(trim($data['location_code'] ?? '')) ?: 'CHUA-XEP';
         $warehouseCode = strtoupper(trim($data['ma_ko'] ?? ''));
         $location = WarehouseLocation::query()->firstOrCreate(
             ['location_code' => $locationCode],
-            ['warehouse_code' => $warehouseCode]
+            [
+                'warehouse_code' => $warehouseCode,
+                'shelf_code' => 'CX',
+                'tier' => 1,
+                'bay_code' => null,
+                'grid_x' => 1,
+                'grid_y' => 1,
+                'grid_w' => 4,
+                'grid_h' => 2,
+                'location_name' => 'Chưa xếp vị trí',
+                'note' => 'Vị trí tạm để ghi nhận tồn trước khi xếp kệ.',
+            ]
         );
+
+        $catalogItem = DB::table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
+            ->where('Ma_hh', trim($data['ma_sp']))
+            ->select('Ten_hh', 'Dvt')
+            ->first();
 
         $attributes = [
             'ma_sp' => trim($data['ma_sp']),
@@ -201,7 +314,7 @@ class WarehouseCountController extends Controller
             'checked_at' => $data['checked_at'],
         ];
 
-        $package = DB::connection('internal')->transaction(function () use ($attributes, $data, $location) {
+        [$package, $receipt] = DB::connection('internal')->transaction(function () use ($attributes, $data, $location, $catalogItem) {
             $count = InternalInventoryCount::query()->firstOrCreate(
                 [
                     'ma_sp' => $attributes['ma_sp'],
@@ -234,13 +347,39 @@ class WarehouseCountController extends Controller
             $location->status = 'counting';
             $location->save();
 
-            return $package;
+            $receipt = InternalMaterialReceipt::query()->create([
+                'receipt_code' => $this->nextMaterialReceiptCode(),
+                'receipt_date' => $attributes['checked_at'],
+                'warehouse_code' => $attributes['ma_ko'],
+                'location_code' => $location->location_code,
+                'receiver_name' => '',
+                'source' => 'Nhap thanh pham tai cho',
+                'status' => 'posted',
+                'note' => $data['note'] ?? null,
+            ]);
+
+            $receipt->lines()->create([
+                'inventory_package_id' => $package->id,
+                'ma_hh' => $attributes['ma_sp'],
+                'ten_hh' => $catalogItem->Ten_hh ?? '',
+                'dvt' => $catalogItem->Dvt ?? '',
+                'quantity' => $data['quantity'],
+                'location_code' => $location->location_code,
+                'internal_item_code' => $attributes['internal_item_code'],
+                'size' => $attributes['size'],
+                'color' => $attributes['color'],
+                'side' => $attributes['side'],
+                'note' => $data['note'] ?? null,
+            ]);
+
+            return [$package, $receipt];
         });
 
         return response()->json([
             'message' => 'Đã lưu kiện nội bộ.',
             'data' => $package->load('location:id,location_code'),
             'print_url' => url('/client/kiem-ton-kho/tem-kien/' . $package->id),
+            'receipt_print_url' => url('/client/nhap-thanh-pham-noi-bo/' . $receipt->id . '/in'),
         ]);
     }
 
@@ -365,6 +504,13 @@ class WarehouseCountController extends Controller
         return view('client.labels.location', ['location' => $warehouseLocation]);
     }
 
+    public function printMaterialReceipt(InternalMaterialReceipt $receipt)
+    {
+        return view('client.internal-material-receipt-print', [
+            'receipt' => $receipt->load('lines'),
+        ]);
+    }
+
     private function nextPackageCode()
     {
         $prefix = 'PK-' . now()->format('Ymd') . '-';
@@ -376,6 +522,19 @@ class WarehouseCountController extends Controller
         $number = $last ? ((int) substr($last, -5)) + 1 : 1;
 
         return $prefix . str_pad((string) $number, 5, '0', STR_PAD_LEFT);
+    }
+
+    private function nextMaterialReceiptCode()
+    {
+        $prefix = 'PNTP-' . now()->format('Ymd') . '-';
+        $last = InternalMaterialReceipt::query()
+            ->where('receipt_code', 'like', $prefix . '%')
+            ->orderByDesc('receipt_code')
+            ->value('receipt_code');
+
+        $number = $last ? ((int) substr($last, -4)) + 1 : 1;
+
+        return $prefix . str_pad((string) $number, 4, '0', STR_PAD_LEFT);
     }
 
     private function inferShelfCode($locationCode)

@@ -143,6 +143,7 @@
         let selectedRow = null;
         let receiptRow = null;
         let missingReceiptOnly = false;
+        let searchTimer = null;
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => value === null || value === undefined ? '' : Number(value).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
@@ -156,7 +157,7 @@
             }).map(row => {
                 const differenceClass = row.difference === null || Number(row.difference) === 0 ? '' : 'text-danger fw-bold';
                 return `<tr>
-                    <td>${esc(row.ma_sp)}${row.internal_only ? '<div><span class="badge text-bg-warning">Chỉ có nội bộ</span></div>' : ''}${row.missing_receipt ? '<div><span class="badge text-bg-danger">Xuất chưa có nhập</span></div>' : ''}</td><td>${esc(row.ten_hh)}</td><td>${esc(row.ma_ko)}</td><td>${esc(row.dvt)}</td>
+                    <td>${esc(row.ma_sp)}${row.internal_only ? '<div><span class="badge text-bg-warning">Chỉ có nội bộ</span></div>' : ''}${row.catalog_only ? '<div><span class="badge text-bg-info">Có trong danh mục</span></div>' : ''}${row.missing_receipt ? '<div><span class="badge text-bg-danger">Xuất chưa có nhập</span></div>' : ''}</td><td>${esc(row.ten_hh)}</td><td>${esc(row.ma_ko)}</td><td>${esc(row.dvt)}</td>
                     <td class="text-end">${num(row.tong_nhap)}</td><td class="text-end">${num(row.tong_xuat)}</td>
                     <td class="text-end">${num(row.source_quantity)}</td><td class="text-end">${num(row.counted_quantity)}</td>
                     <td class="text-end ${differenceClass}">${num(row.difference)}</td>
@@ -179,7 +180,10 @@
 
         function loadData() {
             document.getElementById('refreshStatus').textContent = 'Đang cập nhật...';
-            fetch(`/api/doi-chieu-ton?checked_at=${encodeURIComponent(checkedAtEl.value)}`)
+            const params = new URLSearchParams({ checked_at: checkedAtEl.value });
+            const keyword = keywordEl.value.trim();
+            if (keyword) params.set('keyword', keyword);
+            fetch(`/api/doi-chieu-ton?${params.toString()}`)
                 .then(response => { if (!response.ok) throw new Error('Không tải được dữ liệu'); return response.json(); })
                 .then(result => {
                     rows = result.data || [];
@@ -298,7 +302,11 @@
             renderRows();
         });
         checkedAtEl.addEventListener('change', loadData);
-        keywordEl.addEventListener('input', renderRows);
+        keywordEl.addEventListener('input', () => {
+            renderRows();
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(loadData, 350);
+        });
         loadData();
         setInterval(() => {
             if (!document.hidden) loadData();

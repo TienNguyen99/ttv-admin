@@ -17,6 +17,7 @@ use App\Http\Controllers\Tool;
 use App\Http\Controllers\InventoryComparisonController;
 use App\Http\Controllers\WarehouseCountController;
 use App\Http\Controllers\InternalFinishedGoodsReceiptController;
+use App\Http\Controllers\InternalMaterialIssueController;
 use Google\Service\Dfareporting\Order;
 
 
@@ -144,7 +145,17 @@ Route::post('/api/doi-chieu-ton', [InventoryComparisonController::class, 'store'
 Route::delete('/api/doi-chieu-ton/{inventoryCount}', [InventoryComparisonController::class, 'destroy']);
 Route::post('/api/phieu-nhap-thanh-pham-noi-bo', [InternalFinishedGoodsReceiptController::class, 'store']);
 Route::get('/client/phieu-nhap-thanh-pham-noi-bo/{receipt}/in', [InternalFinishedGoodsReceiptController::class, 'print']);
+Route::get('/client/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'index']);
+Route::get('/api/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'list']);
+Route::post('/api/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'store']);
+Route::get('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'show']);
+Route::delete('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'destroy']);
+Route::get('/client/xuat-vat-tu-noi-bo/{issue}/in', [InternalMaterialIssueController::class, 'print']);
+Route::get('/api/vat-tu-ke-toan/goi-y', [InternalMaterialIssueController::class, 'materialSuggestions']);
 Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
+Route::get('/client/ton-kho-noi-bo', [WarehouseCountController::class, 'stockIndex']);
+Route::get('/api/ton-kho-noi-bo/kho', [WarehouseCountController::class, 'stockWarehouses']);
+Route::get('/api/ton-kho-noi-bo', [WarehouseCountController::class, 'stockData']);
 Route::get('/client/kiem-ton-kho/vi-tri/{warehouseLocation}', [WarehouseCountController::class, 'showLocation']);
 Route::get('/api/kiem-ton-kho/vi-tri', [WarehouseCountController::class, 'locations']);
 Route::post('/api/kiem-ton-kho/vi-tri', [WarehouseCountController::class, 'storeLocation']);
@@ -157,6 +168,8 @@ Route::delete('/api/kiem-ton-kho/kien/{inventoryPackage}', [WarehouseCountContro
 Route::get('/api/kiem-ton-kho/noi-dung-vi-tri', [WarehouseCountController::class, 'locationContents']);
 Route::get('/client/kiem-ton-kho/tem-kien/{inventoryPackage}', [WarehouseCountController::class, 'printPackage']);
 Route::get('/client/kiem-ton-kho/tem-vi-tri/{warehouseLocation}', [WarehouseCountController::class, 'printLocation']);
+Route::get('/client/nhap-thanh-pham-noi-bo/{receipt}/in', [WarehouseCountController::class, 'printMaterialReceipt']);
+Route::get('/client/nhap-vat-tu-noi-bo/{receipt}/in', [WarehouseCountController::class, 'printMaterialReceipt']);
 
 
 // Route riêng dành cho tool Unipax

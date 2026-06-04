@@ -156,7 +156,7 @@
 
         <section class="panel context-bar mb-3">
             <div class="row g-2 align-items-end">
-                <div class="col-lg-5"><label class="form-label">Vị trí đang kiểm</label><input id="locationCode" list="locationOptions" class="form-control" placeholder="Chọn hoặc quét mã vị trí"></div>
+                <div class="col-lg-5"><label class="form-label">Vị trí đang kiểm</label><input id="locationCode" list="locationOptions" class="form-control" placeholder="Để trống nếu chưa xếp vị trí"></div>
                 <div class="col-lg-3"><label class="form-label">Mã kho</label><input id="warehouseCode" class="form-control" placeholder="KTPHAM"></div>
                 <div class="col-lg-2"><label class="form-label">Ngày kiểm kê</label><input id="checkedAt" type="date" class="form-control" value="{{ now()->format('Y-m-d') }}"></div>
                 <div class="col-lg-2"><button type="button" class="btn btn-outline-secondary btn-icon w-100 justify-content-center" onclick="openLocationModal(value('locationCode').toUpperCase())"><i data-lucide="settings-2"></i>Quản lý vị trí</button></div>
@@ -218,7 +218,7 @@
         </div>
 
         <section id="entryPanel" data-workspace-panel="entry" class="panel mb-3 d-none">
-            <div class="panel-header"><div><h2 class="panel-title">Ghi nhận kiện hàng</h2><div id="entryLocationContext" class="section-hint mt-1">Chọn vị trí đang kiểm trước khi nhập kiện.</div></div></div>
+            <div class="panel-header"><div><h2 class="panel-title">Ghi nhận kiện hàng</h2><div id="entryLocationContext" class="section-hint mt-1">Có thể nhập tồn trước; nếu chưa có vị trí hệ thống sẽ đưa vào CHUA-XEP.</div></div></div>
             <div class="panel-body"><div class="row g-2">
                 <div class="col-md-3 product-search"><label class="form-label">Mã TP kế toán</label><input id="maSp" class="form-control" autocomplete="off" placeholder="Gõ mã hoặc tên hàng"><div id="maSpResults" class="product-results d-none"></div></div>
                 <div class="col-md-3"><label class="form-label">Mã hàng nội bộ</label><input id="internalItemCode" class="form-control"></div>
@@ -227,7 +227,7 @@
                 <div class="col-md-2"><label class="form-label">Side</label><input id="side" class="form-control"></div>
                 <div class="col-md-2"><label class="form-label">Số lượng</label><input id="quantity" type="number" step="0.001" min="0" class="form-control"></div>
                 <div class="col-md-6"><label class="form-label">Ghi chú</label><input id="note" class="form-control"></div>
-                <div class="col-md-2 d-flex align-items-end"><button id="savePackageBtn" class="btn btn-primary btn-icon w-100 justify-content-center"><i data-lucide="printer"></i>Lưu và in tem</button></div>
+                <div class="col-md-3 d-flex align-items-end"><button id="savePackageBtn" class="btn btn-primary btn-icon w-100 justify-content-center"><i data-lucide="printer"></i>Lưu + in phiếu nhập TP</button></div>
             </div></div>
         </section>
 
@@ -370,7 +370,12 @@
 
         function fillSelectedLocation() {
             const location = selectedLocation();
-            if (!location) return;
+            if (!location) {
+                if (!value('locationCode')) {
+                    document.getElementById('entryLocationContext').textContent = 'Chưa chọn vị trí: kiện sẽ lưu vào CHUA-XEP để xếp kệ sau.';
+                }
+                return;
+            }
             document.getElementById('locationCode').value = location.location_code;
             document.getElementById('warehouseCode').value = location.warehouse_code || '';
             document.getElementById('entryLocationContext').textContent = `Đang nhập tại ${location.location_code} · Kho ${location.warehouse_code || '-'}`;
@@ -723,6 +728,7 @@
             }).then(r => jsonOrError(r, 'Không lưu được kiện'))
               .then(result => {
                   window.open(result.print_url, '_blank');
+                  if (result.receipt_print_url) window.open(result.receipt_print_url, '_blank');
                   ['internalItemCode','size','color','side','quantity','note'].forEach(id => document.getElementById(id).value = '');
                   loadPackages();
                   loadLocations();
