@@ -36,6 +36,10 @@
                         <option value="">Tất cả kho</option>
                     </select>
                 </div>
+                <div class="col-md-2">
+                    <label class="form-label">Tháng</label>
+                    <input id="stockMonth" type="month" class="form-control" value="{{ now()->format('Y-m') }}">
+                </div>
                 <div class="col-md-5">
                     <label class="form-label">Tìm mã, mã nội bộ, size, màu hoặc vị trí</label>
                     <input id="keyword" class="form-control" placeholder="Nhập từ khóa">
@@ -45,9 +49,9 @@
 
         <section class="row g-3 mb-3">
             <div class="col-md-3"><div class="panel"><div class="hint">Mã hàng</div><div id="itemCount" class="metric">0</div></div></div>
-            <div class="col-md-3"><div class="panel"><div class="hint">Dòng tồn</div><div id="lineCount" class="metric">0</div></div></div>
-            <div class="col-md-3"><div class="panel"><div class="hint">Số kiện</div><div id="packageCount" class="metric">0</div></div></div>
-            <div class="col-md-3"><div class="panel"><div class="hint">Tổng số lượng</div><div id="totalQuantity" class="metric">0</div></div></div>
+            <div class="col-md-3"><div class="panel"><div class="hint">Tồn đầu kỳ</div><div id="openingQuantity" class="metric">0</div></div></div>
+            <div class="col-md-3"><div class="panel"><div class="hint">Nhập / Xuất</div><div class="metric"><span id="receiptQuantity">0</span> / <span id="issueQuantity">0</span></div></div></div>
+            <div class="col-md-3"><div class="panel"><div class="hint">Tồn cuối kỳ</div><div id="totalQuantity" class="metric">0</div></div></div>
         </section>
 
         <section class="panel">
@@ -62,9 +66,10 @@
                             <th>Size</th>
                             <th>Màu</th>
                             <th>Side</th>
-                            <th class="text-end">Số kiện</th>
-                            <th class="text-end">Tồn</th>
-                            <th>Ngày mới nhất</th>
+                            <th class="text-end">Tồn đầu</th>
+                            <th class="text-end">Nhập</th>
+                            <th class="text-end">Xuất</th>
+                            <th class="text-end">Tồn cuối</th>
                         </tr>
                     </thead>
                     <tbody id="stockRows"></tbody>
@@ -75,6 +80,7 @@
 
     <script>
         const warehouseSelect = document.getElementById('warehouseSelect');
+        const stockMonthEl = document.getElementById('stockMonth');
         const keywordEl = document.getElementById('keyword');
         const rowsEl = document.getElementById('stockRows');
         let searchTimer = null;
@@ -101,14 +107,16 @@
         function loadStock() {
             const params = new URLSearchParams();
             if (warehouseSelect.value) params.set('warehouse_code', warehouseSelect.value);
+            if (stockMonthEl.value) params.set('month', stockMonthEl.value);
             if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
 
             fetch(`/api/ton-kho-noi-bo?${params.toString()}`)
                 .then(response => jsonOrError(response, 'Không tải được tồn nội bộ'))
                 .then(result => {
                     document.getElementById('itemCount').textContent = num(result.summary?.item_count || 0);
-                    document.getElementById('lineCount').textContent = num(result.summary?.line_count || 0);
-                    document.getElementById('packageCount').textContent = num(result.summary?.package_count || 0);
+                    document.getElementById('openingQuantity').textContent = num(result.summary?.opening_quantity || 0);
+                    document.getElementById('receiptQuantity').textContent = num(result.summary?.receipt_quantity || 0);
+                    document.getElementById('issueQuantity').textContent = num(result.summary?.issue_quantity || 0);
                     document.getElementById('totalQuantity').textContent = num(result.summary?.total_quantity || 0);
                     rowsEl.innerHTML = (result.data || []).map(row => `
                         <tr>
@@ -119,16 +127,18 @@
                             <td>${esc(row.size)}</td>
                             <td>${esc(row.color)}</td>
                             <td>${esc(row.side)}</td>
-                            <td class="text-end">${num(row.package_count)}</td>
+                            <td class="text-end">${num(row.opening_quantity)}</td>
+                            <td class="text-end">${num(row.receipt_quantity)}</td>
+                            <td class="text-end">${num(row.issue_quantity)}</td>
                             <td class="text-end fw-semibold">${num(row.total_quantity)}</td>
-                            <td>${esc(row.latest_checked_at)}</td>
                         </tr>
-                    `).join('') || '<tr><td colspan="10" class="text-center hint">Không có tồn phù hợp</td></tr>';
+                    `).join('') || '<tr><td colspan="11" class="text-center hint">Không có tồn phù hợp</td></tr>';
                 })
                 .catch(error => alert(error.message));
         }
 
         warehouseSelect.addEventListener('change', loadStock);
+        stockMonthEl.addEventListener('change', loadStock);
         keywordEl.addEventListener('input', () => {
             clearTimeout(searchTimer);
             searchTimer = setTimeout(loadStock, 250);

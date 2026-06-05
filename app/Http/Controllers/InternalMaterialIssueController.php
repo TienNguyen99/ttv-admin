@@ -169,7 +169,7 @@ class InternalMaterialIssueController extends Controller
             return response()->json(['data' => []]);
         }
 
-        $data = DB::table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa as c')
+        $data = DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa as c')
             ->where(function ($query) use ($keyword) {
                 $query->where('c.Ma_hh', 'like', '%' . $keyword . '%')
                     ->orWhere('c.Ten_hh', 'like', '%' . $keyword . '%');

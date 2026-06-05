@@ -220,6 +220,7 @@
         <section id="entryPanel" data-workspace-panel="entry" class="panel mb-3 d-none">
             <div class="panel-header"><div><h2 class="panel-title">Ghi nhận kiện hàng</h2><div id="entryLocationContext" class="section-hint mt-1">Có thể nhập tồn trước; nếu chưa có vị trí hệ thống sẽ đưa vào CHUA-XEP.</div></div></div>
             <div class="panel-body"><div class="row g-2">
+                <div class="col-md-2"><label class="form-label">Loại chứng từ</label><select id="entryType" class="form-select"><option value="opening">Tồn đầu kỳ</option><option value="receipt">Phiếu nhập TP</option></select></div>
                 <div class="col-md-3 product-search"><label class="form-label">Mã TP kế toán</label><input id="maSp" class="form-control" autocomplete="off" placeholder="Gõ mã hoặc tên hàng"><div id="maSpResults" class="product-results d-none"></div></div>
                 <div class="col-md-3"><label class="form-label">Mã hàng nội bộ</label><input id="internalItemCode" class="form-control"></div>
                 <div class="col-md-1"><label class="form-label">Size</label><input id="size" class="form-control"></div>
@@ -307,6 +308,14 @@
 
         function formatNumber(value) {
             return Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
+        }
+
+        function updateSavePackageButton() {
+            const isReceipt = value('entryType') === 'receipt';
+            document.getElementById('savePackageBtn').innerHTML = isReceipt
+                ? '<i data-lucide="printer"></i>Lưu + in phiếu nhập TP'
+                : '<i data-lucide="save"></i>Lưu tồn đầu kỳ';
+            refreshIcons();
         }
 
         function switchWorkspace(view) {
@@ -721,7 +730,7 @@
             fetch('/api/kiem-ton-kho/kien', {
                 method: 'POST', headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({
-                    location_code:value('locationCode'), ma_ko:value('warehouseCode'), checked_at:value('checkedAt'),
+                    location_code:value('locationCode'), ma_ko:value('warehouseCode'), checked_at:value('checkedAt'), entry_type:value('entryType'),
                     ma_sp:value('maSp'), internal_item_code:value('internalItemCode'), size:value('size'),
                     color:value('color'), side:value('side'), quantity:value('quantity'), note:value('note')
                 })
@@ -859,9 +868,11 @@
             if (!event.target.closest('.product-search')) hideProductResults();
         });
         document.getElementById('checkedAt').addEventListener('change', () => { loadPackages(); loadWarehouseStats(); loadWarehouseMap(); loadLocationContents(); });
+        document.getElementById('entryType').addEventListener('change', updateSavePackageButton);
         const requestedLocation = new URLSearchParams(window.location.search).get('location_code');
         if (requestedLocation) document.getElementById('locationCode').value = requestedLocation.toUpperCase();
         loadLocations().then(() => { loadPackages(); loadWarehouseStats(); loadWarehouseMap(); loadLocationContents(); });
+        updateSavePackageButton();
         refreshIcons();
     </script>
 </body>

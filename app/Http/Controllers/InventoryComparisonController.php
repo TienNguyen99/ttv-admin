@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternalInventoryCount;
+use App\Models\InternalOpeningStock;
+use App\Models\InventoryPackage;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,32 +18,42 @@ class InventoryComparisonController extends Controller
 
     public function data(Request $request)
     {
-        $checkedAt = $request->query('checked_at', now()->format('Y-m-d'));
+        $month = Carbon::parse($request->query('month', now()->format('Y-m')) . '-01')->startOfMonth();
+        $monthStart = $month->format('Y-m-d');
+        $monthEnd = $month->copy()->endOfMonth()->format('Y-m-d');
+        $warehouseCode = strtoupper(trim((string) $request->query('warehouse_code', '')));
         $keyword = trim((string) $request->query('keyword', ''));
 
-        $subNhap = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
+        $subNhap = DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_sp', DB::raw("COALESCE(Ma3ko, Ma_ko, '') as Ma_ko"), 'Noluong', 'SttRecN')
             ->where('Ma_ct', '=', 'NX')
             ->whereNotNull('Ma_sp')
+            ->whereDate('Ngay_ct', '<=', $monthEnd)
             ->distinct();
 
-        $nhap = DB::query()
+        $nhap = DB::connection('sqlsrv')->query()
             ->fromSub($subNhap, 'sub')
             ->select('Ma_sp', DB::raw("COALESCE(Ma_ko, '') as Ma_ko"), DB::raw('SUM(Noluong) as tong_nhap'))
             ->groupBy('Ma_sp', 'Ma_ko');
 
-        $xuat = DB::table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
+        $xuat = DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.DataKetoan2026')
             ->select('Ma_hh as Ma_sp', DB::raw("COALESCE(Ma_ko, Ma3ko, '') as Ma_ko"), DB::raw('SUM(Soluong) as tong_xuat'))
             ->where('Ma_ct', '=', 'XU')
             ->whereNotNull('Ma_hh')
+            ->whereDate('Ngay_ct', '<=', $monthEnd)
             ->groupBy('Ma_hh', DB::raw("COALESCE(Ma_ko, Ma3ko, '')"));
 
-        $maHang = DB::query()
+        if ($warehouseCode !== '') {
+            $nhap->where('Ma_ko', $warehouseCode);
+            $xuat->where(DB::raw("COALESCE(Ma_ko, Ma3ko, '')"), $warehouseCode);
+        }
+
+        $maHang = DB::connection('sqlsrv')->query()
             ->fromSub((clone $nhap)->union(clone $xuat), 'codes')
             ->select('Ma_sp', 'Ma_ko')
             ->groupBy('Ma_sp', 'Ma_ko');
 
-        $source = DB::query()
+        $source = DB::connection('sqlsrv')->query()
             ->fromSub($maHang, 'mh')
             ->leftJoinSub($nhap, 'n', function ($join) {
                 $join->on('mh.Ma_sp', '=', 'n.Ma_sp')->on('mh.Ma_ko', '=', 'n.Ma_ko');
@@ -63,23 +75,21 @@ class InventoryComparisonController extends Controller
             ->orderBy('mh.Ma_ko')
             ->get();
 
-        $internal = InternalInventoryCount::query()
-            ->whereDate('checked_at', Carbon::parse($checkedAt)->format('Y-m-d'))
-            ->get()
-            ->groupBy(fn ($item) => $item->ma_sp . '|' . $item->ma_ko);
+        $internalRows = $this->internalStockRows($monthStart, $monthEnd, $warehouseCode);
+        $internal = $internalRows->groupBy(fn ($item) => $item->ma_sp . '|' . $item->warehouse_code);
 
         $mapDetails = function ($details) {
-            return $details->map(function ($detail) {
-                return [
-                    'id' => $detail->id,
-                    'internal_item_code' => $detail->internal_item_code,
-                    'size' => $detail->size,
-                    'color' => $detail->color,
-                    'side' => $detail->side,
-                    'counted_quantity' => (float) $detail->counted_quantity,
-                    'note' => $detail->note,
-                ];
-            })->values();
+            return $details->map(fn ($detail) => [
+                'location_code' => $detail->location_code,
+                'internal_item_code' => $detail->internal_item_code,
+                'size' => $detail->size,
+                'color' => $detail->color,
+                'side' => $detail->side,
+                'opening_quantity' => (float) $detail->opening_quantity,
+                'receipt_quantity' => (float) $detail->receipt_quantity,
+                'issue_quantity' => (float) $detail->issue_quantity,
+                'counted_quantity' => (float) $detail->total_quantity,
+            ])->values();
         };
 
         $sourceKeys = $source->mapWithKeys(function ($item) {
@@ -88,7 +98,7 @@ class InventoryComparisonController extends Controller
 
         $data = $source->map(function ($item) use ($internal, $mapDetails) {
             $details = $internal->get($item->Ma_sp . '|' . $item->Ma_ko, collect());
-            $countedQuantity = $details->isEmpty() ? null : (float) $details->sum('counted_quantity');
+            $countedQuantity = $details->isEmpty() ? null : (float) $details->sum('total_quantity');
             $sourceQuantity = (float) $item->source_quantity;
             $missingReceipt = (float) $item->tong_xuat > 0 && (float) $item->tong_nhap <= 0;
 
@@ -114,7 +124,7 @@ class InventoryComparisonController extends Controller
             }
 
             [$maSp, $maKo] = array_pad(explode('|', $key, 2), 2, '');
-            $countedQuantity = (float) $details->sum('counted_quantity');
+            $countedQuantity = (float) $details->sum('total_quantity');
 
             $data->push([
                 'ma_sp' => $maSp,
@@ -137,7 +147,7 @@ class InventoryComparisonController extends Controller
                 return [$item['ma_sp'] . '|' . $item['ma_ko'] => true];
             });
 
-            $catalogItems = DB::table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
+            $catalogItems = DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
                 ->where(function ($query) use ($keyword) {
                     $query->where('Ma_hh', 'like', '%' . $keyword . '%')
                         ->orWhere('Ten_hh', 'like', '%' . $keyword . '%');
@@ -174,22 +184,122 @@ class InventoryComparisonController extends Controller
             }
         }
 
+        if ($keyword !== '') {
+            $lowerKeyword = mb_strtolower($keyword);
+            $data = $data->filter(function ($item) use ($lowerKeyword) {
+                $text = mb_strtolower(implode(' ', [
+                    $item['ma_sp'] ?? '',
+                    $item['ma_ko'] ?? '',
+                    $item['ten_hh'] ?? '',
+                    collect($item['details'] ?? [])->pluck('internal_item_code')->implode(' '),
+                    collect($item['details'] ?? [])->pluck('location_code')->implode(' '),
+                ]));
+
+                return str_contains($text, $lowerKeyword);
+            });
+        }
+
         $data = $data->sortBy([
             ['ma_sp', 'asc'],
             ['ma_ko', 'asc'],
         ])->values();
 
+        $tsoftQuantity = (float) $data->sum('source_quantity');
+        $internalQuantity = (float) $data->sum('counted_quantity');
+
         return response()->json([
-            'checked_at' => $checkedAt,
+            'month' => $month->format('Y-m'),
             'data' => $data,
             'summary' => [
                 'total_items' => $data->count(),
                 'unique_items' => $data->pluck('ma_sp')->filter()->unique()->count(),
                 'checked_items' => $data->whereNotNull('counted_quantity')->count(),
-                'different_items' => $data->where('difference', '!=', 0)->count(),
+                'different_items' => $data->filter(fn ($item) => $item['difference'] !== null && (float) $item['difference'] !== 0.0)->count(),
                 'missing_receipt_items' => $data->where('missing_receipt', true)->count(),
+                'tsoft_quantity' => $tsoftQuantity,
+                'internal_quantity' => $internalQuantity,
+                'difference_quantity' => $internalQuantity - $tsoftQuantity,
             ],
         ]);
+    }
+
+    private function internalStockRows(string $monthStart, string $monthEnd, string $warehouseCode)
+    {
+        $opening = DB::connection('internal')->table('internal_opening_stocks')
+            ->select(
+                'warehouse_code',
+                'location_code',
+                DB::raw('ma_hh as ma_sp'),
+                'internal_item_code',
+                'size',
+                'color',
+                'side',
+                DB::raw('SUM(quantity) as opening_quantity'),
+                DB::raw('0 as receipt_quantity'),
+                DB::raw('0 as issue_quantity')
+            )
+            ->whereDate('period_month', $monthStart)
+            ->groupBy('warehouse_code', 'location_code', 'ma_hh', 'internal_item_code', 'size', 'color', 'side');
+
+        $receipts = DB::connection('internal')->table('internal_material_receipt_lines as l')
+            ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+            ->select(
+                DB::raw("COALESCE(r.warehouse_code, '') as warehouse_code"),
+                DB::raw("COALESCE(l.location_code, r.location_code, '') as location_code"),
+                DB::raw('l.ma_hh as ma_sp'),
+                DB::raw("COALESCE(l.internal_item_code, '') as internal_item_code"),
+                DB::raw("COALESCE(l.size, '') as size"),
+                DB::raw("COALESCE(l.color, '') as color"),
+                DB::raw("COALESCE(l.side, '') as side"),
+                DB::raw('0 as opening_quantity'),
+                DB::raw('SUM(l.quantity) as receipt_quantity'),
+                DB::raw('0 as issue_quantity')
+            )
+            ->whereBetween('r.receipt_date', [$monthStart, $monthEnd])
+            ->where('r.source', 'Phieu nhap thanh pham')
+            ->groupBy('r.warehouse_code', DB::raw("COALESCE(l.location_code, r.location_code, '')"), 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color', 'l.side');
+
+        $issues = DB::connection('internal')->table('internal_material_issue_lines as l')
+            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->select(
+                DB::raw("COALESCE(i.warehouse_code, '') as warehouse_code"),
+                DB::raw("COALESCE(l.location_code, '') as location_code"),
+                DB::raw('l.ma_hh as ma_sp'),
+                DB::raw("COALESCE(l.internal_item_code, '') as internal_item_code"),
+                DB::raw("COALESCE(l.size, '') as size"),
+                DB::raw("COALESCE(l.color, '') as color"),
+                DB::raw("'' as side"),
+                DB::raw('0 as opening_quantity'),
+                DB::raw('0 as receipt_quantity'),
+                DB::raw('SUM(l.quantity) as issue_quantity')
+            )
+            ->whereBetween('i.issue_date', [$monthStart, $monthEnd])
+            ->groupBy('i.warehouse_code', 'l.location_code', 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color');
+
+        $query = DB::connection('internal')->query()
+            ->fromSub($opening->unionAll($receipts)->unionAll($issues), 'ledger')
+            ->select(
+                'warehouse_code',
+                'location_code',
+                'ma_sp',
+                'internal_item_code',
+                'size',
+                'color',
+                'side',
+                DB::raw('SUM(opening_quantity) as opening_quantity'),
+                DB::raw('SUM(receipt_quantity) as receipt_quantity'),
+                DB::raw('SUM(issue_quantity) as issue_quantity'),
+                DB::raw('SUM(opening_quantity + receipt_quantity - issue_quantity) as total_quantity')
+            );
+
+        if ($warehouseCode !== '') {
+            $query->where('warehouse_code', $warehouseCode);
+        }
+
+        return $query
+            ->groupBy('warehouse_code', 'location_code', 'ma_sp', 'internal_item_code', 'size', 'color', 'side')
+            ->havingRaw('SUM(opening_quantity + receipt_quantity - issue_quantity) != 0 OR SUM(opening_quantity) != 0 OR SUM(receipt_quantity) != 0 OR SUM(issue_quantity) != 0')
+            ->get();
     }
 
     public function store(Request $request)
@@ -236,7 +346,31 @@ class InventoryComparisonController extends Controller
 
     public function destroy(InternalInventoryCount $inventoryCount)
     {
-        $inventoryCount->delete();
+        DB::connection('internal')->transaction(function () use ($inventoryCount) {
+            $packages = InventoryPackage::query()
+                ->where('inventory_count_id', $inventoryCount->id)
+                ->get();
+
+            foreach ($packages as $package) {
+                InternalOpeningStock::query()
+                    ->where('inventory_package_id', $package->id)
+                    ->delete();
+
+                $receiptLines = $package->receiptLines()->with('receipt.lines')->get();
+                foreach ($receiptLines as $line) {
+                    $receipt = $line->receipt;
+                    $line->delete();
+
+                    if ($receipt && !$receipt->lines()->exists()) {
+                        $receipt->delete();
+                    }
+                }
+
+                $package->delete();
+            }
+
+            $inventoryCount->delete();
+        });
 
         return response()->json([
             'message' => 'Đã xóa dòng kiểm kê nội bộ.',

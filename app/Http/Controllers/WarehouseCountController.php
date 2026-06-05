@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\InternalInventoryCount;
 use App\Models\InternalMaterialReceipt;
+use App\Models\InternalOpeningStock;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -139,17 +141,21 @@ class WarehouseCountController extends Controller
 
     public function stockWarehouses()
     {
-        $fromPackages = InventoryPackage::query()
-            ->select(DB::raw("NULLIF(ma_ko, '') as warehouse_code"))
-            ->whereRaw("NULLIF(ma_ko, '') IS NOT NULL");
+        $fromOpening = DB::connection('internal')->table('internal_opening_stocks')
+            ->select(DB::raw("NULLIF(warehouse_code, '') as warehouse_code"))
+            ->whereRaw("NULLIF(warehouse_code, '') IS NOT NULL");
 
-        $fromLocations = WarehouseLocation::query()
+        $fromReceipts = DB::connection('internal')->table('internal_material_receipts')
+            ->select(DB::raw("NULLIF(warehouse_code, '') as warehouse_code"))
+            ->whereRaw("NULLIF(warehouse_code, '') IS NOT NULL");
+
+        $fromIssues = DB::connection('internal')->table('internal_material_issues')
             ->select(DB::raw("NULLIF(warehouse_code, '') as warehouse_code"))
             ->whereRaw("NULLIF(warehouse_code, '') IS NOT NULL");
 
         $warehouses = DB::connection('internal')
             ->query()
-            ->fromSub($fromPackages->union($fromLocations), 'warehouses')
+            ->fromSub($fromOpening->union($fromReceipts)->union($fromIssues), 'warehouses')
             ->select('warehouse_code')
             ->whereNotNull('warehouse_code')
             ->groupBy('warehouse_code')
@@ -163,66 +169,112 @@ class WarehouseCountController extends Controller
     {
         $warehouseCode = strtoupper(trim((string) $request->query('warehouse_code', '')));
         $keyword = trim((string) $request->query('keyword', ''));
+        $month = Carbon::parse($request->query('month', now()->format('Y-m')) . '-01')->startOfMonth();
+        $monthStart = $month->format('Y-m-d');
+        $monthEnd = $month->copy()->endOfMonth()->format('Y-m-d');
 
-        $query = InventoryPackage::query()
-            ->join('warehouse_locations as wl', 'inventory_packages.warehouse_location_id', '=', 'wl.id')
+        $opening = DB::connection('internal')->table('internal_opening_stocks')
             ->select(
-                DB::raw("COALESCE(NULLIF(inventory_packages.ma_ko, ''), NULLIF(wl.warehouse_code, ''), '') as warehouse_code"),
-                'wl.location_code',
-                'inventory_packages.ma_sp',
-                'inventory_packages.internal_item_code',
-                'inventory_packages.size',
-                'inventory_packages.color',
-                'inventory_packages.side',
-                DB::raw('SUM(inventory_packages.quantity) as total_quantity'),
-                DB::raw('COUNT(*) as package_count'),
-                DB::raw('MAX(inventory_packages.checked_at) as latest_checked_at')
+                'warehouse_code',
+                'location_code',
+                'ma_hh',
+                'internal_item_code',
+                'size',
+                'color',
+                'side',
+                DB::raw('SUM(quantity) as opening_quantity'),
+                DB::raw('0 as receipt_quantity'),
+                DB::raw('0 as issue_quantity')
             )
-            ->where('inventory_packages.quantity', '>', 0);
+            ->whereDate('period_month', $monthStart)
+            ->groupBy('warehouse_code', 'location_code', 'ma_hh', 'internal_item_code', 'size', 'color', 'side');
+
+        $receipts = DB::connection('internal')->table('internal_material_receipt_lines as l')
+            ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+            ->select(
+                DB::raw("COALESCE(r.warehouse_code, '') as warehouse_code"),
+                DB::raw("COALESCE(l.location_code, r.location_code, '') as location_code"),
+                'l.ma_hh',
+                DB::raw("COALESCE(l.internal_item_code, '') as internal_item_code"),
+                DB::raw("COALESCE(l.size, '') as size"),
+                DB::raw("COALESCE(l.color, '') as color"),
+                DB::raw("COALESCE(l.side, '') as side"),
+                DB::raw('0 as opening_quantity'),
+                DB::raw('SUM(l.quantity) as receipt_quantity'),
+                DB::raw('0 as issue_quantity')
+            )
+            ->whereBetween('r.receipt_date', [$monthStart, $monthEnd])
+            ->where('r.source', 'Phieu nhap thanh pham')
+            ->groupBy('r.warehouse_code', DB::raw("COALESCE(l.location_code, r.location_code, '')"), 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color', 'l.side');
+
+        $issues = DB::connection('internal')->table('internal_material_issue_lines as l')
+            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->select(
+                DB::raw("COALESCE(i.warehouse_code, '') as warehouse_code"),
+                DB::raw("COALESCE(l.location_code, '') as location_code"),
+                'l.ma_hh',
+                DB::raw("COALESCE(l.internal_item_code, '') as internal_item_code"),
+                DB::raw("COALESCE(l.size, '') as size"),
+                DB::raw("COALESCE(l.color, '') as color"),
+                DB::raw("'' as side"),
+                DB::raw('0 as opening_quantity'),
+                DB::raw('0 as receipt_quantity'),
+                DB::raw('SUM(l.quantity) as issue_quantity')
+            )
+            ->whereBetween('i.issue_date', [$monthStart, $monthEnd])
+            ->groupBy('i.warehouse_code', 'l.location_code', 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color');
+
+        $query = DB::connection('internal')->query()
+            ->fromSub($opening->unionAll($receipts)->unionAll($issues), 'ledger')
+            ->select(
+                'warehouse_code',
+                'location_code',
+                DB::raw('ma_hh as ma_sp'),
+                'internal_item_code',
+                'size',
+                'color',
+                'side',
+                DB::raw('SUM(opening_quantity) as opening_quantity'),
+                DB::raw('SUM(receipt_quantity) as receipt_quantity'),
+                DB::raw('SUM(issue_quantity) as issue_quantity'),
+                DB::raw('SUM(opening_quantity + receipt_quantity - issue_quantity) as total_quantity'),
+                DB::raw('0 as package_count'),
+                DB::raw("'" . $monthEnd . "' as latest_checked_at")
+            );
 
         if ($warehouseCode !== '') {
-            $query->where(function ($q) use ($warehouseCode) {
-                $q->where('inventory_packages.ma_ko', $warehouseCode)
-                    ->orWhere(function ($sub) use ($warehouseCode) {
-                        $sub->where('inventory_packages.ma_ko', '')
-                            ->where('wl.warehouse_code', $warehouseCode);
-                    });
-            });
+            $query->where('warehouse_code', $warehouseCode);
         }
 
         if ($keyword !== '') {
             $query->where(function ($q) use ($keyword) {
-                $q->where('inventory_packages.ma_sp', 'like', '%' . $keyword . '%')
-                    ->orWhere('inventory_packages.internal_item_code', 'like', '%' . $keyword . '%')
-                    ->orWhere('inventory_packages.size', 'like', '%' . $keyword . '%')
-                    ->orWhere('inventory_packages.color', 'like', '%' . $keyword . '%')
-                    ->orWhere('wl.location_code', 'like', '%' . $keyword . '%');
+                $q->where('ma_hh', 'like', '%' . $keyword . '%')
+                    ->orWhere('internal_item_code', 'like', '%' . $keyword . '%')
+                    ->orWhere('size', 'like', '%' . $keyword . '%')
+                    ->orWhere('color', 'like', '%' . $keyword . '%')
+                    ->orWhere('location_code', 'like', '%' . $keyword . '%');
             });
         }
 
         $data = $query
-            ->groupBy(
-                'inventory_packages.ma_ko',
-                'wl.warehouse_code',
-                'wl.location_code',
-                'inventory_packages.ma_sp',
-                'inventory_packages.internal_item_code',
-                'inventory_packages.size',
-                'inventory_packages.color',
-                'inventory_packages.side'
-            )
+            ->groupBy('warehouse_code', 'location_code', 'ma_hh', 'internal_item_code', 'size', 'color', 'side')
+            ->havingRaw('SUM(opening_quantity + receipt_quantity - issue_quantity) != 0 OR SUM(opening_quantity) != 0 OR SUM(receipt_quantity) != 0 OR SUM(issue_quantity) != 0')
             ->orderBy('warehouse_code')
-            ->orderBy('wl.location_code')
-            ->orderBy('inventory_packages.ma_sp')
+            ->orderBy('location_code')
+            ->orderBy('ma_hh')
             ->get();
 
         return response()->json([
             'data' => $data,
             'summary' => [
                 'warehouse_code' => $warehouseCode,
+                'month' => $month->format('Y-m'),
                 'item_count' => $data->pluck('ma_sp')->filter()->unique()->count(),
                 'line_count' => $data->count(),
-                'package_count' => $data->sum('package_count'),
+                'opening_quantity' => (float) $data->sum('opening_quantity'),
+                'receipt_quantity' => (float) $data->sum('receipt_quantity'),
+                'issue_quantity' => (float) $data->sum('issue_quantity'),
+                'package_count' => 0,
                 'total_quantity' => (float) $data->sum('total_quantity'),
             ],
         ]);
@@ -232,6 +284,7 @@ class WarehouseCountController extends Controller
     {
         $data = InventoryPackage::query()
             ->join('warehouse_locations as wl', 'inventory_packages.warehouse_location_id', '=', 'wl.id')
+            ->join('inventory_counts as ic', 'inventory_packages.inventory_count_id', '=', 'ic.id')
             ->select(
                 'inventory_packages.internal_item_code',
                 'inventory_packages.ma_sp',
@@ -278,6 +331,7 @@ class WarehouseCountController extends Controller
             'side' => 'nullable|string|max:100',
             'quantity' => 'required|numeric|min:0',
             'checked_at' => 'required|date',
+            'entry_type' => 'nullable|in:opening,receipt',
             'note' => 'nullable|string|max:500',
         ]);
 
@@ -299,7 +353,7 @@ class WarehouseCountController extends Controller
             ]
         );
 
-        $catalogItem = DB::table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
+        $catalogItem = DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
             ->where('Ma_hh', trim($data['ma_sp']))
             ->select('Ten_hh', 'Dvt')
             ->first();
@@ -314,7 +368,9 @@ class WarehouseCountController extends Controller
             'checked_at' => $data['checked_at'],
         ];
 
-        [$package, $receipt] = DB::connection('internal')->transaction(function () use ($attributes, $data, $location, $catalogItem) {
+        $entryType = $data['entry_type'] ?? 'opening';
+
+        [$package, $receipt] = DB::connection('internal')->transaction(function () use ($attributes, $data, $location, $catalogItem, $entryType) {
             $count = InternalInventoryCount::query()->firstOrCreate(
                 [
                     'ma_sp' => $attributes['ma_sp'],
@@ -347,30 +403,48 @@ class WarehouseCountController extends Controller
             $location->status = 'counting';
             $location->save();
 
-            $receipt = InternalMaterialReceipt::query()->create([
-                'receipt_code' => $this->nextMaterialReceiptCode(),
-                'receipt_date' => $attributes['checked_at'],
-                'warehouse_code' => $attributes['ma_ko'],
-                'location_code' => $location->location_code,
-                'receiver_name' => '',
-                'source' => 'Nhap thanh pham tai cho',
-                'status' => 'posted',
-                'note' => $data['note'] ?? null,
-            ]);
+            $receipt = null;
 
-            $receipt->lines()->create([
-                'inventory_package_id' => $package->id,
-                'ma_hh' => $attributes['ma_sp'],
-                'ten_hh' => $catalogItem->Ten_hh ?? '',
-                'dvt' => $catalogItem->Dvt ?? '',
-                'quantity' => $data['quantity'],
-                'location_code' => $location->location_code,
-                'internal_item_code' => $attributes['internal_item_code'],
-                'size' => $attributes['size'],
-                'color' => $attributes['color'],
-                'side' => $attributes['side'],
-                'note' => $data['note'] ?? null,
-            ]);
+            if ($entryType === 'opening') {
+                InternalOpeningStock::query()->create([
+                    'inventory_package_id' => $package->id,
+                    'period_month' => Carbon::parse($attributes['checked_at'])->startOfMonth()->format('Y-m-d'),
+                    'warehouse_code' => $attributes['ma_ko'],
+                    'location_code' => $location->location_code,
+                    'ma_hh' => $attributes['ma_sp'],
+                    'internal_item_code' => $attributes['internal_item_code'],
+                    'size' => $attributes['size'],
+                    'color' => $attributes['color'],
+                    'side' => $attributes['side'],
+                    'quantity' => $data['quantity'],
+                    'note' => $data['note'] ?? null,
+                ]);
+            } else {
+                $receipt = InternalMaterialReceipt::query()->create([
+                    'receipt_code' => $this->nextMaterialReceiptCode(),
+                    'receipt_date' => $attributes['checked_at'],
+                    'warehouse_code' => $attributes['ma_ko'],
+                    'location_code' => $location->location_code,
+                    'receiver_name' => '',
+                    'source' => 'Phieu nhap thanh pham',
+                    'status' => 'posted',
+                    'note' => $data['note'] ?? null,
+                ]);
+
+                $receipt->lines()->create([
+                    'inventory_package_id' => $package->id,
+                    'ma_hh' => $attributes['ma_sp'],
+                    'ten_hh' => $catalogItem->Ten_hh ?? '',
+                    'dvt' => $catalogItem->Dvt ?? '',
+                    'quantity' => $data['quantity'],
+                    'location_code' => $location->location_code,
+                    'internal_item_code' => $attributes['internal_item_code'],
+                    'size' => $attributes['size'],
+                    'color' => $attributes['color'],
+                    'side' => $attributes['side'],
+                    'note' => $data['note'] ?? null,
+                ]);
+            }
 
             return [$package, $receipt];
         });
@@ -379,7 +453,7 @@ class WarehouseCountController extends Controller
             'message' => 'Đã lưu kiện nội bộ.',
             'data' => $package->load('location:id,location_code'),
             'print_url' => url('/client/kiem-ton-kho/tem-kien/' . $package->id),
-            'receipt_print_url' => url('/client/nhap-thanh-pham-noi-bo/' . $receipt->id . '/in'),
+            'receipt_print_url' => $receipt ? url('/client/nhap-thanh-pham-noi-bo/' . $receipt->id . '/in') : null,
         ]);
     }
 
@@ -398,6 +472,20 @@ class WarehouseCountController extends Controller
                 ? InternalInventoryCount::query()->lockForUpdate()->find($inventoryPackage->inventory_count_id)
                 : null;
             $quantity = (float) $inventoryPackage->quantity;
+
+            InternalOpeningStock::query()
+                ->where('inventory_package_id', $inventoryPackage->id)
+                ->delete();
+
+            $receiptLines = $inventoryPackage->receiptLines()->with('receipt.lines')->get();
+            foreach ($receiptLines as $line) {
+                $receipt = $line->receipt;
+                $line->delete();
+
+                if ($receipt && !$receipt->lines()->exists()) {
+                    $receipt->delete();
+                }
+            }
 
             $inventoryPackage->delete();
 

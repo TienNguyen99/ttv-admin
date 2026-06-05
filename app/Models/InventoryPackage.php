@@ -34,4 +34,9 @@ class InventoryPackage extends Model
     {
         return $this->belongsTo(WarehouseLocation::class, 'warehouse_location_id');
     }
+
+    public function receiptLines()
+    {
+        return $this->hasMany(InternalMaterialReceiptLine::class, 'inventory_package_id');
+    }
 }

@@ -109,14 +109,13 @@
     <a class="summary-sidebar__link {{ request()->is('client/view-all-sx-data') ? 'is-active' : '' }}" href="{{ url('/client/view-all-sx-data') }}">Tổng hợp sản xuất</a>
     <a class="summary-sidebar__link {{ request()->is('client/view-nx-data') ? 'is-active' : '' }}" href="{{ url('/client/view-nx-data') }}">Phân tích NX</a>
 
-    <div class="summary-sidebar__label">Kế toán</div>
-    <a class="summary-sidebar__link {{ request()->is('client/ketoan') ? 'is-active' : '' }}" href="{{ url('/client/ketoan') }}">Xuất kho</a>
-    <a class="summary-sidebar__link {{ request()->is('client/ketoan-ton') ? 'is-active' : '' }}" href="{{ url('/client/ketoan-ton') }}">Tồn mã hàng</a>
+    <div class="summary-sidebar__label">Kho & kế toán</div>
+    <a class="summary-sidebar__link {{ request()->is('client/ketoan') ? 'is-active' : '' }}" href="{{ url('/client/ketoan') }}">Xuất kho TSoft</a>
+    <a class="summary-sidebar__link {{ request()->is('client/ketoan-ton') ? 'is-active' : '' }}" href="{{ url('/client/ketoan-ton') }}">Tồn mã hàng TSoft</a>
     <a class="summary-sidebar__link {{ request()->is('client/phieu-nhap-thanh-pham') ? 'is-active' : '' }}" href="{{ url('/client/phieu-nhap-thanh-pham') }}">Phiếu nhập TP</a>
-    <a class="summary-sidebar__link {{ request()->is('client/doi-chieu-ton') ? 'is-active' : '' }}" href="{{ url('/client/doi-chieu-ton') }}">Đối chiếu tồn</a>
-    <a class="summary-sidebar__link {{ request()->is('client/kiem-ton-kho*') ? 'is-active' : '' }}" href="{{ url('/client/kiem-ton-kho') }}">Nhập kho</a>
-    <a class="summary-sidebar__link {{ request()->is('client/xuat-vat-tu-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-vat-tu-noi-bo') }}">Xuất kho</a>
-    <a class="summary-sidebar__link {{ request()->is('client/ton-kho-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/ton-kho-noi-bo') }}">Tồn nội bộ</a>
+    <a class="summary-sidebar__link {{ request()->is('client/doi-chieu-ton') || request()->is('client/ton-kho-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/doi-chieu-ton') }}">Đối chiếu tồn</a>
+    <a class="summary-sidebar__link {{ request()->is('client/kiem-ton-kho*') ? 'is-active' : '' }}" href="{{ url('/client/kiem-ton-kho') }}">Nhập kho nội bộ</a>
+    <a class="summary-sidebar__link {{ request()->is('client/xuat-vat-tu-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-vat-tu-noi-bo') }}">Xuất kho nội bộ</a>
 </aside>
 
 <script>
