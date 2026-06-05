@@ -152,6 +152,7 @@ Route::get('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::
 Route::delete('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'destroy']);
 Route::get('/client/xuat-vat-tu-noi-bo/{issue}/in', [InternalMaterialIssueController::class, 'print']);
 Route::get('/api/vat-tu-ke-toan/goi-y', [InternalMaterialIssueController::class, 'materialSuggestions']);
+Route::view('/client/material-calculator', 'client.material-calculator');
 Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
 Route::get('/client/ton-kho-noi-bo', [WarehouseCountController::class, 'stockIndex']);
 Route::get('/api/ton-kho-noi-bo/kho', [WarehouseCountController::class, 'stockWarehouses']);

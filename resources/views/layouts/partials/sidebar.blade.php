@@ -114,6 +114,7 @@
     <a class="summary-sidebar__link {{ request()->is('client/ketoan-ton') ? 'is-active' : '' }}" href="{{ url('/client/ketoan-ton') }}">Tồn mã hàng TSoft</a>
     <a class="summary-sidebar__link {{ request()->is('client/phieu-nhap-thanh-pham') ? 'is-active' : '' }}" href="{{ url('/client/phieu-nhap-thanh-pham') }}">Phiếu nhập TP</a>
     <a class="summary-sidebar__link {{ request()->is('client/doi-chieu-ton') || request()->is('client/ton-kho-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/doi-chieu-ton') }}">Đối chiếu tồn</a>
+    <a class="summary-sidebar__link {{ request()->is('client/material-calculator') ? 'is-active' : '' }}" href="{{ url('/client/material-calculator') }}">Tính cắt vải</a>
     <a class="summary-sidebar__link {{ request()->is('client/kiem-ton-kho*') ? 'is-active' : '' }}" href="{{ url('/client/kiem-ton-kho') }}">Nhập kho nội bộ</a>
     <a class="summary-sidebar__link {{ request()->is('client/xuat-vat-tu-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-vat-tu-noi-bo') }}">Xuất kho nội bộ</a>
 </aside>
