@@ -51,6 +51,49 @@
         color: #fff;
     }
 
+    .summary-sidebar__group {
+        margin: 2px 0;
+    }
+
+    .summary-sidebar__summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 16px;
+        border-left: 3px solid transparent;
+        color: #d1d5db;
+        font-size: 14px;
+        cursor: pointer;
+        list-style: none;
+    }
+
+    .summary-sidebar__summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .summary-sidebar__summary::after {
+        content: "▾";
+        color: #9ca3af;
+        font-size: 11px;
+    }
+
+    .summary-sidebar__group[open] .summary-sidebar__summary,
+    .summary-sidebar__summary:hover {
+        border-left-color: #60a5fa;
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+    }
+
+    .summary-sidebar__child {
+        padding-left: 30px;
+        font-size: 13px;
+    }
+
+    .summary-sidebar > a[href$="/client/kiem-ton-kho"],
+    .summary-sidebar > a[href$="/client/xuat-vat-tu-noi-bo"] {
+        display: none;
+    }
+
     .summary-sidebar-toggle {
         display: none;
         position: fixed;
@@ -117,6 +160,11 @@
     <a class="summary-sidebar__link {{ request()->is('client/material-calculator') ? 'is-active' : '' }}" href="{{ url('/client/material-calculator') }}">Tính cắt vải</a>
     <a class="summary-sidebar__link {{ request()->is('client/kiem-ton-kho*') ? 'is-active' : '' }}" href="{{ url('/client/kiem-ton-kho') }}">Nhập kho nội bộ</a>
     <a class="summary-sidebar__link {{ request()->is('client/xuat-vat-tu-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-vat-tu-noi-bo') }}">Xuất kho nội bộ</a>
+    <details class="summary-sidebar__group" {{ request()->is('client/kiem-ton-kho*') || request()->is('client/xuat-vat-tu-noi-bo*') ? 'open' : '' }}>
+        <summary class="summary-sidebar__summary">Kho nội bộ</summary>
+        <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/kiem-ton-kho*') ? 'is-active' : '' }}" href="{{ url('/client/kiem-ton-kho') }}">Nhập kho</a>
+        <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/xuat-vat-tu-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-vat-tu-noi-bo') }}">Xuất kho</a>
+    </details>
 </aside>
 
 <script>

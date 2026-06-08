@@ -1,110 +1,117 @@
 <!DOCTYPE html>
 <html lang="vi">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $receipt->receipt_code }}</title>
     <style>
+        @page { size: A4 portrait; margin: 8mm; }
         * { box-sizing: border-box; }
-        body { margin: 0; background: #f3f4f6; color: #111; font-family: Arial, sans-serif; font-size: 13px; }
+        body { margin: 0; background: #eef1f5; color: #111; font-family: "Times New Roman", serif; }
         .toolbar { display: flex; justify-content: flex-end; gap: 8px; padding: 12px; }
-        .btn { border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; padding: 8px 12px; cursor: pointer; }
-        .sheet { width: 210mm; min-height: 297mm; margin: 0 auto 24px; background: #fff; padding: 16mm; }
-        .top { display: flex; justify-content: space-between; gap: 20px; }
-        .company { font-weight: 700; text-transform: uppercase; }
-        .code-box { text-align: right; line-height: 1.6; }
-        h1 { margin: 18px 0 4px; text-align: center; font-size: 22px; text-transform: uppercase; }
-        .subtitle { text-align: center; margin-bottom: 18px; }
-        .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin-bottom: 14px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #111; padding: 6px 7px; vertical-align: middle; }
-        th { text-align: center; }
-        .text-end { text-align: right; }
-        .text-center { text-align: center; }
-        .signatures { margin-top: 28px; table-layout: fixed; }
-        .signature { height: 92px; text-align: center; vertical-align: top; font-weight: 700; }
-        .signature span { font-weight: 400; }
+        .toolbar button { padding: 8px 14px; border: 1px solid #9ca3af; border-radius: 5px; background: #fff; cursor: pointer; }
+        .sheet { width: 210mm; min-height: 297mm; margin: 0 auto 20px; padding: 10mm 8mm; background: #fff; }
+        .header { position: relative; min-height: 26mm; }
+        .brand { position: absolute; top: 0; left: 4mm; width: 75mm; text-align: left; }
+        .wordmark { display: inline-block; font-size: 14px; font-weight: 900; font-style: italic; letter-spacing: 1px; }
+        .company { margin-top: 5px; font-size: 15px; font-weight: 700; }
+        h1 { margin: 0; text-align: center; font-size: 22px; font-weight: 800; text-transform: uppercase; }
+        .department { position: absolute; right: 22mm; top: 15mm; font-size: 14px; font-weight: 700; }
+        .receipt-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+        .receipt-table th, .receipt-table td { border: 1px solid #111; padding: 4px 3px; vertical-align: middle; }
+        .receipt-table th { height: 12mm; text-align: center; font-size: 12px; font-style: italic; font-weight: 700; }
+        .receipt-table tbody td { height: 10mm; }
+        .center { text-align: center; }
+        .right { text-align: right; }
+        .signatures { position: relative; min-height: 40mm; padding-top: 5px; font-size: 14px; font-weight: 700; }
+        .date { position: absolute; right: 22mm; top: 4px; }
+        .signature-grid { display: grid; grid-template-columns: repeat(4, 1fr); padding-top: 8mm; text-align: center; }
+        .signature-grid > div { min-height: 28mm; }
+        .receipt-code { margin-top: 2mm; color: #555; font-family: Arial, sans-serif; font-size: 9px; text-align: right; }
         @media print {
             body { background: #fff; }
             .toolbar { display: none; }
-            .sheet { width: auto; min-height: auto; margin: 0; padding: 10mm; }
+            .sheet { width: auto; min-height: auto; margin: 0; padding: 0; }
         }
     </style>
 </head>
-
 <body>
     <div class="toolbar">
-        <button class="btn" onclick="window.print()">In phiếu</button>
-        <button class="btn" onclick="window.close()">Đóng</button>
+        <button type="button" onclick="window.print()">In phiếu</button>
+        <button type="button" onclick="window.close()">Đóng</button>
     </div>
 
+    @php
+        $lines = $receipt->lines->values();
+        $rowCount = max(8, $lines->count());
+    @endphp
+
     <main class="sheet">
-        <div class="top">
-            <div>
-                <div class="company">Công ty TNHH Nhãn Thời Gian Việt Tiến</div>
-                <div>Phiếu nội bộ, dùng để thủ kho nhập thành phẩm và bàn giao chứng từ.</div>
+        <header class="header">
+            <div class="brand">
+                <div class="wordmark">TAGTIME<sup>®</sup></div>
+                <div class="company">Công ty Nhãn Thời Gian Việt Tiến</div>
             </div>
-            <div class="code-box">
-                <div>Số phiếu: <strong>{{ $receipt->receipt_code }}</strong></div>
-                <div>Ngày tạo: {{ optional($receipt->created_at)->format('d/m/Y H:i') }}</div>
-            </div>
-        </div>
+            <h1>Phiếu nhập kho</h1>
+            <div class="department">BỘ PHẬN: KCS</div>
+        </header>
 
-        <h1>Phiếu Nhập Thành Phẩm Nội Bộ</h1>
-        <div class="subtitle">Ngày {{ optional($receipt->receipt_date)->format('d/m/Y') }}</div>
-
-        <section class="meta">
-            <div><strong>Kho nhập:</strong> {{ $receipt->warehouse_code }}</div>
-            <div><strong>Người giao:</strong> {{ $receipt->receiver_name }}</div>
-            <div><strong>Bộ phận:</strong> Kho thành phẩm</div>
-            <div><strong>Lệnh/Số việc:</strong> {{ $receipt->source }}</div>
-            <div style="grid-column: 1 / -1;"><strong>Mục đích:</strong> Nhập thành phẩm nội bộ</div>
-            <div style="grid-column: 1 / -1;"><strong>Ghi chú:</strong> {{ trim(($receipt->location_code ? 'Vị trí: ' . $receipt->location_code . '. ' : '') . (string) $receipt->note) }}</div>
-        </section>
-
-        <table>
+        <table class="receipt-table">
+            <colgroup>
+                <col style="width:5%">
+                <col style="width:17%">
+                <col style="width:15%">
+                <col style="width:11%">
+                <col style="width:10%">
+                <col style="width:7%">
+                <col style="width:10%">
+                <col style="width:5%">
+                <col style="width:14%">
+                <col style="width:11%">
+            </colgroup>
             <thead>
                 <tr>
-                    <th style="width: 42px;">STT</th>
-                    <th style="width: 110px;">Mã thành phẩm</th>
-                    <th>Tên thành phẩm</th>
-                    <th style="width: 58px;">ĐVT</th>
-                    <th style="width: 82px;">Số lượng</th>
-                    <th style="width: 82px;">Vị trí</th>
-                    <th style="width: 100px;">Mã nội bộ</th>
-                    <th style="width: 120px;">Ghi chú</th>
+                    <th>Stt</th>
+                    <th>Danh mục</th>
+                    <th>Mã hàng</th>
+                    <th>Item code</th>
+                    <th>Màu sắc</th>
+                    <th>Size</th>
+                    <th>Số lượng</th>
+                    <th>Đvt</th>
+                    <th>Lệnh sản xuất</th>
+                    <th>Ghi chú</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach ($receipt->lines as $index => $line)
+                @for ($index = 0; $index < $rowCount; $index++)
+                    @php $line = $lines->get($index); @endphp
                     <tr>
-                        <td class="text-center">{{ $index + 1 }}</td>
-                        <td>{{ $line->ma_hh }}</td>
-                        <td>{{ $line->ten_hh }}</td>
-                        <td class="text-center">{{ $line->dvt }}</td>
-                        <td class="text-end">{{ number_format($line->quantity, 3, ',', '.') }}</td>
-                        <td>{{ $line->location_code }}</td>
-                        <td>{{ $line->internal_item_code }}</td>
-                        <td>{{ $line->note }}</td>
+                        <td class="center">{{ $index + 1 }}</td>
+                        <td>{{ optional($line)->ten_hh }}</td>
+                        <td>{{ optional($line)->ma_hh }}</td>
+                        <td>{{ optional($line)->internal_item_code }}</td>
+                        <td>{{ optional($line)->color }}</td>
+                        <td class="center">{{ optional($line)->size }}</td>
+                        <td class="right">{{ $line ? number_format($line->quantity, 3, ',', '.') : '' }}</td>
+                        <td class="center">{{ optional($line)->dvt }}</td>
+                        <td>{{ optional($line)->note }}</td>
+                        <td>{{ $line ? $receipt->note : '' }}</td>
                     </tr>
-                @endforeach
-                <tr>
-                    <td colspan="4" class="text-end"><strong>Tổng cộng</strong></td>
-                    <td class="text-end"><strong>{{ number_format($receipt->lines->sum('quantity'), 3, ',', '.') }}</strong></td>
-                    <td colspan="3"></td>
-                </tr>
+                @endfor
             </tbody>
         </table>
 
-        <table class="signatures">
-            <tr>
-                <td class="signature">Người lập phiếu<br><span>(Ký, ghi rõ họ tên)</span></td>
-                <td class="signature">Người giao<br><span>(Ký, ghi rõ họ tên)</span></td>
-                <td class="signature">Thủ kho<br><span>(Ký, ghi rõ họ tên)</span></td>
-                <td class="signature">Kế toán<br><span>(Ký, ghi rõ họ tên)</span></td>
-            </tr>
-        </table>
+        <section class="signatures">
+            <div class="date">Ngày {{ optional($receipt->receipt_date)->format('d') }}/{{ optional($receipt->receipt_date)->format('m') }}/{{ optional($receipt->receipt_date)->format('Y') }}</div>
+            <div class="signature-grid">
+                <div>Người nhận</div>
+                <div>Thủ kho</div>
+                <div>Người nhập</div>
+                <div>Giám Đốc</div>
+            </div>
+        </section>
+        <div class="receipt-code">Số phiếu: {{ $receipt->receipt_code }}</div>
     </main>
 </body>
 </html>
