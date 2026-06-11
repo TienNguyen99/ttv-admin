@@ -170,6 +170,7 @@ Route::delete('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}', [WarehouseCountContro
 Route::patch('/api/kiem-ton-kho/kien/{inventoryPackage}/chuyen-vi-tri', [WarehouseCountController::class, 'movePackage']);
 Route::delete('/api/kiem-ton-kho/kien/{inventoryPackage}', [WarehouseCountController::class, 'destroyPackage']);
 Route::get('/api/kiem-ton-kho/noi-dung-vi-tri', [WarehouseCountController::class, 'locationContents']);
+Route::get('/api/kiem-ton-kho/tra-cuu-giong-noi', [WarehouseCountController::class, 'voiceLookup']);
 Route::get('/client/kiem-ton-kho/tem-kien/{inventoryPackage}', [WarehouseCountController::class, 'printPackage']);
 Route::get('/client/kiem-ton-kho/tem-vi-tri/{warehouseLocation}', [WarehouseCountController::class, 'printLocation']);
 Route::get('/client/nhap-thanh-pham-noi-bo/{receipt}/in', [WarehouseCountController::class, 'printMaterialReceipt']);

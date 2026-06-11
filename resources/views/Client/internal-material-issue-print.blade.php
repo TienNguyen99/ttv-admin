@@ -34,6 +34,10 @@
 </head>
 
 <body>
+    @php
+        $isProductionIssue = strpos((string) $issue->issue_code, 'PXBTP-') === 0
+            || trim((string) $issue->purpose) === 'Xuất BTP đi sản xuất';
+    @endphp
     <div class="toolbar">
         <button class="btn" onclick="window.print()">In phiếu</button>
         <button class="btn" onclick="window.close()">Đóng</button>
@@ -43,7 +47,7 @@
         <div class="top">
             <div>
                 <div class="company">Công ty TNHH Nhãn Thời Gian Việt Tiến</div>
-                <div>Phiếu nội bộ, dùng để thủ kho xuất vật tư và bàn giao chứng từ.</div>
+                <div>{{ $isProductionIssue ? 'Phiếu giao bán thành phẩm cho bộ phận sản xuất.' : 'Phiếu nội bộ, dùng để thủ kho xuất vật tư và bàn giao chứng từ.' }}</div>
             </div>
             <div class="code-box">
                 <div>Số phiếu: <strong>{{ $issue->issue_code }}</strong></div>
@@ -51,7 +55,7 @@
             </div>
         </div>
 
-        <h1>Phiếu Xuất Vật Tư Nội Bộ</h1>
+        <h1>{{ $isProductionIssue ? 'Phiếu Xuất Bán Thành Phẩm' : 'Phiếu Xuất Vật Tư Nội Bộ' }}</h1>
         <div class="subtitle">Ngày {{ optional($issue->issue_date)->format('d/m/Y') }}</div>
 
         <section class="meta">

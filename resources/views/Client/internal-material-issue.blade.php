@@ -54,8 +54,8 @@
     <main class="container-fluid py-4">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
             <div>
-                <h1 class="page-title mb-1">Xuất vật tư nội bộ</h1>
-                <div class="hint">Phiếu dùng để in và bàn giao nội bộ. TSoft kế toán chỉ đọc danh mục, không ghi dữ liệu.</div>
+                <h1 id="pageTitle" class="page-title mb-1">Phiếu xuất kho nội bộ</h1>
+                <div id="pageHint" class="hint">TSoft kế toán chỉ đọc danh mục, không ghi dữ liệu.</div>
             </div>
             <div class="d-flex gap-2">
                 <button id="reloadBtn" type="button" class="btn btn-outline-secondary">Tải lại</button>
@@ -79,6 +79,7 @@
             </div>
 
             <div class="row g-2 mb-3">
+                <div class="col-md-2"><label class="form-label">Nghiệp vụ</label><select id="issueType" class="form-select"><option value="production">Xuất BTP đi sản xuất</option><option value="material">Xuất vật tư</option></select></div>
                 <div class="col-md-2"><label class="form-label">Ngày xuất</label><input id="issueDate" type="date" class="form-control" value="{{ now()->format('Y-m-d') }}"></div>
                 <div class="col-md-2"><label class="form-label">Kho xuất</label><input id="warehouseCode" class="form-control" placeholder="KTPHAM"></div>
                 <div class="col-md-2"><label class="form-label">Người nhận</label><input id="receiverName" class="form-control"></div>
@@ -119,7 +120,7 @@
             <div class="table-responsive">
                 <table class="table table-hover align-middle">
                     <thead class="table-light">
-                        <tr><th>Số phiếu</th><th>Ngày</th><th>Kho</th><th>Người nhận</th><th>Bộ phận</th><th>Lệnh</th><th class="text-end">Dòng</th><th class="text-end">Tổng SL</th><th></th></tr>
+                        <tr><th>Số phiếu</th><th>Ngày</th><th>Kho</th><th>Người nhận</th><th>Bộ phận</th><th>Lệnh</th><th>Mục đích</th><th class="text-end">Dòng</th><th class="text-end">Tổng SL</th><th></th></tr>
                     </thead>
                     <tbody id="issueRows"></tbody>
                 </table>
@@ -178,6 +179,22 @@
             })).filter(line => line.ma_hh || line.quantity);
         }
 
+        function applyIssueType(type) {
+            const isProduction = type === 'production';
+            document.getElementById('pageTitle').textContent = isProduction ? 'Xuất bán thành phẩm đi sản xuất' : 'Xuất vật tư nội bộ';
+            document.getElementById('pageHint').textContent = isProduction
+                ? 'Xuất BTP khỏi kho nội bộ để giao sản xuất. Khi hoàn thành, nhập lại bằng Phiếu nhập thành phẩm.'
+                : 'Xuất vật tư khỏi tồn nội bộ theo mã, vị trí, size và màu.';
+            document.getElementById('saveBtn').textContent = isProduction ? 'Xuất BTP + in phiếu' : 'Xuất vật tư + in phiếu';
+
+            if (isProduction) {
+                if (!value('department')) document.getElementById('department').value = 'Sản xuất';
+                if (!value('purpose') || value('purpose') === 'Xuất vật tư') document.getElementById('purpose').value = 'Xuất BTP đi sản xuất';
+            } else if (value('purpose') === 'Xuất BTP đi sản xuất') {
+                document.getElementById('purpose').value = 'Xuất vật tư';
+            }
+        }
+
         function suggestMaterial(input) {
             const keyword = input.value.trim();
             const cell = input.closest('.product-search');
@@ -218,6 +235,7 @@
                 method: 'POST',
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({
+                    issue_type: value('issueType'),
                     issue_date: value('issueDate'),
                     warehouse_code: value('warehouseCode'),
                     receiver_name: value('receiverName'),
@@ -257,6 +275,7 @@
                             <td>${esc(issue.receiver_name)}</td>
                             <td>${esc(issue.department)}</td>
                             <td>${esc(issue.production_order)}</td>
+                            <td>${esc(issue.purpose)}</td>
                             <td class="text-end">${num(issue.lines_count)}</td>
                             <td class="text-end">${num(issue.lines_sum_quantity)}</td>
                             <td class="text-nowrap text-end">
@@ -264,7 +283,7 @@
                                 <button class="btn btn-sm btn-outline-danger delete-issue" data-id="${issue.id}">Xóa</button>
                             </td>
                         </tr>
-                    `).join('') || '<tr><td colspan="9" class="text-center hint">Chưa có phiếu</td></tr>';
+                    `).join('') || '<tr><td colspan="10" class="text-center hint">Chưa có phiếu</td></tr>';
                 })
                 .catch(error => alert(error.message));
         }
@@ -305,6 +324,7 @@
 
         document.getElementById('addLineBtn').addEventListener('click', () => addLine());
         document.getElementById('saveBtn').addEventListener('click', saveIssue);
+        document.getElementById('issueType').addEventListener('change', event => applyIssueType(event.target.value));
         document.getElementById('reloadBtn').addEventListener('click', loadIssues);
         document.getElementById('clearFilterBtn').addEventListener('click', () => {
             ['fromDate','toDate','keyword'].forEach(id => document.getElementById(id).value = '');
@@ -312,6 +332,9 @@
         });
         ['fromDate','toDate','keyword'].forEach(id => document.getElementById(id).addEventListener('input', loadIssues));
 
+        const requestedType = new URLSearchParams(window.location.search).get('type');
+        document.getElementById('issueType').value = requestedType === 'material' ? 'material' : 'production';
+        applyIssueType(document.getElementById('issueType').value);
         addLine();
         loadIssues();
     </script>

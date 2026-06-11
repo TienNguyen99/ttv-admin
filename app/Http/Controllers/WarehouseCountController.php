@@ -365,6 +365,58 @@ class WarehouseCountController extends Controller
         ]);
     }
 
+    public function voiceLookup(Request $request)
+    {
+        $keyword = strtoupper(trim((string) $request->query('keyword', '')));
+        $keyword = preg_replace('/\s+/', '', $keyword);
+
+        if ($keyword === '' || strlen($keyword) < 2) {
+            return response()->json([
+                'message' => 'Hãy nói hoặc nhập mã hàng cần tìm.',
+                'data' => [],
+            ], 422);
+        }
+
+        $data = InventoryPackage::query()
+            ->join('warehouse_locations as wl', 'inventory_packages.warehouse_location_id', '=', 'wl.id')
+            ->select(
+                'inventory_packages.ma_sp',
+                'inventory_packages.internal_item_code',
+                'inventory_packages.size',
+                'inventory_packages.color',
+                'wl.location_code',
+                'wl.warehouse_code',
+                DB::raw('SUM(inventory_packages.quantity) as total_quantity'),
+                DB::raw('COUNT(inventory_packages.id) as package_count')
+            )
+            ->where('inventory_packages.quantity', '>', 0)
+            ->where(function ($query) use ($keyword) {
+                $query->whereRaw("UPPER(REPLACE(inventory_packages.ma_sp, ' ', '')) LIKE ?", ['%' . $keyword . '%'])
+                    ->orWhereRaw("UPPER(REPLACE(inventory_packages.internal_item_code, ' ', '')) LIKE ?", ['%' . $keyword . '%']);
+            })
+            ->groupBy(
+                'inventory_packages.ma_sp',
+                'inventory_packages.internal_item_code',
+                'inventory_packages.size',
+                'inventory_packages.color',
+                'wl.location_code',
+                'wl.warehouse_code'
+            )
+            ->orderBy('wl.location_code')
+            ->limit(50)
+            ->get();
+
+        return response()->json([
+            'data' => $data,
+            'summary' => [
+                'keyword' => $keyword,
+                'item_count' => $data->count(),
+                'location_count' => $data->pluck('location_code')->filter()->unique()->count(),
+                'total_quantity' => (float) $data->sum('total_quantity'),
+            ],
+        ]);
+    }
+
     public function storePackage(Request $request)
     {
         $data = $request->validate([
@@ -662,8 +714,20 @@ class WarehouseCountController extends Controller
 
     public function destroyReceipt(InternalMaterialReceipt $receipt)
     {
+        $receipt->load('lines');
+        foreach ($receipt->lines as $line) {
+            $package = $line->inventory_package_id
+                ? InventoryPackage::query()->find($line->inventory_package_id)
+                : null;
+
+            if (!$package || (float) $package->quantity + 0.0001 < (float) $line->quantity) {
+                return response()->json([
+                    'message' => 'Không thể xóa phiếu vì một phần hàng của phiếu đã được xuất kho hoặc thay đổi. Hãy hoàn/xóa phiếu xuất liên quan trước.',
+                ], 422);
+            }
+        }
+
         DB::connection('internal')->transaction(function () use ($receipt) {
-            $receipt->load('lines');
             $locationIds = [];
 
             foreach ($receipt->lines as $line) {

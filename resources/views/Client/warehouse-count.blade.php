@@ -55,6 +55,13 @@
         .view-tab:hover { background: #f8fafc; }
         .view-tab.is-active { background: #eff6ff; color: #1d4ed8; }
         .section-hint { color: var(--muted); font-size: 12px; }
+        .voice-assistant { display: grid; grid-template-columns: auto minmax(220px, 420px) auto minmax(0, 1fr); gap: 8px; align-items: center; padding: 10px 12px; }
+        .voice-button { width: 40px; height: 40px; padding: 0; justify-content: center; }
+        .voice-button.is-listening { border-color: #dc2626; background: #fee2e2; color: #b91c1c; animation: voice-pulse 1.2s infinite; }
+        .voice-result { min-width: 0; color: #334155; font-size: 13px; }
+        .voice-result strong { color: #0f172a; }
+        .voice-location { display: inline-flex; gap: 5px; margin: 2px 4px 2px 0; padding: 3px 7px; border: 1px solid #bfdbfe; border-radius: 5px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; }
+        @keyframes voice-pulse { 50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12); } }
         .warehouse-map { padding: 14px; overflow-x: auto; }
         .warehouse-blueprint { position: relative; min-width: 980px; padding: 12px 14px 14px; border: 2px solid #cbd5e1; border-radius: 8px; background: #fff; }
         .blueprint-title { margin: 0 0 10px; text-align: center; color: #334155; font-size: 22px; font-weight: 900; letter-spacing: 0.06em; }
@@ -129,7 +136,7 @@
         .layout-help { color: var(--muted); font-size: 12px; }
         @media (max-width: 1100px) { .workspace-grid { grid-template-columns: 1fr; } }
         @media (max-width: 900px) { .shelf-row { grid-template-columns: 1fr; } .shelf-lanes { grid-template-columns: 1fr; } }
-        @media (max-width: 700px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .view-tabs { overflow-x: auto; } .view-tab { white-space: nowrap; } }
+        @media (max-width: 700px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .view-tabs { overflow-x: auto; } .view-tab { white-space: nowrap; } .voice-assistant { grid-template-columns: auto minmax(0, 1fr) auto; } .voice-result { grid-column: 1 / -1; } }
         @media (max-width: 991.98px) { .page-shell { padding: 62px 12px 16px; } }
     </style>
 </head>
@@ -143,13 +150,21 @@
             </div>
             <div class="d-flex gap-2 align-items-center">
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="openLocationModal()"><i data-lucide="map-pin-plus"></i>Thêm vị trí</button>
-                <select id="warehouseFlowTop" class="form-select" style="width:132px" onchange="handleWarehouseFlow(this.value)">
-                    <option value="receipt">Nhập kho</option>
-                    <option value="issue">Xuất kho</option>
+                <select id="warehouseFlowTop" class="form-select" style="width:180px" onchange="handleWarehouseFlow(this.value)">
+                    <option value="receipt">Nhập thành phẩm</option>
+                    <option value="production">Xuất BTP sản xuất</option>
+                    <option value="material">Xuất vật tư</option>
                 </select>
                 <button type="button" class="btn btn-primary btn-icon" onclick="handleWarehouseFlow(document.getElementById('warehouseFlowTop').value)"><i data-lucide="file-plus-2"></i>Mở phiếu</button>
             </div>
         </div>
+
+        <section class="panel voice-assistant mb-3" aria-label="Trợ lý giọng nói kho">
+            <button id="voiceLookupBtn" type="button" class="btn btn-outline-primary btn-icon voice-button" title="Nói mã hàng cần tìm"><i data-lucide="mic"></i></button>
+            <input id="voiceLookupInput" class="form-control" placeholder="Nói hoặc nhập mã hàng, mã nội bộ">
+            <button id="voiceSearchBtn" type="button" class="btn btn-outline-primary btn-icon"><i data-lucide="search"></i>Tìm</button>
+            <div id="voiceLookupResult" class="voice-result">Bấm micro và nói: “Tìm mã BTPDAYHAIRB1-1”.</div>
+        </section>
 
         <section class="kpi-grid">
             <div class="kpi-item"><div class="kpi-icon"><i data-lucide="map-pinned"></i></div><div><div id="kpiLocations" class="kpi-value">0</div><div class="kpi-label">Vị trí kho</div></div></div>
@@ -228,9 +243,10 @@
                     <div id="entryLocationContext" class="section-hint mt-1">Nếu chưa chọn vị trí, phiếu sẽ lưu vào CHUA-XEP để xếp kệ sau.</div>
                 </div>
                 <div class="d-flex gap-2 align-items-center">
-                    <select id="warehouseFlowEntry" class="form-select" style="width:132px" onchange="handleWarehouseFlow(this.value)">
-                        <option value="receipt">Nhập kho</option>
-                        <option value="issue">Xuất kho</option>
+                    <select id="warehouseFlowEntry" class="form-select" style="width:180px" onchange="handleWarehouseFlow(this.value)">
+                        <option value="receipt">Nhập thành phẩm</option>
+                        <option value="production">Xuất BTP sản xuất</option>
+                        <option value="material">Xuất vật tư</option>
                     </select>
                     <button id="saveReceiptBatchBtn" class="btn btn-primary btn-icon"><i data-lucide="printer"></i>Lưu + in</button>
                 </div>
@@ -372,6 +388,7 @@
         let editingLocationId = null;
         let selectedAccountingProduct = '';
         let productSearchTimer;
+        let voiceRecognition = null;
 
         function refreshIcons() {
             if (window.lucide) lucide.createIcons();
@@ -393,12 +410,122 @@
         }
 
         function handleWarehouseFlow(value) {
-            if (value === 'issue') {
-                window.location.href = '/client/xuat-vat-tu-noi-bo';
+            if (value === 'production' || value === 'material') {
+                window.location.href = `/client/xuat-vat-tu-noi-bo?type=${value}`;
                 return;
             }
             setWarehouseFlow('receipt');
             switchWorkspace('entry');
+        }
+
+        function normalizeVoiceKeyword(text) {
+            let normalized = String(text || '').toUpperCase()
+                .replace(/[.,?!:;]/g, ' ')
+                .replace(/\s+/g, ' ');
+            [
+                'CHO TÔI BIẾT', 'CÒN BAO NHIÊU', 'VỊ TRÍ NÀO', 'MÃ NỘI BỘ',
+                'KIỂM TRA', 'TRA CỨU', 'MÃ HÀNG', 'TỒN KHO', 'KỆ NÀO',
+                'NẰM Ở', 'Ở ĐÂU', 'BAO NHIÊU', 'VỊ TRÍ', 'TÌM', 'MÃ', 'TỒN', 'NẰM', 'KỆ'
+            ].forEach(phrase => {
+                normalized = normalized.split(phrase).join(' ');
+            });
+            normalized = normalized.replace(/\s+/g, ' ').trim();
+
+            const tokens = normalized.split(' ').filter(Boolean);
+            return tokens.join('');
+        }
+
+        function speakWarehouseAnswer(text) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'vi-VN';
+            utterance.rate = 0.95;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function lookupWarehouseByVoice(rawText = '') {
+            const input = document.getElementById('voiceLookupInput');
+            const resultBox = document.getElementById('voiceLookupResult');
+            const keyword = normalizeVoiceKeyword(rawText || input.value);
+            input.value = keyword;
+
+            if (!keyword) {
+                resultBox.textContent = 'Không nhận được mã hàng. Hãy nói lại hoặc nhập mã.';
+                speakWarehouseAnswer('Không nhận được mã hàng. Hãy nói lại.');
+                return;
+            }
+
+            resultBox.textContent = `Đang tìm ${keyword}...`;
+            fetch(`/api/kiem-ton-kho/tra-cuu-giong-noi?keyword=${encodeURIComponent(keyword)}`)
+                .then(r => jsonOrError(r, 'Không tra cứu được tồn kho'))
+                .then(result => {
+                    const rows = result.data || [];
+                    if (!rows.length) {
+                        resultBox.innerHTML = `<strong>${escapeHtml(keyword)}</strong>: không có tồn trong kho nội bộ.`;
+                        speakWarehouseAnswer(`Mã ${keyword} hiện không có tồn trong kho nội bộ.`);
+                        return;
+                    }
+
+                    const byLocation = {};
+                    rows.forEach(row => {
+                        const location = row.location_code || 'CHUA-XEP';
+                        byLocation[location] = (byLocation[location] || 0) + Number(row.total_quantity || 0);
+                    });
+                    const locationsText = Object.entries(byLocation)
+                        .map(([location, quantity]) => `${location}: ${formatNumber(quantity)}`)
+                        .join(', ');
+                    const locationsHtml = Object.entries(byLocation)
+                        .map(([location, quantity]) => `<span class="voice-location">${escapeHtml(location)} · ${formatNumber(quantity)}</span>`)
+                        .join('');
+                    const total = formatNumber(result.summary?.total_quantity || 0);
+
+                    resultBox.innerHTML = `<strong>${escapeHtml(keyword)}</strong> · Tổng ${total} ${locationsHtml}`;
+                    speakWarehouseAnswer(`Mã ${keyword} còn tổng ${total}. ${locationsText}.`);
+                })
+                .catch(error => {
+                    resultBox.textContent = error.message;
+                    speakWarehouseAnswer('Không tra cứu được tồn kho.');
+                });
+        }
+
+        function startVoiceLookup() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const button = document.getElementById('voiceLookupBtn');
+            const resultBox = document.getElementById('voiceLookupResult');
+
+            if (!SpeechRecognition) {
+                resultBox.textContent = 'Trình duyệt không hỗ trợ nhận diện giọng nói. Hãy dùng Chrome hoặc Edge.';
+                return;
+            }
+
+            if (voiceRecognition) {
+                voiceRecognition.stop();
+                return;
+            }
+
+            voiceRecognition = new SpeechRecognition();
+            voiceRecognition.lang = 'vi-VN';
+            voiceRecognition.interimResults = false;
+            voiceRecognition.maxAlternatives = 3;
+            button.classList.add('is-listening');
+            resultBox.textContent = 'Đang nghe...';
+
+            voiceRecognition.onresult = event => {
+                const transcript = event.results[0][0].transcript;
+                document.getElementById('voiceLookupInput').value = transcript;
+                lookupWarehouseByVoice(transcript);
+            };
+            voiceRecognition.onerror = event => {
+                resultBox.textContent = event.error === 'not-allowed'
+                    ? 'Chưa được cấp quyền micro cho trình duyệt.'
+                    : 'Không nghe rõ. Hãy thử nói lại.';
+            };
+            voiceRecognition.onend = () => {
+                button.classList.remove('is-listening');
+                voiceRecognition = null;
+            };
+            voiceRecognition.start();
         }
 
         function switchWorkspace(view) {
@@ -1054,6 +1181,11 @@
         });
         document.getElementById('receiptEntryRows').addEventListener('input', event => {
             if (event.target.classList.contains('receipt-ma-sp')) searchReceiptProducts(event.target);
+        });
+        document.getElementById('voiceLookupBtn').addEventListener('click', startVoiceLookup);
+        document.getElementById('voiceSearchBtn').addEventListener('click', () => lookupWarehouseByVoice());
+        document.getElementById('voiceLookupInput').addEventListener('keydown', event => {
+            if (event.key === 'Enter') lookupWarehouseByVoice();
         });
         document.addEventListener('click', event => {
             if (!event.target.closest('.product-search')) hideProductResults();

@@ -64,6 +64,7 @@ class InternalMaterialIssueController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
+            'issue_type' => 'nullable|in:material,production',
             'issue_date' => 'required|date',
             'warehouse_code' => 'nullable|string|max:50',
             'receiver_name' => 'nullable|string|max:150',
@@ -83,15 +84,17 @@ class InternalMaterialIssueController extends Controller
             'lines.*.note' => 'nullable|string|max:500',
         ]);
 
-        $issue = DB::connection('internal')->transaction(function () use ($data) {
+        $issueType = $data['issue_type'] ?? 'material';
+
+        $issue = DB::connection('internal')->transaction(function () use ($data, $issueType) {
             $issue = InternalMaterialIssue::query()->create([
-                'issue_code' => $this->nextIssueCode(),
+                'issue_code' => $this->nextIssueCode($issueType),
                 'issue_date' => $data['issue_date'],
                 'warehouse_code' => strtoupper(trim($data['warehouse_code'] ?? '')),
                 'receiver_name' => trim($data['receiver_name'] ?? ''),
-                'department' => trim($data['department'] ?? ''),
+                'department' => trim($data['department'] ?? '') ?: ($issueType === 'production' ? 'Sản xuất' : ''),
                 'production_order' => trim($data['production_order'] ?? ''),
-                'purpose' => trim($data['purpose'] ?? ''),
+                'purpose' => trim($data['purpose'] ?? '') ?: ($issueType === 'production' ? 'Xuất BTP đi sản xuất' : 'Xuất vật tư'),
                 'status' => 'posted',
                 'note' => trim($data['note'] ?? ''),
             ]);
@@ -116,7 +119,9 @@ class InternalMaterialIssueController extends Controller
         });
 
         return response()->json([
-            'message' => 'Đã tạo phiếu xuất vật tư nội bộ.',
+            'message' => $issueType === 'production'
+                ? 'Đã tạo phiếu xuất BTP đi sản xuất.'
+                : 'Đã tạo phiếu xuất vật tư nội bộ.',
             'data' => $issue,
             'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in'),
         ]);
@@ -182,9 +187,9 @@ class InternalMaterialIssueController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    private function nextIssueCode()
+    private function nextIssueCode(string $issueType = 'material')
     {
-        $prefix = 'PXVT-' . now()->format('Ymd') . '-';
+        $prefix = ($issueType === 'production' ? 'PXBTP-' : 'PXVT-') . now()->format('Ymd') . '-';
         $last = InternalMaterialIssue::query()
             ->where('issue_code', 'like', $prefix . '%')
             ->orderByDesc('issue_code')
