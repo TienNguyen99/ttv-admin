@@ -153,10 +153,12 @@ Route::delete('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueControlle
 Route::get('/client/xuat-vat-tu-noi-bo/{issue}/in', [InternalMaterialIssueController::class, 'print']);
 Route::get('/api/vat-tu-ke-toan/goi-y', [InternalMaterialIssueController::class, 'materialSuggestions']);
 Route::view('/client/material-calculator', 'client.material-calculator');
+Route::view('/client/kho-noi-bo', 'client.warehouse-dashboard');
 Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
 Route::get('/client/ton-kho-noi-bo', [WarehouseCountController::class, 'stockIndex']);
 Route::get('/api/ton-kho-noi-bo/kho', [WarehouseCountController::class, 'stockWarehouses']);
 Route::get('/api/ton-kho-noi-bo', [WarehouseCountController::class, 'stockData']);
+Route::delete('/api/ton-kho-noi-bo', [WarehouseCountController::class, 'destroyOpeningStock']);
 Route::get('/client/kiem-ton-kho/vi-tri/{warehouseLocation}', [WarehouseCountController::class, 'showLocation']);
 Route::get('/api/kiem-ton-kho/vi-tri', [WarehouseCountController::class, 'locations']);
 Route::post('/api/kiem-ton-kho/vi-tri', [WarehouseCountController::class, 'storeLocation']);

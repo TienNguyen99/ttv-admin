@@ -7,6 +7,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Xuất vật tư nội bộ</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ asset('css/warehouse-wms.css') }}" rel="stylesheet">
     <style>
         body { background: #f6f7f9; color: #111827; }
         .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
@@ -45,28 +46,47 @@
         @media (max-width: 767.98px) {
             .line-table { min-width: 980px; }
         }
+        .panel { border-color: var(--wms-line); border-radius: 7px; box-shadow: none; }
+        .page-title { color: var(--wms-ink); font-size: 28px; font-weight: 800; }
+        .table thead th { background: var(--wms-navy); color: #fff; font-size: 12px; white-space: nowrap; }
+        .table tbody tr:hover td { background: #edf5ff; }
+        .metric { color: var(--wms-ink); font-size: 27px; font-weight: 800; }
+        .form-control, .form-select { min-height: 40px; border-color: #bdc8d8; border-radius: 5px; }
+        .btn { border-radius: 5px; }
     </style>
 </head>
 
 <body>
     @include('layouts.partials.sidebar')
 
-    <main class="container-fluid py-4">
+    <header class="wms-topbar">
+        <h1 class="wms-topbar__title">WMS May Mặc</h1>
+        <div class="wms-global-search">
+            <i data-lucide="search"></i>
+            <input id="topIssueKeyword" aria-label="Tìm phiếu xuất" placeholder="Tìm phiếu xuất, mã vật tư hoặc người nhận...">
+        </div>
+        <div class="wms-topbar__actions">
+            <a class="wms-btn" href="{{ url('/client/ton-kho-noi-bo') }}"><i data-lucide="boxes"></i> Xem tồn</a>
+        </div>
+    </header>
+
+    <main class="wms-page">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
             <div>
                 <h1 id="pageTitle" class="page-title mb-1">Phiếu xuất kho nội bộ</h1>
                 <div id="pageHint" class="hint">TSoft kế toán chỉ đọc danh mục, không ghi dữ liệu.</div>
             </div>
             <div class="d-flex gap-2">
-                <button id="reloadBtn" type="button" class="btn btn-outline-secondary">Tải lại</button>
-                <button id="saveBtn" type="button" class="btn btn-primary">Xuất và in phiếu</button>
+                <button id="reloadBtn" type="button" class="wms-btn"><i data-lucide="refresh-cw"></i>Tải lại</button>
+                <button id="saveBtn" type="button" class="wms-btn wms-btn--primary"><i data-lucide="printer"></i>Xuất và in phiếu</button>
             </div>
         </div>
 
-        <section class="row g-3 mb-3">
-            <div class="col-md-4"><div class="panel"><div class="hint">Phiếu trong danh sách</div><div id="issueCount" class="metric">0</div></div></div>
-            <div class="col-md-4"><div class="panel"><div class="hint">Dòng vật tư</div><div id="lineCount" class="metric">0</div></div></div>
-            <div class="col-md-4"><div class="panel"><div class="hint">Tổng số lượng</div><div id="totalQuantity" class="metric">0</div></div></div>
+        <section class="wms-kpis">
+            <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="clipboard-list"></i></div><div><div class="wms-kpi__label">Phiếu trong danh sách</div><div id="issueCount" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Theo bộ lọc</div></div></article>
+            <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="list-ordered"></i></div><div><div class="wms-kpi__label">Dòng vật tư</div><div id="lineCount" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Chi tiết các phiếu</div></div></article>
+            <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="package-minus"></i></div><div><div class="wms-kpi__label">Tổng số lượng</div><div id="totalQuantity" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Đã xuất nội bộ</div></div></article>
+            <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="factory"></i></div><div><div class="wms-kpi__label">Luồng xuất</div><div id="issueTypeMetric" class="wms-kpi__value" style="font-size:18px">BTP sản xuất</div><div class="wms-kpi__meta">Chọn tại thông tin phiếu</div></div></article>
         </section>
 
         <section class="panel mb-3">
@@ -181,6 +201,7 @@
 
         function applyIssueType(type) {
             const isProduction = type === 'production';
+            document.getElementById('issueTypeMetric').textContent = isProduction ? 'BTP sản xuất' : 'Vật tư';
             document.getElementById('pageTitle').textContent = isProduction ? 'Xuất bán thành phẩm đi sản xuất' : 'Xuất vật tư nội bộ';
             document.getElementById('pageHint').textContent = isProduction
                 ? 'Xuất BTP khỏi kho nội bộ để giao sản xuất. Khi hoàn thành, nhập lại bằng Phiếu nhập thành phẩm.'
@@ -328,9 +349,19 @@
         document.getElementById('reloadBtn').addEventListener('click', loadIssues);
         document.getElementById('clearFilterBtn').addEventListener('click', () => {
             ['fromDate','toDate','keyword'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('topIssueKeyword').value = '';
             loadIssues();
         });
         ['fromDate','toDate','keyword'].forEach(id => document.getElementById(id).addEventListener('input', loadIssues));
+        let topIssueSearchTimer = null;
+        document.getElementById('topIssueKeyword').addEventListener('input', event => {
+            document.getElementById('keyword').value = event.target.value;
+            clearTimeout(topIssueSearchTimer);
+            topIssueSearchTimer = setTimeout(loadIssues, 250);
+        });
+        document.getElementById('keyword').addEventListener('input', event => {
+            document.getElementById('topIssueKeyword').value = event.target.value;
+        });
 
         const requestedType = new URLSearchParams(window.location.search).get('type');
         document.getElementById('issueType').value = requestedType === 'material' ? 'material' : 'production';

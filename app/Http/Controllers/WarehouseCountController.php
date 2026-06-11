@@ -308,7 +308,17 @@ class WarehouseCountController extends Controller
             ->orderBy('warehouse_code')
             ->orderBy('location_code')
             ->orderBy('ma_hh')
-            ->get();
+            ->get()
+            ->map(function ($row) {
+                $row->can_delete = (float) $row->opening_quantity != 0.0
+                    && (float) $row->receipt_quantity == 0.0
+                    && (float) $row->issue_quantity == 0.0;
+                $row->delete_reason = $row->can_delete
+                    ? ''
+                    : 'Dòng có phát sinh phiếu. Hãy xóa phiếu nhập/xuất nguồn.';
+
+                return $row;
+            });
 
         return response()->json([
             'data' => $data,
@@ -323,6 +333,114 @@ class WarehouseCountController extends Controller
                 'package_count' => 0,
                 'total_quantity' => (float) $data->sum('total_quantity'),
             ],
+        ]);
+    }
+
+    public function destroyOpeningStock(Request $request)
+    {
+        $data = $request->validate([
+            'month' => 'required|date_format:Y-m',
+            'warehouse_code' => 'nullable|string|max:50',
+            'location_code' => 'nullable|string|max:100',
+            'ma_hh' => 'required|string|max:100',
+            'internal_item_code' => 'nullable|string|max:100',
+            'size' => 'nullable|string|max:100',
+            'color' => 'nullable|string|max:100',
+            'side' => 'nullable|string|max:100',
+        ]);
+
+        $monthStart = Carbon::parse($data['month'] . '-01')->startOfMonth()->format('Y-m-d');
+        $keys = [
+            'warehouse_code' => strtoupper(trim($data['warehouse_code'] ?? '')),
+            'location_code' => strtoupper(trim($data['location_code'] ?? '')),
+            'ma_hh' => strtoupper(trim($data['ma_hh'])),
+            'internal_item_code' => trim($data['internal_item_code'] ?? ''),
+            'size' => trim($data['size'] ?? ''),
+            'color' => trim($data['color'] ?? ''),
+            'side' => trim($data['side'] ?? ''),
+        ];
+
+        $hasReceipts = DB::connection('internal')->table('internal_material_receipt_lines as l')
+            ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+            ->whereRaw("UPPER(COALESCE(r.warehouse_code, '')) = ?", [$keys['warehouse_code']])
+            ->whereRaw("UPPER(COALESCE(l.location_code, r.location_code, '')) = ?", [$keys['location_code']])
+            ->whereRaw("UPPER(l.ma_hh) = ?", [$keys['ma_hh']])
+            ->whereRaw("COALESCE(l.internal_item_code, '') = ?", [$keys['internal_item_code']])
+            ->whereRaw("COALESCE(l.size, '') = ?", [$keys['size']])
+            ->whereRaw("COALESCE(l.color, '') = ?", [$keys['color']])
+            ->exists();
+
+        $hasIssues = DB::connection('internal')->table('internal_material_issue_lines as l')
+            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->whereRaw("UPPER(COALESCE(i.warehouse_code, '')) = ?", [$keys['warehouse_code']])
+            ->whereRaw("UPPER(COALESCE(l.location_code, '')) = ?", [$keys['location_code']])
+            ->whereRaw("UPPER(l.ma_hh) = ?", [$keys['ma_hh']])
+            ->whereRaw("COALESCE(l.internal_item_code, '') = ?", [$keys['internal_item_code']])
+            ->whereRaw("COALESCE(l.size, '') = ?", [$keys['size']])
+            ->whereRaw("COALESCE(l.color, '') = ?", [$keys['color']])
+            ->exists();
+
+        if ($hasReceipts || $hasIssues) {
+            return response()->json([
+                'message' => 'Dòng tồn đã có phát sinh phiếu nhập/xuất. Hãy xóa chứng từ nguồn trong danh sách phiếu kho.',
+            ], 422);
+        }
+
+        $openingRows = InternalOpeningStock::query()
+            ->whereDate('period_month', $monthStart)
+            ->where('warehouse_code', $keys['warehouse_code'])
+            ->where('location_code', $keys['location_code'])
+            ->whereRaw('UPPER(ma_hh) = ?', [$keys['ma_hh']])
+            ->where('internal_item_code', $keys['internal_item_code'])
+            ->where('size', $keys['size'])
+            ->where('color', $keys['color'])
+            ->where('side', $keys['side'])
+            ->get();
+
+        if ($openingRows->isEmpty()) {
+            return response()->json([
+                'message' => 'Không tìm thấy dòng tồn đầu nội bộ để xóa.',
+            ], 404);
+        }
+
+        DB::connection('internal')->transaction(function () use ($openingRows) {
+            foreach ($openingRows as $opening) {
+                $package = $opening->inventory_package_id
+                    ? InventoryPackage::query()->lockForUpdate()->find($opening->inventory_package_id)
+                    : null;
+
+                $opening->delete();
+
+                if (!$package || $package->receiptLines()->exists()) {
+                    continue;
+                }
+
+                $count = $package->inventory_count_id
+                    ? InternalInventoryCount::query()->lockForUpdate()->find($package->inventory_count_id)
+                    : null;
+                $quantity = (float) $package->quantity;
+                $package->delete();
+
+                if (!$count) {
+                    continue;
+                }
+
+                $remainingQuantity = (float) $count->counted_quantity - $quantity;
+                $hasPackages = InventoryPackage::query()
+                    ->where('inventory_count_id', $count->id)
+                    ->exists();
+
+                if ($remainingQuantity <= 0 && !$hasPackages) {
+                    $count->delete();
+                } else {
+                    $count->counted_quantity = max(0, $remainingQuantity);
+                    $count->save();
+                }
+            }
+        });
+
+        return response()->json([
+            'message' => 'Đã xóa dòng tồn đầu nội bộ.',
         ]);
     }
 

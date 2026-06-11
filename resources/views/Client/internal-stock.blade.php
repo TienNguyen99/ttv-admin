@@ -1,78 +1,63 @@
 <!DOCTYPE html>
 <html lang="vi">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Tồn kho nội bộ</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background: #f6f7f9; color: #111827; }
-        .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
-        .page-title { font-size: 24px; font-weight: 700; }
-        .hint { color: #6b7280; font-size: 13px; }
-        .metric { font-size: 20px; font-weight: 700; }
-        .table td, .table th { vertical-align: middle; }
-    </style>
+    <link href="{{ asset('css/warehouse-wms.css') }}" rel="stylesheet">
 </head>
-
 <body>
     @include('layouts.partials.sidebar')
 
-    <main class="container-fluid py-4">
-        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <header class="wms-topbar">
+        <h1 class="wms-topbar__title">WMS May Mặc</h1>
+        <div class="wms-global-search">
+            <i data-lucide="search"></i>
+            <input id="topKeyword" aria-label="Tìm trong tồn kho" placeholder="Tìm mã nội bộ, mã kế toán, size hoặc vị trí...">
+        </div>
+        <div class="wms-topbar__actions">
+            <button id="voiceStockBtn" type="button" class="wms-btn" title="Tìm bằng giọng nói"><i data-lucide="mic"></i><span class="visually-hidden">Tìm bằng giọng nói</span></button>
+            <a class="wms-btn" href="{{ url('/client/kiem-ton-kho') }}"><i data-lucide="scan-line"></i> Quét kho</a>
+        </div>
+    </header>
+
+    <main class="wms-page">
+        <div class="wms-heading">
             <div>
-                <h1 class="page-title mb-1">Tồn kho nội bộ</h1>
-                <div class="hint">Tồn thực tế từ phiếu nhập/xuất nội bộ và kiện đang còn trong kho. Không đọc/ghi tồn TSoft.</div>
+                <h1>Tồn kho nội bộ</h1>
+                <p>Tồn đầu tháng + phiếu nhập - phiếu xuất. Không ghi dữ liệu sang TSoft.</p>
             </div>
-            <button id="reloadBtn" type="button" class="btn btn-primary">Tải lại</button>
+            <div class="wms-actions">
+                <a class="wms-btn" href="{{ url('/client/doi-chieu-ton') }}"><i data-lucide="scale"></i> Đối chiếu TSoft</a>
+                <button id="reloadBtn" type="button" class="wms-btn wms-btn--primary"><i data-lucide="refresh-cw"></i> Tải lại</button>
+            </div>
         </div>
 
-        <section class="panel mb-3">
-            <div class="row g-2 align-items-end">
-                <div class="col-md-3">
-                    <label class="form-label">KHO</label>
-                    <select id="warehouseSelect" class="form-select">
-                        <option value="">Tất cả kho</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Tháng</label>
-                    <input id="stockMonth" type="month" class="form-control" value="{{ now()->format('Y-m') }}">
-                </div>
-                <div class="col-md-5">
-                    <label class="form-label">Tìm mã, mã nội bộ, size, màu hoặc vị trí</label>
-                    <input id="keyword" class="form-control" placeholder="Nhập từ khóa">
-                </div>
+        <section class="wms-kpis">
+            <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="barcode"></i></div><div><div class="wms-kpi__label">Mã hàng</div><div id="itemCount" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Mã có phát sinh trong kỳ</div></div></article>
+            <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="calendar-range"></i></div><div><div class="wms-kpi__label">Tồn đầu kỳ</div><div id="openingQuantity" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Số lượng đầu tháng</div></div></article>
+            <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="arrow-down-up"></i></div><div><div class="wms-kpi__label">Nhập / Xuất</div><div class="wms-kpi__value"><span id="receiptQuantity">0</span> / <span id="issueQuantity">0</span></div><div class="wms-kpi__meta">Phát sinh trong kỳ</div></div></article>
+            <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="boxes"></i></div><div><div class="wms-kpi__label">Tồn cuối kỳ</div><div id="totalQuantity" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Theo bộ lọc hiện tại</div></div></article>
+        </section>
+
+        <section class="wms-filterbar">
+            <div><label for="warehouseSelect">Kho</label><select id="warehouseSelect" class="form-select"><option value="">Tất cả kho</option></select></div>
+            <div><label for="stockMonth">Tháng tồn</label><input id="stockMonth" type="month" class="form-control" value="{{ now()->format('Y-m') }}"></div>
+            <div><label for="keyword">Tìm mã hàng, mã nội bộ, size, màu hoặc vị trí</label><input id="keyword" class="form-control" value="{{ request('keyword') }}" placeholder="Nhập từ khóa hoặc quét mã"></div>
+            <div><button id="clearFilterBtn" type="button" class="wms-btn"><i data-lucide="filter-x"></i> Xóa lọc</button></div>
+        </section>
+
+        <section class="wms-panel">
+            <div class="wms-panel__header">
+                <h2>Danh sách tồn kho</h2>
+                <span id="stockResultLabel" class="text-secondary small">Đang tải...</span>
             </div>
-        </section>
-
-        <section class="row g-3 mb-3">
-            <div class="col-md-3"><div class="panel"><div class="hint">Mã hàng</div><div id="itemCount" class="metric">0</div></div></div>
-            <div class="col-md-3"><div class="panel"><div class="hint">Tồn đầu kỳ</div><div id="openingQuantity" class="metric">0</div></div></div>
-            <div class="col-md-3"><div class="panel"><div class="hint">Nhập / Xuất</div><div class="metric"><span id="receiptQuantity">0</span> / <span id="issueQuantity">0</span></div></div></div>
-            <div class="col-md-3"><div class="panel"><div class="hint">Tồn cuối kỳ</div><div id="totalQuantity" class="metric">0</div></div></div>
-        </section>
-
-        <section class="panel">
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>KHO</th>
-                            <th>Vị trí</th>
-                            <th>Mã hàng</th>
-                            <th>Mã nội bộ</th>
-                            <th>Size</th>
-                            <th>Màu</th>
-                            <th>Side</th>
-                            <th class="text-end">Tồn đầu</th>
-                            <th class="text-end">Nhập</th>
-                            <th class="text-end">Xuất</th>
-                            <th class="text-end">Tồn cuối</th>
-                        </tr>
-                    </thead>
-                    <tbody id="stockRows"></tbody>
+            <div class="wms-table-wrap">
+                <table class="wms-table">
+                    <thead><tr><th>Kho</th><th>Vị trí</th><th>Mã kế toán</th><th>Mã nội bộ</th><th>Size</th><th>Màu</th><th>Side</th><th class="text-end">Tồn đầu</th><th class="text-end">Nhập</th><th class="text-end">Xuất</th><th class="text-end">Tồn cuối</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+                    <tbody id="stockRows"><tr><td colspan="13" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
                 </table>
             </div>
         </section>
@@ -82,11 +67,13 @@
         const warehouseSelect = document.getElementById('warehouseSelect');
         const stockMonthEl = document.getElementById('stockMonth');
         const keywordEl = document.getElementById('keyword');
+        const topKeywordEl = document.getElementById('topKeyword');
         const rowsEl = document.getElementById('stockRows');
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         let searchTimer = null;
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-        const num = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
+        const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits: 3});
 
         function jsonOrError(response, fallback) {
             if (response.ok) return response.json();
@@ -94,17 +81,17 @@
         }
 
         function loadWarehouses() {
-            fetch('/api/ton-kho-noi-bo/kho')
+            return fetch('/api/ton-kho-noi-bo/kho')
                 .then(response => jsonOrError(response, 'Không tải được danh sách kho'))
                 .then(result => {
                     const current = warehouseSelect.value;
                     warehouseSelect.innerHTML = '<option value="">Tất cả kho</option>' + (result.data || []).map(code => `<option value="${esc(code)}">${esc(code)}</option>`).join('');
                     warehouseSelect.value = current;
-                })
-                .catch(error => alert(error.message));
+                });
         }
 
         function loadStock() {
+            rowsEl.innerHTML = '<tr><td colspan="13" class="wms-loading">Đang tải dữ liệu...</td></tr>';
             const params = new URLSearchParams();
             if (warehouseSelect.value) params.set('warehouse_code', warehouseSelect.value);
             if (stockMonthEl.value) params.set('month', stockMonthEl.value);
@@ -113,43 +100,118 @@
             fetch(`/api/ton-kho-noi-bo?${params.toString()}`)
                 .then(response => jsonOrError(response, 'Không tải được tồn nội bộ'))
                 .then(result => {
-                    document.getElementById('itemCount').textContent = num(result.summary?.item_count || 0);
-                    document.getElementById('openingQuantity').textContent = num(result.summary?.opening_quantity || 0);
-                    document.getElementById('receiptQuantity').textContent = num(result.summary?.receipt_quantity || 0);
-                    document.getElementById('issueQuantity').textContent = num(result.summary?.issue_quantity || 0);
-                    document.getElementById('totalQuantity').textContent = num(result.summary?.total_quantity || 0);
-                    rowsEl.innerHTML = (result.data || []).map(row => `
-                        <tr>
+                    document.getElementById('itemCount').textContent = num(result.summary?.item_count);
+                    document.getElementById('openingQuantity').textContent = num(result.summary?.opening_quantity);
+                    document.getElementById('receiptQuantity').textContent = num(result.summary?.receipt_quantity);
+                    document.getElementById('issueQuantity').textContent = num(result.summary?.issue_quantity);
+                    document.getElementById('totalQuantity').textContent = num(result.summary?.total_quantity);
+                    document.getElementById('stockResultLabel').textContent = `${num((result.data || []).length)} dòng tồn`;
+                    rowsEl.innerHTML = (result.data || []).map(row => {
+                        const quantity = Number(row.total_quantity || 0);
+                        const unassigned = !row.location_code || row.location_code === 'CHUA-XEP';
+                        const status = unassigned
+                            ? '<span class="wms-badge wms-badge--warning">Chưa xếp</span>'
+                            : quantity < 0
+                                ? '<span class="wms-badge wms-badge--danger">Âm tồn</span>'
+                                : '<span class="wms-badge">Có tồn</span>';
+                        return `<tr>
                             <td>${esc(row.warehouse_code || '-')}</td>
-                            <td>${esc(row.location_code)}</td>
-                            <td>${esc(row.ma_sp)}</td>
-                            <td>${esc(row.internal_item_code)}</td>
-                            <td>${esc(row.size)}</td>
-                            <td>${esc(row.color)}</td>
-                            <td>${esc(row.side)}</td>
-                            <td class="text-end">${num(row.opening_quantity)}</td>
-                            <td class="text-end">${num(row.receipt_quantity)}</td>
-                            <td class="text-end">${num(row.issue_quantity)}</td>
-                            <td class="text-end fw-semibold">${num(row.total_quantity)}</td>
-                        </tr>
-                    `).join('') || '<tr><td colspan="11" class="text-center hint">Không có tồn phù hợp</td></tr>';
+                            <td>${esc(row.location_code || 'CHUA-XEP')}</td>
+                            <td class="wms-code">${esc(row.ma_sp || '-')}</td>
+                            <td class="wms-code">${esc(row.internal_item_code || '-')}</td>
+                            <td>${esc(row.size || '-')}</td>
+                            <td>${esc(row.color || '-')}</td>
+                            <td>${esc(row.side || '-')}</td>
+                            <td class="wms-number">${num(row.opening_quantity)}</td>
+                            <td class="wms-number">${num(row.receipt_quantity)}</td>
+                            <td class="wms-number">${num(row.issue_quantity)}</td>
+                            <td class="wms-number ${quantity < 0 ? 'text-danger' : ''}">${num(quantity)}</td>
+                            <td>${status}</td>
+                            <td class="text-nowrap">
+                                ${row.can_delete
+                                    ? `<button type="button" class="btn btn-sm btn-outline-danger delete-stock"
+                                        data-warehouse="${esc(row.warehouse_code || '')}"
+                                        data-location="${esc(row.location_code || '')}"
+                                        data-ma-hh="${esc(row.ma_sp || '')}"
+                                        data-internal-code="${esc(row.internal_item_code || '')}"
+                                        data-size="${esc(row.size || '')}"
+                                        data-color="${esc(row.color || '')}"
+                                        data-side="${esc(row.side || '')}"><i data-lucide="trash-2"></i> Xóa</button>`
+                                    : `<a class="btn btn-sm btn-outline-secondary" href="${Number(row.receipt_quantity || 0) ? '/client/kiem-ton-kho?view=history' : '/client/xuat-vat-tu-noi-bo'}" title="${esc(row.delete_reason || '')}">Xem phiếu</a>`}
+                            </td>
+                        </tr>`;
+                    }).join('') || '<tr><td colspan="13" class="wms-empty">Không có tồn phù hợp.</td></tr>';
+                    if (window.lucide) window.lucide.createIcons();
                 })
-                .catch(error => alert(error.message));
+                .catch(error => {
+                    rowsEl.innerHTML = `<tr><td colspan="13" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
+                });
+        }
+
+        rowsEl.addEventListener('click', event => {
+            const button = event.target.closest('.delete-stock');
+            if (!button) return;
+            const code = button.dataset.internalCode || button.dataset.maHh;
+            if (!confirm(`Xóa tồn đầu nội bộ của ${code}? Thao tác này không ảnh hưởng TSoft.`)) return;
+
+            button.disabled = true;
+            fetch('/api/ton-kho-noi-bo', {
+                method: 'DELETE',
+                headers: {'Content-Type':'application/json', 'Accept':'application/json', 'X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({
+                    month: stockMonthEl.value,
+                    warehouse_code: button.dataset.warehouse,
+                    location_code: button.dataset.location,
+                    ma_hh: button.dataset.maHh,
+                    internal_item_code: button.dataset.internalCode,
+                    size: button.dataset.size,
+                    color: button.dataset.color,
+                    side: button.dataset.side
+                })
+            }).then(response => jsonOrError(response, 'Không xóa được dòng tồn'))
+              .then(() => loadStock())
+              .catch(error => {
+                  button.disabled = false;
+                  alert(error.message);
+              });
+        });
+
+        function queueSearch(source) {
+            if (source === topKeywordEl) keywordEl.value = topKeywordEl.value;
+            if (source === keywordEl) topKeywordEl.value = keywordEl.value;
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(loadStock, 250);
         }
 
         warehouseSelect.addEventListener('change', loadStock);
         stockMonthEl.addEventListener('change', loadStock);
-        keywordEl.addEventListener('input', () => {
-            clearTimeout(searchTimer);
-            searchTimer = setTimeout(loadStock, 250);
-        });
-        document.getElementById('reloadBtn').addEventListener('click', () => {
-            loadWarehouses();
+        keywordEl.addEventListener('input', () => queueSearch(keywordEl));
+        topKeywordEl.addEventListener('input', () => queueSearch(topKeywordEl));
+        document.getElementById('reloadBtn').addEventListener('click', () => loadWarehouses().then(loadStock));
+        document.getElementById('clearFilterBtn').addEventListener('click', () => {
+            warehouseSelect.value = '';
+            keywordEl.value = '';
+            topKeywordEl.value = '';
             loadStock();
         });
 
-        loadWarehouses();
-        loadStock();
+        document.getElementById('voiceStockBtn').addEventListener('click', () => {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) return alert('Trình duyệt này chưa hỗ trợ nhận diện giọng nói.');
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'vi-VN';
+            recognition.onresult = event => {
+                keywordEl.value = event.results[0][0].transcript.replace(/\s+/g, '');
+                topKeywordEl.value = keywordEl.value;
+                loadStock();
+            };
+            recognition.start();
+        });
+
+        topKeywordEl.value = keywordEl.value;
+        loadWarehouses().then(loadStock).catch(error => {
+            rowsEl.innerHTML = `<tr><td colspan="13" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
+        });
     </script>
 </body>
 </html>

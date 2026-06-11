@@ -139,14 +139,39 @@
         @media (max-width: 700px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .view-tabs { overflow-x: auto; } .view-tab { white-space: nowrap; } .voice-assistant { grid-template-columns: auto minmax(0, 1fr) auto; } .voice-result { grid-column: 1 / -1; } }
         @media (max-width: 991.98px) { .page-shell { padding: 62px 12px 16px; } }
     </style>
+    <link href="{{ asset('css/warehouse-wms.css') }}" rel="stylesheet">
+    <style>
+        .page-shell { max-width: 1600px; padding: 24px 28px 40px; }
+        .page-title { color: var(--wms-ink); font-size: 28px; font-weight: 800; }
+        .panel { border-color: var(--wms-line); border-radius: 7px; }
+        .kpi-item { min-height: 92px; border-color: var(--wms-line); border-radius: 7px; }
+        .kpi-value { font-size: 25px; }
+        .view-tabs { border-radius: 7px; }
+        .view-tab { border-radius: 4px; }
+        .view-tab.is-active { background: var(--wms-blue); color: #fff; }
+        .table thead th { background: var(--wms-navy); color: #fff; }
+    </style>
 </head>
 <body>
     @include('layouts.partials.sidebar')
+
+    <header class="wms-topbar">
+        <h1 class="wms-topbar__title">WMS May Mặc</h1>
+        <div class="wms-global-search">
+            <i data-lucide="search"></i>
+            <input id="warehouseTopSearch" aria-label="Tìm mã hoặc vị trí kho" placeholder="Tìm mã hàng, vị trí hoặc quét mã...">
+        </div>
+        <div class="wms-topbar__actions">
+            <button id="warehouseTopMic" type="button" class="wms-btn" title="Tìm bằng giọng nói"><i data-lucide="mic"></i><span class="visually-hidden">Tìm bằng giọng nói</span></button>
+            <a class="wms-btn" href="{{ url('/client/ton-kho-noi-bo') }}"><i data-lucide="boxes"></i> Xem tồn</a>
+        </div>
+    </header>
+
     <main class="page-shell">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
             <div>
-                <h1 class="page-title mb-1">Quản lý kho</h1>
-                <div class="page-subtitle">Theo dõi vị trí, ghi nhận kiện và kiểm soát tồn nội bộ.</div>
+                <h1 class="page-title mb-1">Quản lý nhập kho & vị trí</h1>
+                <div class="page-subtitle">Nhập thành phẩm, bố trí vị trí, in tem QR và theo dõi kiện nội bộ.</div>
             </div>
             <div class="d-flex gap-2 align-items-center">
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="openLocationModal()"><i data-lucide="map-pin-plus"></i>Thêm vị trí</button>
@@ -184,11 +209,11 @@
         </section>
 
         <nav class="view-tabs" aria-label="Khu vực quản lý kho">
-            <button type="button" class="view-tab is-active" data-workspace-view="map" onclick="switchWorkspace('map')"><i data-lucide="map"></i>Sơ đồ kho</button>
-            <button type="button" class="view-tab" data-workspace-view="editor" onclick="switchWorkspace('editor')"><i data-lucide="grid-3x3"></i>Editor layout</button>
-            <button type="button" class="view-tab" data-workspace-view="overview" onclick="switchWorkspace('overview')"><i data-lucide="layout-dashboard"></i>Tổng quan vị trí</button>
-            <button type="button" class="view-tab" data-workspace-view="entry" onclick="switchWorkspace('entry')"><i data-lucide="file-text"></i>Phiếu kho</button>
-            <button type="button" class="view-tab" data-workspace-view="history" onclick="switchWorkspace('history')"><i data-lucide="history"></i>Lịch sử kiện</button>
+            <button type="button" class="view-tab is-active" data-workspace-view="entry" onclick="switchWorkspace('entry')"><i data-lucide="package-plus"></i>Nhập kho</button>
+            <button type="button" class="view-tab" data-workspace-view="history" onclick="switchWorkspace('history')"><i data-lucide="history"></i>Danh sách phiếu</button>
+            <button type="button" class="view-tab" data-workspace-view="overview" onclick="switchWorkspace('overview')"><i data-lucide="layout-dashboard"></i>Vị trí & hàng hóa</button>
+            <button type="button" class="view-tab" data-workspace-view="map" onclick="switchWorkspace('map')"><i data-lucide="map"></i>Sơ đồ kho</button>
+            <button type="button" class="view-tab" data-workspace-view="editor" onclick="switchWorkspace('editor')"><i data-lucide="grid-3x3"></i>Thiết lập sơ đồ</button>
         </nav>
 
         <section id="mapPanel" data-workspace-panel="map" class="panel mb-3">
@@ -1187,11 +1212,26 @@
         document.getElementById('voiceLookupInput').addEventListener('keydown', event => {
             if (event.key === 'Enter') lookupWarehouseByVoice();
         });
+        document.getElementById('warehouseTopSearch').addEventListener('input', event => {
+            document.getElementById('voiceLookupInput').value = event.target.value;
+        });
+        document.getElementById('warehouseTopSearch').addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                document.getElementById('voiceLookupInput').value = event.target.value;
+                lookupWarehouseByVoice();
+            }
+        });
+        document.getElementById('warehouseTopMic').addEventListener('click', () => {
+            document.getElementById('voiceLookupBtn').click();
+        });
         document.addEventListener('click', event => {
             if (!event.target.closest('.product-search')) hideProductResults();
         });
         document.getElementById('checkedAt').addEventListener('change', () => { loadPackages(); loadReceipts(); loadWarehouseStats(); loadWarehouseMap(); loadLocationContents(); });
-        const requestedLocation = new URLSearchParams(window.location.search).get('location_code');
+        const pageParams = new URLSearchParams(window.location.search);
+        const requestedView = pageParams.get('view');
+        switchWorkspace(['entry', 'history', 'overview', 'map', 'editor'].includes(requestedView) ? requestedView : 'entry');
+        const requestedLocation = pageParams.get('location_code');
         if (requestedLocation) document.getElementById('locationCode').value = requestedLocation.toUpperCase();
         loadLocations().then(() => { loadPackages(); loadReceipts(); loadWarehouseStats(); loadWarehouseMap(); loadLocationContents(); });
         updateSavePackageButton();
