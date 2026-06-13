@@ -71,32 +71,34 @@
             <thead>
                 <tr>
                     <th style="width: 42px;">STT</th>
+                    <th style="width: 82px;">Lệnh SX</th>
                     <th style="width: 110px;">Mã vật tư</th>
                     <th>Tên vật tư</th>
                     <th style="width: 58px;">ĐVT</th>
-                    <th style="width: 82px;">Số lượng</th>
+                    <th style="width: 70px;">SL lệnh</th>
+                    <th style="width: 76px;">Thực xuất</th>
                     <th style="width: 82px;">Vị trí</th>
-                    <th style="width: 100px;">Mã nội bộ</th>
-                    <th style="width: 120px;">Ghi chú</th>
+                    <th style="width: 100px;">Mã nội bộ / Size</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($issue->lines as $index => $line)
                     <tr>
                         <td class="text-center">{{ $index + 1 }}</td>
+                        <td>{{ $line->production_order }}</td>
                         <td>{{ $line->ma_hh }}</td>
                         <td>{{ $line->ten_hh }}</td>
                         <td class="text-center">{{ $line->dvt }}</td>
+                        <td class="text-end">{{ $line->ordered_quantity !== null ? number_format($line->ordered_quantity, 3, ',', '.') : '' }}</td>
                         <td class="text-end">{{ number_format($line->quantity, 3, ',', '.') }}</td>
                         <td>{{ $line->location_code }}</td>
-                        <td>{{ $line->internal_item_code }}</td>
-                        <td>{{ $line->note }}</td>
+                        <td>{{ $line->internal_item_code }}{{ $line->size ? ' / ' . $line->size : '' }}</td>
                     </tr>
                 @endforeach
                 <tr>
-                    <td colspan="4" class="text-end"><strong>Tổng cộng</strong></td>
+                    <td colspan="6" class="text-end"><strong>Tổng cộng</strong></td>
                     <td class="text-end"><strong>{{ number_format($issue->lines->sum('quantity'), 3, ',', '.') }}</strong></td>
-                    <td colspan="3"></td>
+                    <td colspan="2"></td>
                 </tr>
             </tbody>
         </table>

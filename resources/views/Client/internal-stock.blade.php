@@ -63,6 +63,34 @@
         </section>
     </main>
 
+    <div class="modal fade" id="accountingCodeModal" tabindex="-1" aria-labelledby="accountingCodeModalTitle" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="accountingCodeModalTitle">Gán mã kế toán</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Mã nội bộ</label>
+                        <input id="mappingInternalCode" class="form-control" readonly>
+                    </div>
+                    <div>
+                        <label class="form-label">Tìm và chọn mã kế toán</label>
+                        <input id="mappingAccountingCode" class="form-control" list="mappingAccountingOptions" autocomplete="off" placeholder="Gõ mã hoặc tên hàng">
+                        <datalist id="mappingAccountingOptions"></datalist>
+                        <div class="text-secondary small mt-2">Mã này chỉ dùng để đối chiếu với tồn TSoft. Hệ thống không ghi dữ liệu sang TSoft.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button id="saveAccountingCodeBtn" type="button" class="btn btn-primary">Lưu mã kế toán</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const warehouseSelect = document.getElementById('warehouseSelect');
         const stockMonthEl = document.getElementById('stockMonth');
@@ -70,7 +98,9 @@
         const topKeywordEl = document.getElementById('topKeyword');
         const rowsEl = document.getElementById('stockRows');
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+        const accountingCodeModal = new bootstrap.Modal(document.getElementById('accountingCodeModal'));
         let searchTimer = null;
+        let mappingSearchTimer = null;
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits: 3});
@@ -117,7 +147,7 @@
                         return `<tr>
                             <td>${esc(row.warehouse_code || '-')}</td>
                             <td>${esc(row.location_code || 'CHUA-XEP')}</td>
-                            <td class="wms-code">${esc(row.ma_sp || '-')}</td>
+                            <td class="wms-code">${row.ma_sp ? esc(row.ma_sp) : '<span class="wms-badge wms-badge--warning">Chưa gán</span>'}</td>
                             <td class="wms-code">${esc(row.internal_item_code || '-')}</td>
                             <td>${esc(row.size || '-')}</td>
                             <td>${esc(row.color || '-')}</td>
@@ -128,6 +158,9 @@
                             <td class="wms-number ${quantity < 0 ? 'text-danger' : ''}">${num(quantity)}</td>
                             <td>${status}</td>
                             <td class="text-nowrap">
+                                ${!row.ma_sp && row.internal_item_code
+                                    ? `<button type="button" class="btn btn-sm btn-outline-primary assign-accounting-code" data-internal-code="${esc(row.internal_item_code)}"><i data-lucide="link-2"></i> Gán mã</button>`
+                                    : ''}
                                 ${row.can_delete
                                     ? `<button type="button" class="btn btn-sm btn-outline-danger delete-stock"
                                         data-warehouse="${esc(row.warehouse_code || '')}"
@@ -149,6 +182,15 @@
         }
 
         rowsEl.addEventListener('click', event => {
+            const assignButton = event.target.closest('.assign-accounting-code');
+            if (assignButton) {
+                document.getElementById('mappingInternalCode').value = assignButton.dataset.internalCode;
+                document.getElementById('mappingAccountingCode').value = '';
+                document.getElementById('mappingAccountingOptions').innerHTML = '';
+                accountingCodeModal.show();
+                return;
+            }
+
             const button = event.target.closest('.delete-stock');
             if (!button) return;
             const code = button.dataset.internalCode || button.dataset.maHh;
@@ -174,6 +216,42 @@
                   button.disabled = false;
                   alert(error.message);
               });
+        });
+
+        document.getElementById('mappingAccountingCode').addEventListener('input', event => {
+            const keyword = event.target.value.trim();
+            clearTimeout(mappingSearchTimer);
+            if (keyword.length < 2) return;
+            mappingSearchTimer = setTimeout(() => {
+                fetch(`/api/thanh-pham-ke-toan/goi-y?keyword=${encodeURIComponent(keyword)}`)
+                    .then(response => jsonOrError(response, 'Không tìm được mã kế toán'))
+                    .then(result => {
+                        document.getElementById('mappingAccountingOptions').innerHTML = (result.data || []).map(item =>
+                            `<option value="${esc(item.Ma_hh)}">${esc(item.Ten_hh || '')}</option>`
+                        ).join('');
+                    })
+                    .catch(() => {});
+            }, 250);
+        });
+
+        document.getElementById('saveAccountingCodeBtn').addEventListener('click', () => {
+            const internalCode = document.getElementById('mappingInternalCode').value.trim();
+            const accountingCode = document.getElementById('mappingAccountingCode').value.trim();
+            if (!accountingCode) return alert('Chọn mã kế toán cần gán.');
+
+            const button = document.getElementById('saveAccountingCodeBtn');
+            button.disabled = true;
+            fetch('/api/ton-kho-noi-bo/ma-ke-toan', {
+                method: 'PATCH',
+                headers: {'Content-Type':'application/json', 'Accept':'application/json', 'X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({internal_item_code: internalCode, ma_hh: accountingCode})
+            }).then(response => jsonOrError(response, 'Không gán được mã kế toán'))
+              .then(() => {
+                  accountingCodeModal.hide();
+                  loadStock();
+              })
+              .catch(error => alert(error.message))
+              .finally(() => button.disabled = false);
         });
 
         function queueSearch(source) {

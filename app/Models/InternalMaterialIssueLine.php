@@ -12,9 +12,14 @@ class InternalMaterialIssueLine extends Model
 
     protected $fillable = [
         'issue_id',
+        'production_order_id',
+        'production_order',
+        'purchase_order',
+        'customer',
         'ma_hh',
         'ten_hh',
         'dvt',
+        'ordered_quantity',
         'quantity',
         'location_code',
         'internal_item_code',
@@ -24,6 +29,7 @@ class InternalMaterialIssueLine extends Model
     ];
 
     protected $casts = [
+        'ordered_quantity' => 'float',
         'quantity' => 'float',
     ];
 }

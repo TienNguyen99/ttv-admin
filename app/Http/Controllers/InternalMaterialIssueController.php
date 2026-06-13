@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\InternalInventoryCount;
 use App\Models\InternalMaterialIssue;
+use App\Models\InternalProductionOrder;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
 use Illuminate\Http\Request;
@@ -82,6 +83,11 @@ class InternalMaterialIssueController extends Controller
             'lines.*.size' => 'nullable|string|max:100',
             'lines.*.color' => 'nullable|string|max:100',
             'lines.*.note' => 'nullable|string|max:500',
+            'lines.*.production_order_id' => 'nullable|integer',
+            'lines.*.production_order' => 'nullable|string|max:100',
+            'lines.*.purchase_order' => 'nullable|string|max:1000',
+            'lines.*.customer' => 'nullable|string|max:200',
+            'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
         ]);
 
         $issueType = $data['issue_type'] ?? 'material';
@@ -103,9 +109,14 @@ class InternalMaterialIssueController extends Controller
                 $this->decreaseInternalStock($line, strtoupper(trim($data['warehouse_code'] ?? '')));
 
                 $issue->lines()->create([
+                    'production_order_id' => $line['production_order_id'] ?? null,
+                    'production_order' => trim($line['production_order'] ?? ''),
+                    'purchase_order' => trim($line['purchase_order'] ?? ''),
+                    'customer' => trim($line['customer'] ?? ''),
                     'ma_hh' => strtoupper(trim($line['ma_hh'])),
                     'ten_hh' => trim($line['ten_hh'] ?? ''),
                     'dvt' => trim($line['dvt'] ?? ''),
+                    'ordered_quantity' => $line['ordered_quantity'] ?? null,
                     'quantity' => $line['quantity'],
                     'location_code' => strtoupper(trim($line['location_code'] ?? '')),
                     'internal_item_code' => trim($line['internal_item_code'] ?? ''),
@@ -124,6 +135,70 @@ class InternalMaterialIssueController extends Controller
                 : 'Đã tạo phiếu xuất vật tư nội bộ.',
             'data' => $issue,
             'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in'),
+        ]);
+    }
+
+    public function productionOrderLines(Request $request)
+    {
+        $productionOrder = trim((string) $request->query('production_order', ''));
+        if ($productionOrder === '') {
+            return response()->json(['data' => []]);
+        }
+
+        $orders = InternalProductionOrder::query()
+            ->where('is_active', true)
+            ->where('production_order', $productionOrder)
+            ->orderBy('source_row')
+            ->get();
+
+        $warehouseCode = strtoupper(trim((string) $request->query('warehouse_code', '')));
+
+        $data = $orders->map(function (InternalProductionOrder $order) use ($warehouseCode) {
+            $stockQuery = InventoryPackage::query()
+                ->with('location:id,location_code')
+                ->where('quantity', '>', 0)
+                ->whereRaw('UPPER(TRIM(internal_item_code)) = ?', [mb_strtoupper(trim((string) $order->item_code))]);
+
+            if ($warehouseCode !== '') {
+                $stockQuery->where('ma_ko', $warehouseCode);
+            }
+            if (trim((string) $order->size) !== '') {
+                $stockQuery->where('size', trim((string) $order->size));
+            }
+            if (trim((string) $order->color) !== '') {
+                $stockQuery->where('color', trim((string) $order->color));
+            }
+
+            $packages = $stockQuery->orderBy('checked_at')->orderBy('id')->get();
+            $accountingCodes = $packages->pluck('ma_sp')->filter()->unique()->values();
+            $locations = $packages->pluck('location.location_code')->filter()->unique()->values();
+
+            return [
+                'production_order_id' => $order->id,
+                'production_order' => $order->production_order,
+                'purchase_order' => $order->purchase_order,
+                'customer' => $order->customer,
+                'internal_item_code' => mb_substr((string) $order->item_code, 0, 100),
+                'ten_hh' => mb_substr((string) ($order->description ?: $order->specification), 0, 255),
+                'dvt' => mb_substr((string) $order->unit, 0, 50),
+                'ordered_quantity' => (float) $order->order_quantity,
+                'size' => mb_substr((string) $order->size, 0, 100),
+                'color' => mb_substr((string) $order->color, 0, 100),
+                'ma_hh' => $accountingCodes->count() === 1 ? $accountingCodes->first() : '',
+                'location_code' => $locations->count() === 1 ? $locations->first() : '',
+                'available_quantity' => (float) $packages->sum('quantity'),
+                'stock_match_count' => $packages->count(),
+            ];
+        });
+
+        return response()->json([
+            'data' => $data,
+            'summary' => [
+                'production_order' => $productionOrder,
+                'variant_count' => $data->count(),
+                'ordered_quantity' => (float) $data->sum('ordered_quantity'),
+                'available_quantity' => (float) $data->sum('available_quantity'),
+            ],
         ]);
     }
 

@@ -43,6 +43,9 @@
         .product-code { font-weight: 700; }
         .product-name { color: #6b7280; font-size: 13px; }
         .table td, .table th { vertical-align: middle; }
+        .order-load-status { min-height: 20px; margin-top: 5px; font-size: 12px; }
+        .reference-value { min-width: 92px; background: #f8fafc !important; color: #475569; }
+        .stock-warning { color: #b91c1c; font-size: 11px; font-weight: 700; white-space: nowrap; }
         @media (max-width: 767.98px) {
             .line-table { min-width: 980px; }
         }
@@ -104,7 +107,15 @@
                 <div class="col-md-2"><label class="form-label">Kho xuất</label><input id="warehouseCode" class="form-control" placeholder="KTPHAM"></div>
                 <div class="col-md-2"><label class="form-label">Người nhận</label><input id="receiverName" class="form-control"></div>
                 <div class="col-md-2"><label class="form-label">Bộ phận</label><input id="department" class="form-control"></div>
-                <div class="col-md-2"><label class="form-label">Lệnh/Số việc</label><input id="productionOrder" class="form-control"></div>
+                <div class="col-md-4">
+                    <label class="form-label">Lệnh sản xuất</label>
+                    <div class="input-group">
+                        <input id="productionOrder" class="form-control" list="productionOrderOptions" autocomplete="off" placeholder="Gõ lệnh SX">
+                        <button id="loadProductionOrderBtn" type="button" class="btn btn-outline-primary">Nạp lệnh</button>
+                    </div>
+                    <datalist id="productionOrderOptions"></datalist>
+                    <div id="productionOrderStatus" class="order-load-status hint">Có thể nạp nhiều lệnh vào cùng một phiếu.</div>
+                </div>
                 <div class="col-md-2"><label class="form-label">Mục đích</label><input id="purpose" class="form-control" placeholder="Sản xuất / bù hao..."></div>
                 <div class="col-12"><label class="form-label">Ghi chú phiếu</label><input id="issueNote" class="form-control"></div>
             </div>
@@ -113,10 +124,13 @@
                 <table class="table table-bordered line-table mb-0">
                     <thead class="table-light">
                         <tr>
+                            <th style="width:130px">Lệnh SX</th>
                             <th style="width:220px">Mã vật tư</th>
                             <th>Tên vật tư</th>
                             <th style="width:80px">ĐVT</th>
-                            <th style="width:120px">Số lượng</th>
+                            <th style="width:105px">SL theo lệnh</th>
+                            <th style="width:105px">Tồn khả dụng</th>
+                            <th style="width:120px">SL thực xuất *</th>
                             <th style="width:120px">Vị trí</th>
                             <th style="width:140px">Mã nội bộ</th>
                             <th style="width:90px">Size</th>
@@ -153,6 +167,7 @@
         const lineRows = document.getElementById('lineRows');
         const issueRows = document.getElementById('issueRows');
         let searchTimers = {};
+        let productionOrderSearchTimer = null;
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const value = id => document.getElementById(id).value.trim();
@@ -167,13 +182,22 @@
             const rowId = `line-${Date.now()}-${Math.random().toString(16).slice(2)}`;
             const tr = document.createElement('tr');
             tr.dataset.rowId = rowId;
+            tr.dataset.productionOrderId = data.production_order_id || '';
+            tr.dataset.purchaseOrder = data.purchase_order || '';
+            tr.dataset.customer = data.customer || '';
             tr.innerHTML = `
+                <td><input class="form-control line-production-order reference-value" value="${esc(data.production_order || '')}" readonly></td>
                 <td class="product-search">
                     <input class="form-control ma-hh" autocomplete="off" value="${esc(data.ma_hh || '')}" placeholder="Gõ mã/tên">
                     <div class="product-results d-none"></div>
                 </td>
                 <td><input class="form-control ten-hh" value="${esc(data.ten_hh || '')}"></td>
                 <td><input class="form-control dvt" value="${esc(data.dvt || '')}"></td>
+                <td><input class="form-control ordered-quantity text-end reference-value" value="${esc(data.ordered_quantity || '')}" readonly></td>
+                <td>
+                    <input class="form-control available-quantity text-end reference-value" value="${esc(data.available_quantity || '')}" readonly>
+                    ${data.production_order && !Number(data.available_quantity || 0) ? '<div class="stock-warning">Chưa khớp tồn</div>' : ''}
+                </td>
                 <td><input class="form-control quantity text-end" type="number" step="0.001" min="0" value="${esc(data.quantity || '')}"></td>
                 <td><input class="form-control location-code" value="${esc(data.location_code || '')}" placeholder="A01"></td>
                 <td><input class="form-control internal-code" value="${esc(data.internal_item_code || '')}"></td>
@@ -190,6 +214,11 @@
                 ma_hh: row.querySelector('.ma-hh').value.trim(),
                 ten_hh: row.querySelector('.ten-hh').value.trim(),
                 dvt: row.querySelector('.dvt').value.trim(),
+                production_order_id: row.dataset.productionOrderId || null,
+                production_order: row.querySelector('.line-production-order').value.trim(),
+                purchase_order: row.dataset.purchaseOrder || '',
+                customer: row.dataset.customer || '',
+                ordered_quantity: row.querySelector('.ordered-quantity').value || null,
                 quantity: row.querySelector('.quantity').value,
                 location_code: row.querySelector('.location-code').value.trim(),
                 internal_item_code: row.querySelector('.internal-code').value.trim(),
@@ -197,6 +226,85 @@
                 color: row.querySelector('.color').value.trim(),
                 note: row.querySelector('.line-note').value.trim(),
             })).filter(line => line.ma_hh || line.quantity);
+        }
+
+        function searchProductionOrders() {
+            const input = document.getElementById('productionOrder');
+            const keyword = input.value.trim();
+            clearTimeout(productionOrderSearchTimer);
+            if (keyword.length < 2) return;
+
+            productionOrderSearchTimer = setTimeout(() => {
+                fetch(`/api/lenh-san-xuat-sheet?keyword=${encodeURIComponent(keyword)}&limit=30`)
+                    .then(response => jsonOrError(response, 'Không tải được lệnh sản xuất'))
+                    .then(result => {
+                        const uniqueOrders = Array.from(new Map(
+                            (result.data || []).map(order => [order.production_order, order])
+                        ).values());
+                        document.getElementById('productionOrderOptions').innerHTML = uniqueOrders.map(order => {
+                            const label = [order.customer, order.purchase_order, order.item_code].filter(Boolean).join(' · ');
+                            return `<option value="${esc(order.production_order)}" label="${esc(label)}"></option>`;
+                        }).join('');
+                    })
+                    .catch(() => {});
+            }, 220);
+        }
+
+        function loadProductionOrder() {
+            const code = value('productionOrder');
+            if (!code) return alert('Nhập Lệnh sản xuất cần nạp.');
+
+            const status = document.getElementById('productionOrderStatus');
+            const button = document.getElementById('loadProductionOrderBtn');
+            status.textContent = `Đang tải ${code}...`;
+            button.disabled = true;
+
+            const params = new URLSearchParams({ production_order: code });
+            if (value('warehouseCode')) params.set('warehouse_code', value('warehouseCode'));
+
+            fetch(`/api/xuat-vat-tu-noi-bo/lenh-san-xuat?${params.toString()}`)
+                .then(response => jsonOrError(response, 'Không tải được chi tiết lệnh sản xuất'))
+                .then(result => {
+                    const rows = result.data || [];
+                    if (!rows.length) throw new Error(`Không tìm thấy lệnh ${code}.`);
+
+                    const existingKeys = new Set(Array.from(lineRows.querySelectorAll('tr')).map(row => [
+                        row.querySelector('.line-production-order').value.trim().toUpperCase(),
+                        row.querySelector('.internal-code').value.trim().toUpperCase(),
+                        row.querySelector('.size').value.trim().toUpperCase(),
+                        row.querySelector('.color').value.trim().toUpperCase()
+                    ].join('|')));
+
+                    const emptyRows = Array.from(lineRows.querySelectorAll('tr')).filter(row =>
+                        !row.querySelector('.ma-hh').value.trim() &&
+                        !row.querySelector('.internal-code').value.trim() &&
+                        !row.querySelector('.quantity').value
+                    );
+                    let added = 0;
+
+                    rows.forEach(data => {
+                        const key = [
+                            String(data.production_order || '').trim().toUpperCase(),
+                            String(data.internal_item_code || '').trim().toUpperCase(),
+                            String(data.size || '').trim().toUpperCase(),
+                            String(data.color || '').trim().toUpperCase()
+                        ].join('|');
+                        if (existingKeys.has(key)) return;
+
+                        if (emptyRows.length) emptyRows.shift().remove();
+                        addLine(data);
+                        existingKeys.add(key);
+                        added++;
+                    });
+
+                    status.textContent = `${code}: đã thêm ${added} dòng size/màu. Số lượng thực xuất đang để trống.`;
+                    document.getElementById('productionOrder').value = '';
+                })
+                .catch(error => {
+                    status.textContent = error.message;
+                    alert(error.message);
+                })
+                .finally(() => button.disabled = false);
         }
 
         function applyIssueType(type) {
@@ -261,7 +369,7 @@
                     warehouse_code: value('warehouseCode'),
                     receiver_name: value('receiverName'),
                     department: value('department'),
-                    production_order: value('productionOrder'),
+                    production_order: Array.from(new Set(lines.map(line => line.production_order).filter(Boolean))).join(', '),
                     purpose: value('purpose'),
                     note: value('issueNote'),
                     lines
@@ -344,6 +452,14 @@
         });
 
         document.getElementById('addLineBtn').addEventListener('click', () => addLine());
+        document.getElementById('loadProductionOrderBtn').addEventListener('click', loadProductionOrder);
+        document.getElementById('productionOrder').addEventListener('input', searchProductionOrders);
+        document.getElementById('productionOrder').addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                loadProductionOrder();
+            }
+        });
         document.getElementById('saveBtn').addEventListener('click', saveIssue);
         document.getElementById('issueType').addEventListener('change', event => applyIssueType(event.target.value));
         document.getElementById('reloadBtn').addEventListener('click', loadIssues);

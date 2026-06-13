@@ -210,9 +210,10 @@
 
         <nav class="view-tabs" aria-label="Khu vực quản lý kho">
             <button type="button" class="view-tab is-active" data-workspace-view="entry" onclick="switchWorkspace('entry')"><i data-lucide="package-plus"></i>Nhập kho</button>
-            <button type="button" class="view-tab" data-workspace-view="history" onclick="switchWorkspace('history')"><i data-lucide="history"></i>Danh sách phiếu</button>
+            <button type="button" class="view-tab" data-workspace-view="receipts" onclick="switchWorkspace('receipts')"><i data-lucide="files"></i>Danh sách phiếu</button>
             <button type="button" class="view-tab" data-workspace-view="overview" onclick="switchWorkspace('overview')"><i data-lucide="layout-dashboard"></i>Vị trí & hàng hóa</button>
             <button type="button" class="view-tab" data-workspace-view="map" onclick="switchWorkspace('map')"><i data-lucide="map"></i>Sơ đồ kho</button>
+            <button type="button" class="view-tab" data-workspace-view="history" onclick="switchWorkspace('history')"><i data-lucide="package-search"></i>Kiện hàng</button>
             <button type="button" class="view-tab" data-workspace-view="editor" onclick="switchWorkspace('editor')"><i data-lucide="grid-3x3"></i>Thiết lập sơ đồ</button>
         </nav>
 
@@ -278,18 +279,23 @@
             </div>
             <div class="panel-body">
                 <div class="row g-2 mb-3">
+                    <div class="col-md-2">
+                        <label class="form-label">Ngày nhập</label>
+                        <input id="receiptDate" type="date" class="form-control" value="{{ now()->format('Y-m-d') }}">
+                    </div>
                     <div class="col-md-4"><label class="form-label">Ghi chú phiếu</label><input id="receiptHeaderNote" class="form-control" placeholder="Ví dụ: KCS giao kho, ca sáng"></div>
-                    <div class="col-md-8 d-flex align-items-end justify-content-md-end"><span class="section-hint">Nhập tối đa 10 dòng. Mỗi dòng có Mã TP kế toán + Số lượng sẽ được lưu vào cùng một phiếu.</span></div>
+                    <div class="col-md-6 d-flex align-items-end justify-content-md-end"><span class="section-hint">Mã nội bộ + Số lượng là bắt buộc. Mã kế toán có thể để trống và gán sau khi đối chiếu.</span></div>
                 </div>
                 <datalist id="receiptProductOptions"></datalist>
+                <datalist id="productionOrderOptions"></datalist>
                 <div class="table-responsive">
                     <table class="table align-middle receipt-entry-table">
                         <thead>
                             <tr>
                                 <th style="width:48px">Stt</th>
                                 <th style="min-width:160px">Danh mục</th>
-                                <th style="min-width:180px">Mã hàng</th>
-                                <th style="min-width:180px">Item code</th>
+                                <th style="min-width:180px">Mã nội bộ *</th>
+                                <th style="min-width:180px">Mã kế toán</th>
                                 <th style="min-width:130px">Màu sắc</th>
                                 <th style="min-width:110px">Size</th>
                                 <th style="min-width:120px" class="text-end">Số lượng</th>
@@ -302,13 +308,13 @@
                                 <tr>
                                     <td class="text-muted fw-bold">{{ $i }}</td>
                                     <td><input class="form-control receipt-note" placeholder="TP / KCS"></td>
-                                    <td><input class="form-control receipt-ma-sp" list="receiptProductOptions" autocomplete="off" placeholder="Mã TP kế toán"></td>
                                     <td><input class="form-control receipt-internal-code" placeholder="Mã nội bộ"></td>
+                                    <td><input class="form-control receipt-ma-sp" list="receiptProductOptions" autocomplete="off" placeholder="Có thể thêm sau"></td>
                                     <td><input class="form-control receipt-color"></td>
                                     <td><input class="form-control receipt-size"></td>
                                     <td><input class="form-control receipt-quantity text-end" type="number" step="0.001" min="0"></td>
                                     <td><input class="form-control receipt-dvt" placeholder="Cái"></td>
-                                    <td><input class="form-control receipt-order" placeholder="LSX / ghi chú"></td>
+                                    <td><input class="form-control receipt-order" list="productionOrderOptions" autocomplete="off" placeholder="Gõ lệnh SX"></td>
                                 </tr>
                             @endfor
                         </tbody>
@@ -317,13 +323,28 @@
             </div>
         </section>
 
-        <section id="receiptsPanel" data-workspace-panel="entry" class="panel mb-3 d-none">
+        <section id="receiptsPanel" data-workspace-panel="receipts" class="panel mb-3 d-none">
             <div class="panel-header">
                 <div>
                     <h2 class="panel-title">Danh sách phiếu nhập thành phẩm</h2>
-                    <div id="receiptListSummary" class="section-hint mt-1">Theo ngày kiểm kê và kho đang chọn.</div>
+                    <div id="receiptListSummary" class="section-hint mt-1">Mỗi dòng là một phiếu cha, bên trong có nhiều dòng hàng.</div>
                 </div>
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="loadReceipts()"><i data-lucide="refresh-cw"></i>Tải lại</button>
+            </div>
+            <div class="panel-body pb-2">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-6">
+                        <label class="form-label">Tìm số phiếu, mã nội bộ, mã kế toán hoặc ghi chú</label>
+                        <input id="receiptKeyword" class="form-control" placeholder="Ví dụ: PNTP-20260612-0001">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Ngày phiếu</label>
+                        <input id="receiptFilterDate" type="date" class="form-control">
+                    </div>
+                    <div class="col-md-2">
+                        <button id="clearReceiptFilter" type="button" class="btn btn-outline-secondary w-100">Xóa lọc</button>
+                    </div>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table align-middle">
@@ -637,6 +658,106 @@
             }, 250);
         }
 
+        let productionOrderSearchTimer = null;
+        let productionOrderOptions = [];
+
+        function searchProductionOrders(input) {
+            const keyword = input.value.trim();
+            if (input.dataset.appliedOrder !== keyword.toUpperCase()) {
+                delete input.dataset.appliedOrder;
+            }
+            clearTimeout(productionOrderSearchTimer);
+            if (keyword.length < 2) return;
+
+            productionOrderSearchTimer = setTimeout(() => {
+                fetch(`/api/lenh-san-xuat-sheet?keyword=${encodeURIComponent(keyword)}&limit=20`)
+                    .then(r => jsonOrError(r, 'Không tải được lệnh sản xuất'))
+                    .then(result => {
+                        productionOrderOptions = result.data || [];
+                        document.getElementById('productionOrderOptions').innerHTML = productionOrderOptions.map(order => {
+                            const label = [order.customer, order.item_code, order.description].filter(Boolean).join(' · ');
+                            return `<option value="${escapeHtml(order.production_order)}" label="${escapeHtml(label)}"></option>`;
+                        }).join('');
+                        applyProductionOrder(input);
+                    })
+                    .catch(() => {});
+            }, 220);
+        }
+
+        function applyProductionOrder(input) {
+            const code = input.value.trim().toUpperCase();
+            if (!code || input.dataset.appliedOrder === code || input.dataset.loadingOrder === code) return false;
+            const hasExactMatch = productionOrderOptions.some(
+                item => String(item.production_order || '').trim().toUpperCase() === code
+            );
+            if (!hasExactMatch) return false;
+
+            input.dataset.loadingOrder = code;
+            fetch(`/api/lenh-san-xuat-sheet?production_order=${encodeURIComponent(input.value.trim())}&limit=500`)
+                .then(r => jsonOrError(r, 'Khong tai duoc chi tiet lenh san xuat'))
+                .then(result => {
+                    const variants = result.data || [];
+                    if (variants.length) expandProductionOrder(input, variants);
+                })
+                .catch(error => alert(error.message))
+                .finally(() => delete input.dataset.loadingOrder);
+            return true;
+        }
+
+        function fillReceiptRow(row, order) {
+            row.querySelector('.receipt-internal-code').value = order.item_code || '';
+            row.querySelector('.receipt-note').value = order.description || order.specification || '';
+            row.querySelector('.receipt-size').value = order.size || '';
+            row.querySelector('.receipt-color').value = order.color || '';
+            row.querySelector('.receipt-dvt').value = order.unit || '';
+            row.querySelector('.receipt-quantity').value = Number(order.order_quantity || 0) || '';
+            const orderInput = row.querySelector('.receipt-order');
+            orderInput.value = order.production_order || '';
+            orderInput.dataset.appliedOrder = String(order.production_order || '').trim().toUpperCase();
+        }
+
+        function receiptRowIsEmpty(row) {
+            return !Array.from(row.querySelectorAll('input')).some(input => input.value.trim() !== '');
+        }
+
+        function appendReceiptRow() {
+            const body = document.getElementById('receiptEntryRows');
+            const row = body.lastElementChild.cloneNode(true);
+            row.querySelectorAll('input').forEach(input => {
+                input.value = '';
+                delete input.dataset.appliedOrder;
+                delete input.dataset.loadingOrder;
+            });
+            row.firstElementChild.textContent = body.children.length + 1;
+            body.appendChild(row);
+            return row;
+        }
+
+        function expandProductionOrder(input, variants) {
+            const currentRow = input.closest('tr');
+            let rows = Array.from(document.querySelectorAll('#receiptEntryRows tr'));
+            const currentIndex = rows.indexOf(currentRow);
+            const targets = [currentRow];
+
+            for (let index = currentIndex + 1; index < rows.length && targets.length < variants.length; index++) {
+                if (receiptRowIsEmpty(rows[index])) targets.push(rows[index]);
+            }
+
+            while (targets.length < variants.length && rows.length < 50) {
+                const row = appendReceiptRow();
+                rows.push(row);
+                targets.push(row);
+            }
+
+            variants.slice(0, targets.length).forEach((variant, index) => {
+                fillReceiptRow(targets[index], variant);
+            });
+
+            if (targets.length < variants.length) {
+                alert(`Lenh ${input.value} co ${variants.length} dong size/mau, form chi nhan toi da 50 dong.`);
+            }
+        }
+
         function receiptLineNote(row) {
             return row.querySelector('.receipt-order')?.value.trim() || '';
         }
@@ -658,7 +779,11 @@
         }
 
         function clearReceiptLines() {
-            document.querySelectorAll('#receiptEntryRows input').forEach(input => input.value = '');
+            document.querySelectorAll('#receiptEntryRows input').forEach(input => {
+                input.value = '';
+                delete input.dataset.appliedOrder;
+                delete input.dataset.loadingOrder;
+            });
             document.getElementById('receiptHeaderNote').value = '';
         }
 
@@ -946,7 +1071,9 @@
         }
 
         function loadReceipts() {
-            const params = new URLSearchParams({ receipt_date: value('checkedAt') });
+            const params = new URLSearchParams();
+            if (value('receiptFilterDate')) params.set('receipt_date', value('receiptFilterDate'));
+            if (value('receiptKeyword')) params.set('keyword', value('receiptKeyword'));
             if (value('warehouseCode')) params.set('warehouse_code', value('warehouseCode').toUpperCase());
             fetch(`/api/kiem-ton-kho/phieu-nhap-tp?${params}`).then(r => r.json()).then(result => {
                 const rows = result.data || [];
@@ -1038,8 +1165,9 @@
 
         document.getElementById('saveReceiptBatchBtn').addEventListener('click', () => {
             const lines = collectReceiptLines();
-            const validLines = lines.filter(line => line.ma_sp && Number(line.quantity || 0) > 0);
-            if (!validLines.length) return alert('Nhập ít nhất 1 dòng có Mã hàng và Số lượng lớn hơn 0.');
+            const validLines = lines.filter(line => line.internal_item_code && Number(line.quantity || 0) > 0);
+            if (!validLines.length) return alert('Nhập ít nhất 1 dòng có Mã nội bộ và Số lượng lớn hơn 0. Mã kế toán có thể thêm sau.');
+            if (!value('receiptDate')) return alert('Chọn ngày nhập kho.');
             const printWindow = window.open('', '_blank');
 
             fetch('/api/kiem-ton-kho/phieu-nhap-tp', {
@@ -1047,7 +1175,7 @@
                 body: JSON.stringify({
                     location_code: value('locationCode'),
                     ma_ko: value('warehouseCode'),
-                    checked_at: value('checkedAt'),
+                    checked_at: value('receiptDate'),
                     note: value('receiptHeaderNote'),
                     lines: validLines
                 })
@@ -1206,6 +1334,10 @@
         });
         document.getElementById('receiptEntryRows').addEventListener('input', event => {
             if (event.target.classList.contains('receipt-ma-sp')) searchReceiptProducts(event.target);
+            if (event.target.classList.contains('receipt-order')) searchProductionOrders(event.target);
+        });
+        document.getElementById('receiptEntryRows').addEventListener('change', event => {
+            if (event.target.classList.contains('receipt-order')) applyProductionOrder(event.target);
         });
         document.getElementById('voiceLookupBtn').addEventListener('click', startVoiceLookup);
         document.getElementById('voiceSearchBtn').addEventListener('click', () => lookupWarehouseByVoice());
@@ -1228,9 +1360,23 @@
             if (!event.target.closest('.product-search')) hideProductResults();
         });
         document.getElementById('checkedAt').addEventListener('change', () => { loadPackages(); loadReceipts(); loadWarehouseStats(); loadWarehouseMap(); loadLocationContents(); });
+        document.getElementById('checkedAt').addEventListener('change', event => {
+            document.getElementById('receiptDate').value = event.target.value;
+        });
+        let receiptSearchTimer = null;
+        document.getElementById('receiptKeyword').addEventListener('input', () => {
+            clearTimeout(receiptSearchTimer);
+            receiptSearchTimer = setTimeout(loadReceipts, 250);
+        });
+        document.getElementById('receiptFilterDate').addEventListener('change', loadReceipts);
+        document.getElementById('clearReceiptFilter').addEventListener('click', () => {
+            document.getElementById('receiptKeyword').value = '';
+            document.getElementById('receiptFilterDate').value = '';
+            loadReceipts();
+        });
         const pageParams = new URLSearchParams(window.location.search);
         const requestedView = pageParams.get('view');
-        switchWorkspace(['entry', 'history', 'overview', 'map', 'editor'].includes(requestedView) ? requestedView : 'entry');
+        switchWorkspace(['entry', 'receipts', 'history', 'overview', 'map', 'editor'].includes(requestedView) ? requestedView : 'entry');
         const requestedLocation = pageParams.get('location_code');
         if (requestedLocation) document.getElementById('locationCode').value = requestedLocation.toUpperCase();
         loadLocations().then(() => { loadPackages(); loadReceipts(); loadWarehouseStats(); loadWarehouseMap(); loadLocationContents(); });

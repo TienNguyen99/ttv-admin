@@ -160,6 +160,19 @@ class WarehouseCountController extends Controller
             $query->where('location_code', strtoupper(trim((string) $request->query('location_code'))));
         }
 
+        $keyword = trim((string) $request->query('keyword', ''));
+        if ($keyword !== '') {
+            $query->where(function ($q) use ($keyword) {
+                $q->where('receipt_code', 'like', '%' . $keyword . '%')
+                    ->orWhere('note', 'like', '%' . $keyword . '%')
+                    ->orWhereHas('lines', function ($lineQuery) use ($keyword) {
+                        $lineQuery->where('ma_hh', 'like', '%' . $keyword . '%')
+                            ->orWhere('internal_item_code', 'like', '%' . $keyword . '%')
+                            ->orWhere('ten_hh', 'like', '%' . $keyword . '%');
+                    });
+            });
+        }
+
         $limit = min(max((int) $request->query('limit', 100), 1), 500);
         $receipts = $query->limit($limit)->get();
 
@@ -325,7 +338,9 @@ class WarehouseCountController extends Controller
             'summary' => [
                 'warehouse_code' => $warehouseCode,
                 'month' => $month->format('Y-m'),
-                'item_count' => $data->pluck('ma_sp')->filter()->unique()->count(),
+                'item_count' => $data->map(function ($row) {
+                    return $row->internal_item_code ?: $row->ma_sp;
+                })->filter()->unique()->count(),
                 'line_count' => $data->count(),
                 'opening_quantity' => (float) $data->sum('opening_quantity'),
                 'receipt_quantity' => (float) $data->sum('receipt_quantity'),
@@ -444,6 +459,95 @@ class WarehouseCountController extends Controller
         ]);
     }
 
+    public function assignAccountingCode(Request $request)
+    {
+        $data = $request->validate([
+            'internal_item_code' => 'required|string|max:100',
+            'ma_hh' => 'required|string|max:100',
+        ]);
+
+        $internalCode = trim($data['internal_item_code']);
+        $accountingCode = strtoupper(trim($data['ma_hh']));
+
+        $catalogExists = DB::connection('sqlsrv')
+            ->table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
+            ->where('Ma_hh', $accountingCode)
+            ->exists();
+
+        if (!$catalogExists) {
+            return response()->json([
+                'message' => 'Mã kế toán không tồn tại trong danh mục TSoft kế toán.',
+            ], 422);
+        }
+
+        $updated = DB::connection('internal')->transaction(function () use ($internalCode, $accountingCode) {
+            $packageIds = InventoryPackage::query()
+                ->where('internal_item_code', $internalCode)
+                ->where(function ($query) {
+                    $query->whereNull('ma_sp')->orWhere('ma_sp', '');
+                })
+                ->pluck('id');
+
+            $countRows = InternalInventoryCount::query()
+                ->where('internal_item_code', $internalCode)
+                ->where(function ($query) {
+                    $query->whereNull('ma_sp')->orWhere('ma_sp', '');
+                })
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($countRows as $count) {
+                $target = InternalInventoryCount::query()
+                    ->where('ma_sp', $accountingCode)
+                    ->where('ma_ko', $count->ma_ko)
+                    ->where('internal_item_code', $count->internal_item_code)
+                    ->where('size', $count->size)
+                    ->where('color', $count->color)
+                    ->where('side', $count->side)
+                    ->whereDate('checked_at', optional($count->checked_at)->format('Y-m-d'))
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($target) {
+                    InventoryPackage::query()
+                        ->where('inventory_count_id', $count->id)
+                        ->update(['inventory_count_id' => $target->id, 'ma_sp' => $accountingCode]);
+                    $target->counted_quantity = (float) $target->counted_quantity + (float) $count->counted_quantity;
+                    $target->save();
+                    $count->delete();
+                } else {
+                    $count->ma_sp = $accountingCode;
+                    $count->save();
+                }
+            }
+
+            InventoryPackage::query()
+                ->whereIn('id', $packageIds)
+                ->update(['ma_sp' => $accountingCode]);
+
+            InternalOpeningStock::query()
+                ->where('internal_item_code', $internalCode)
+                ->where(function ($query) {
+                    $query->whereNull('ma_hh')->orWhere('ma_hh', '');
+                })
+                ->update(['ma_hh' => $accountingCode]);
+
+            $receiptLines = DB::connection('internal')->table('internal_material_receipt_lines')
+                ->where('internal_item_code', $internalCode)
+                ->where(function ($query) {
+                    $query->whereNull('ma_hh')->orWhere('ma_hh', '');
+                })
+                ->update(['ma_hh' => $accountingCode, 'updated_at' => now()]);
+
+            return $packageIds->count() + $receiptLines;
+        });
+
+        return response()->json([
+            'message' => 'Đã gán mã kế toán cho mã nội bộ.',
+            'updated' => $updated,
+        ]);
+    }
+
     public function locationContents(Request $request)
     {
         $data = InventoryPackage::query()
@@ -539,7 +643,7 @@ class WarehouseCountController extends Controller
     {
         $data = $request->validate([
             'location_code' => 'nullable|string|max:100',
-            'ma_sp' => 'required|string|max:100',
+            'ma_sp' => 'nullable|string|max:100',
             'ma_ko' => 'nullable|string|max:50',
             'internal_item_code' => 'nullable|string|max:100',
             'size' => 'nullable|string|max:100',
@@ -550,6 +654,12 @@ class WarehouseCountController extends Controller
             'entry_type' => 'nullable|in:opening,receipt',
             'note' => 'nullable|string|max:500',
         ]);
+
+        if (trim((string) ($data['internal_item_code'] ?? '')) === '') {
+            return response()->json([
+                'message' => 'Mã nội bộ là bắt buộc. Mã kế toán có thể gán sau.',
+            ], 422);
+        }
 
         $locationCode = strtoupper(trim($data['location_code'] ?? '')) ?: 'CHUA-XEP';
         $warehouseCode = strtoupper(trim($data['ma_ko'] ?? ''));
@@ -569,13 +679,16 @@ class WarehouseCountController extends Controller
             ]
         );
 
-        $catalogItem = DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
-            ->where('Ma_hh', trim($data['ma_sp']))
-            ->select('Ten_hh', 'Dvt')
-            ->first();
+        $accountingCode = strtoupper(trim((string) ($data['ma_sp'] ?? '')));
+        $catalogItem = $accountingCode !== ''
+            ? DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
+                ->where('Ma_hh', $accountingCode)
+                ->select('Ten_hh', 'Dvt')
+                ->first()
+            : null;
 
         $attributes = [
-            'ma_sp' => trim($data['ma_sp']),
+            'ma_sp' => $accountingCode,
             'ma_ko' => trim($data['ma_ko'] ?? ''),
             'internal_item_code' => trim($data['internal_item_code'] ?? ''),
             'size' => trim($data['size'] ?? ''),
@@ -707,24 +820,27 @@ class WarehouseCountController extends Controller
                 ];
             })
             ->filter(function ($line) {
-                return $line['ma_sp'] !== '' && $line['quantity'] > 0;
+                return $line['internal_item_code'] !== '' && $line['quantity'] > 0;
             })
             ->values();
 
         if ($lines->isEmpty()) {
             return response()->json([
-                'message' => 'Nhập ít nhất 1 dòng có Mã TP kế toán và Số lượng lớn hơn 0.',
+                'message' => 'Nhập ít nhất 1 dòng có Mã nội bộ và Số lượng lớn hơn 0. Mã kế toán có thể gán sau.',
             ], 422);
         }
 
         $locationCode = strtoupper(trim($data['location_code'] ?? '')) ?: 'CHUA-XEP';
         $warehouseCode = strtoupper(trim($data['ma_ko'] ?? ''));
 
-        $catalogItems = DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
-            ->whereIn('Ma_hh', $lines->pluck('ma_sp')->unique()->all())
-            ->select('Ma_hh', 'Ten_hh', 'Dvt')
-            ->get()
-            ->keyBy('Ma_hh');
+        $accountingCodes = $lines->pluck('ma_sp')->filter()->unique()->all();
+        $catalogItems = empty($accountingCodes)
+            ? collect()
+            : DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
+                ->whereIn('Ma_hh', $accountingCodes)
+                ->select('Ma_hh', 'Ten_hh', 'Dvt')
+                ->get()
+                ->keyBy('Ma_hh');
 
         [$receipt, $packages] = DB::connection('internal')->transaction(function () use ($data, $lines, $locationCode, $warehouseCode, $catalogItems) {
             $location = WarehouseLocation::query()->firstOrCreate(
