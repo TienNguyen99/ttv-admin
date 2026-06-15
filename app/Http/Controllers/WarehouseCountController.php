@@ -7,6 +7,9 @@ use App\Models\InternalMaterialReceipt;
 use App\Models\InternalOpeningStock;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
+use App\Services\InternalAudit;
+use App\Services\InternalDocumentNumber;
+use App\Services\InternalStockLedger;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -232,59 +235,8 @@ class WarehouseCountController extends Controller
         $monthStart = $month->format('Y-m-d');
         $monthEnd = $month->copy()->endOfMonth()->format('Y-m-d');
 
-        $opening = DB::connection('internal')->table('internal_opening_stocks')
-            ->select(
-                'warehouse_code',
-                'location_code',
-                'ma_hh',
-                'internal_item_code',
-                'size',
-                'color',
-                'side',
-                DB::raw('SUM(quantity) as opening_quantity'),
-                DB::raw('0 as receipt_quantity'),
-                DB::raw('0 as issue_quantity')
-            )
-            ->whereDate('period_month', $monthStart)
-            ->groupBy('warehouse_code', 'location_code', 'ma_hh', 'internal_item_code', 'size', 'color', 'side');
-
-        $receipts = DB::connection('internal')->table('internal_material_receipt_lines as l')
-            ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
-            ->select(
-                DB::raw("COALESCE(r.warehouse_code, '') as warehouse_code"),
-                DB::raw("COALESCE(l.location_code, r.location_code, '') as location_code"),
-                'l.ma_hh',
-                DB::raw("COALESCE(l.internal_item_code, '') as internal_item_code"),
-                DB::raw("COALESCE(l.size, '') as size"),
-                DB::raw("COALESCE(l.color, '') as color"),
-                DB::raw("COALESCE(l.side, '') as side"),
-                DB::raw('0 as opening_quantity'),
-                DB::raw('SUM(l.quantity) as receipt_quantity'),
-                DB::raw('0 as issue_quantity')
-            )
-            ->whereBetween('r.receipt_date', [$monthStart, $monthEnd])
-            ->where('r.source', 'Phieu nhap thanh pham')
-            ->groupBy('r.warehouse_code', DB::raw("COALESCE(l.location_code, r.location_code, '')"), 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color', 'l.side');
-
-        $issues = DB::connection('internal')->table('internal_material_issue_lines as l')
-            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
-            ->select(
-                DB::raw("COALESCE(i.warehouse_code, '') as warehouse_code"),
-                DB::raw("COALESCE(l.location_code, '') as location_code"),
-                'l.ma_hh',
-                DB::raw("COALESCE(l.internal_item_code, '') as internal_item_code"),
-                DB::raw("COALESCE(l.size, '') as size"),
-                DB::raw("COALESCE(l.color, '') as color"),
-                DB::raw("'' as side"),
-                DB::raw('0 as opening_quantity'),
-                DB::raw('0 as receipt_quantity'),
-                DB::raw('SUM(l.quantity) as issue_quantity')
-            )
-            ->whereBetween('i.issue_date', [$monthStart, $monthEnd])
-            ->groupBy('i.warehouse_code', 'l.location_code', 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color');
-
-        $query = DB::connection('internal')->query()
-            ->fromSub($opening->unionAll($receipts)->unionAll($issues), 'ledger')
+        $query = app(InternalStockLedger::class)
+            ->query($monthStart, $monthEnd)
             ->select(
                 'warehouse_code',
                 'location_code',
@@ -315,6 +267,21 @@ class WarehouseCountController extends Controller
             });
         }
 
+        $directOpeningKeys = InternalOpeningStock::query()
+            ->whereDate('period_month', $monthStart)
+            ->get([
+                'warehouse_code',
+                'location_code',
+                'ma_hh',
+                'internal_item_code',
+                'size',
+                'color',
+                'side',
+            ])
+            ->mapWithKeys(function ($row) {
+                return [$this->stockRowKey($row) => true];
+            });
+
         $data = $query
             ->groupBy('warehouse_code', 'location_code', 'ma_hh', 'internal_item_code', 'size', 'color', 'side')
             ->havingRaw('SUM(opening_quantity + receipt_quantity - issue_quantity) != 0 OR SUM(opening_quantity) != 0 OR SUM(receipt_quantity) != 0 OR SUM(issue_quantity) != 0')
@@ -322,8 +289,9 @@ class WarehouseCountController extends Controller
             ->orderBy('location_code')
             ->orderBy('ma_hh')
             ->get()
-            ->map(function ($row) {
-                $row->can_delete = (float) $row->opening_quantity != 0.0
+            ->map(function ($row) use ($directOpeningKeys) {
+                $row->can_delete = $directOpeningKeys->has($this->stockRowKey($row))
+                    && (float) $row->opening_quantity != 0.0
                     && (float) $row->receipt_quantity == 0.0
                     && (float) $row->issue_quantity == 0.0;
                 $row->delete_reason = $row->can_delete
@@ -803,6 +771,10 @@ class WarehouseCountController extends Controller
             'lines.*.dvt' => 'nullable|string|max:50',
             'lines.*.quantity' => 'nullable|numeric|min:0',
             'lines.*.note' => 'nullable|string|max:500',
+            'lines.*.production_order_id' => 'nullable|integer',
+            'lines.*.production_order' => 'nullable|string|max:100',
+            'lines.*.purchase_order' => 'nullable|string|max:1000',
+            'lines.*.customer' => 'nullable|string|max:200',
         ]);
 
         $lines = collect($data['lines'])
@@ -817,6 +789,10 @@ class WarehouseCountController extends Controller
                     'dvt' => trim((string) ($line['dvt'] ?? '')),
                     'quantity' => (float) ($line['quantity'] ?? 0),
                     'note' => trim((string) ($line['note'] ?? '')),
+                    'production_order_id' => $line['production_order_id'] ?? null,
+                    'production_order' => trim((string) ($line['production_order'] ?? '')),
+                    'purchase_order' => trim((string) ($line['purchase_order'] ?? '')),
+                    'customer' => trim((string) ($line['customer'] ?? '')),
                 ];
             })
             ->filter(function ($line) {
@@ -911,6 +887,10 @@ class WarehouseCountController extends Controller
 
                 $receipt->lines()->create([
                     'inventory_package_id' => $package->id,
+                    'production_order_id' => $line['production_order_id'],
+                    'production_order' => $line['production_order'],
+                    'purchase_order' => $line['purchase_order'],
+                    'customer' => $line['customer'],
                     'ma_hh' => $line['ma_sp'],
                     'ten_hh' => $catalogItem->Ten_hh ?? $line['category'],
                     'dvt' => $catalogItem->Dvt ?? $line['dvt'],
@@ -932,7 +912,7 @@ class WarehouseCountController extends Controller
             return [$receipt, $packages];
         });
 
-        return response()->json([
+        $response = response()->json([
             'message' => 'Đã lưu phiếu nhập thành phẩm nội bộ.',
             'data' => $receipt->load('lines'),
             'packages' => $packages->map(function ($package) {
@@ -944,10 +924,24 @@ class WarehouseCountController extends Controller
             })->values(),
             'receipt_print_url' => url('/client/nhap-thanh-pham-noi-bo/' . $receipt->id . '/in'),
         ]);
+
+        app(InternalAudit::class)->model('receipt.created', $receipt, [
+            'line_count' => $receipt->lines->count(),
+            'total_quantity' => (float) $receipt->lines->sum('quantity'),
+            'location_code' => $receipt->location_code,
+        ], $request);
+
+        return $response;
     }
 
     public function destroyReceipt(InternalMaterialReceipt $receipt)
     {
+        $auditPayload = [
+            'receipt_code' => $receipt->receipt_code,
+            'receipt_date' => optional($receipt->receipt_date)->format('Y-m-d'),
+            'location_code' => $receipt->location_code,
+        ];
+
         $receipt->load('lines');
         foreach ($receipt->lines as $line) {
             $package = $line->inventory_package_id
@@ -1009,8 +1003,91 @@ class WarehouseCountController extends Controller
             }
         });
 
+        app(InternalAudit::class)->record(
+            'receipt.deleted',
+            'InternalMaterialReceipt',
+            (int) $receipt->id,
+            $receipt->receipt_code,
+            $auditPayload,
+            request()
+        );
+
         return response()->json([
             'message' => 'Đã xóa phiếu nhập kho nội bộ.',
+        ]);
+    }
+
+    public function updateReceiptLocation(Request $request, InternalMaterialReceipt $receipt)
+    {
+        $data = $request->validate([
+            'location_code' => 'required|string|max:100',
+        ]);
+
+        $locationCode = strtoupper(trim($data['location_code']));
+        $location = WarehouseLocation::query()
+            ->where('location_code', $locationCode)
+            ->first();
+
+        if (!$location) {
+            return response()->json([
+                'message' => 'Vị trí không tồn tại. Hãy tạo vị trí trước khi gán cho phiếu.',
+            ], 422);
+        }
+
+        $oldLocationIds = [];
+        DB::connection('internal')->transaction(function () use ($receipt, $location, &$oldLocationIds) {
+            $receipt->load('lines');
+
+            foreach ($receipt->lines as $line) {
+                if (!$line->inventory_package_id) {
+                    $line->location_code = $location->location_code;
+                    $line->save();
+                    continue;
+                }
+
+                $package = InventoryPackage::query()
+                    ->lockForUpdate()
+                    ->find($line->inventory_package_id);
+
+                if ($package) {
+                    $oldLocationIds[] = $package->warehouse_location_id;
+                    $this->movePackageRecord($package, $location);
+                }
+            }
+
+            $receipt->location_code = $location->location_code;
+            if ($location->warehouse_code) {
+                $receipt->warehouse_code = $location->warehouse_code;
+            }
+            $receipt->save();
+
+            $location->status = 'counting';
+            $location->save();
+        });
+
+        foreach (array_unique(array_filter($oldLocationIds)) as $locationId) {
+            if ((int) $locationId === (int) $location->id) {
+                continue;
+            }
+            $oldLocation = WarehouseLocation::query()->find($locationId);
+            if ($oldLocation && !InventoryPackage::query()->where('warehouse_location_id', $oldLocation->id)->exists()) {
+                $oldLocation->status = 'pending';
+                $oldLocation->save();
+            }
+        }
+
+        app(InternalAudit::class)->model('receipt.location_updated', $receipt, [
+            'location_code' => $location->location_code,
+            'warehouse_code' => $receipt->warehouse_code,
+        ], $request);
+
+        return response()->json([
+            'message' => 'Đã cập nhật vị trí cho phiếu nhập.',
+            'data' => [
+                'receipt_id' => $receipt->id,
+                'location_code' => $location->location_code,
+                'warehouse_code' => $receipt->warehouse_code,
+            ],
         ]);
     }
 
@@ -1080,63 +1157,13 @@ class WarehouseCountController extends Controller
         $targetLocation = WarehouseLocation::query()->findOrFail($data['warehouse_location_id']);
 
         DB::connection('internal')->transaction(function () use ($inventoryPackage, $targetLocation) {
-            $sourceLocationId = $inventoryPackage->warehouse_location_id;
-            $sourceCount = $inventoryPackage->inventory_count_id
-                ? InternalInventoryCount::query()->lockForUpdate()->find($inventoryPackage->inventory_count_id)
-                : null;
-            $quantity = (float) $inventoryPackage->quantity;
-            $targetWarehouseCode = $targetLocation->warehouse_code ?: $inventoryPackage->ma_ko;
-
-            if ((string) $inventoryPackage->ma_ko !== (string) $targetWarehouseCode) {
-                if ($sourceCount) {
-                    $remainingQuantity = (float) $sourceCount->counted_quantity - $quantity;
-                    $hasOtherPackages = InventoryPackage::query()
-                        ->where('inventory_count_id', $sourceCount->id)
-                        ->where('id', '!=', $inventoryPackage->id)
-                        ->exists();
-
-                    if ($remainingQuantity <= 0 && !$hasOtherPackages) {
-                        $sourceCount->delete();
-                    } else {
-                        $sourceCount->counted_quantity = max(0, $remainingQuantity);
-                        $sourceCount->save();
-                    }
-                }
-
-                $targetCount = InternalInventoryCount::query()->firstOrCreate(
-                    [
-                        'ma_sp' => $inventoryPackage->ma_sp,
-                        'ma_ko' => $targetWarehouseCode,
-                        'internal_item_code' => $inventoryPackage->internal_item_code,
-                        'size' => $inventoryPackage->size,
-                        'color' => $inventoryPackage->color,
-                        'side' => $inventoryPackage->side,
-                        'checked_at' => $inventoryPackage->checked_at,
-                    ],
-                    [
-                        'counted_quantity' => 0,
-                        'note' => $inventoryPackage->note,
-                    ]
-                );
-                $targetCount->counted_quantity = (float) $targetCount->counted_quantity + $quantity;
-                $targetCount->save();
-
-                $inventoryPackage->ma_ko = $targetWarehouseCode;
-                $inventoryPackage->inventory_count_id = $targetCount->id;
-            }
-
-            $inventoryPackage->warehouse_location_id = $targetLocation->id;
-            $inventoryPackage->save();
-
-            $targetLocation->status = 'counting';
-            $targetLocation->save();
-
-            $sourceLocation = WarehouseLocation::query()->find($sourceLocationId);
-            if ($sourceLocation && !InventoryPackage::query()->where('warehouse_location_id', $sourceLocation->id)->exists()) {
-                $sourceLocation->status = 'pending';
-                $sourceLocation->save();
-            }
+            $this->movePackageRecord($inventoryPackage, $targetLocation);
         });
+
+        app(InternalAudit::class)->model('package.moved', $inventoryPackage, [
+            'target_location_code' => $targetLocation->location_code,
+            'target_warehouse_code' => $targetLocation->warehouse_code,
+        ], $request);
 
         return response()->json([
             'message' => 'Đã chuyển kiện sang vị trí mới.',
@@ -1158,28 +1185,83 @@ class WarehouseCountController extends Controller
 
     private function nextPackageCode()
     {
-        $prefix = 'PK-' . now()->format('Ymd') . '-';
-        $last = InventoryPackage::query()
-            ->where('package_code', 'like', $prefix . '%')
-            ->orderByDesc('package_code')
-            ->value('package_code');
-
-        $number = $last ? ((int) substr($last, -5)) + 1 : 1;
-
-        return $prefix . str_pad((string) $number, 5, '0', STR_PAD_LEFT);
+        return app(InternalDocumentNumber::class)->next('PK', 5);
     }
 
     private function nextMaterialReceiptCode()
     {
-        $prefix = 'PNTP-' . now()->format('Ymd') . '-';
-        $last = InternalMaterialReceipt::query()
-            ->where('receipt_code', 'like', $prefix . '%')
-            ->orderByDesc('receipt_code')
-            ->value('receipt_code');
+        return app(InternalDocumentNumber::class)->next('PNTP', 4);
+    }
 
-        $number = $last ? ((int) substr($last, -4)) + 1 : 1;
+    private function movePackageRecord(InventoryPackage $package, WarehouseLocation $targetLocation): void
+    {
+        $sourceLocationId = $package->warehouse_location_id;
+        $sourceCount = $package->inventory_count_id
+            ? InternalInventoryCount::query()->lockForUpdate()->find($package->inventory_count_id)
+            : null;
+        $quantity = (float) $package->quantity;
+        $targetWarehouseCode = $targetLocation->warehouse_code ?: $package->ma_ko;
 
-        return $prefix . str_pad((string) $number, 4, '0', STR_PAD_LEFT);
+        if ((string) $package->ma_ko !== (string) $targetWarehouseCode) {
+            if ($sourceCount) {
+                $remainingQuantity = (float) $sourceCount->counted_quantity - $quantity;
+                $hasOtherPackages = InventoryPackage::query()
+                    ->where('inventory_count_id', $sourceCount->id)
+                    ->where('id', '!=', $package->id)
+                    ->exists();
+
+                if ($remainingQuantity <= 0 && !$hasOtherPackages) {
+                    $sourceCount->delete();
+                } else {
+                    $sourceCount->counted_quantity = max(0, $remainingQuantity);
+                    $sourceCount->save();
+                }
+            }
+
+            $targetCount = InternalInventoryCount::query()->firstOrCreate(
+                [
+                    'ma_sp' => $package->ma_sp,
+                    'ma_ko' => $targetWarehouseCode,
+                    'internal_item_code' => $package->internal_item_code,
+                    'size' => $package->size,
+                    'color' => $package->color,
+                    'side' => $package->side,
+                    'checked_at' => $package->checked_at,
+                ],
+                [
+                    'counted_quantity' => 0,
+                    'note' => $package->note,
+                ]
+            );
+            $targetCount->counted_quantity = (float) $targetCount->counted_quantity + $quantity;
+            $targetCount->save();
+
+            $package->ma_ko = $targetWarehouseCode;
+            $package->inventory_count_id = $targetCount->id;
+        }
+
+        $package->warehouse_location_id = $targetLocation->id;
+        $package->save();
+
+        InternalOpeningStock::query()
+            ->where('inventory_package_id', $package->id)
+            ->update([
+                'warehouse_code' => $targetWarehouseCode,
+                'location_code' => $targetLocation->location_code,
+            ]);
+
+        $package->receiptLines()->update([
+            'location_code' => $targetLocation->location_code,
+        ]);
+
+        $targetLocation->status = 'counting';
+        $targetLocation->save();
+
+        $sourceLocation = WarehouseLocation::query()->find($sourceLocationId);
+        if ($sourceLocation && !InventoryPackage::query()->where('warehouse_location_id', $sourceLocation->id)->exists()) {
+            $sourceLocation->status = 'pending';
+            $sourceLocation->save();
+        }
     }
 
     private function inferShelfCode($locationCode)
@@ -1187,5 +1269,18 @@ class WarehouseCountController extends Controller
         preg_match('/[A-Z]/', strtoupper((string) $locationCode), $matches);
 
         return $matches[0] ?? null;
+    }
+
+    private function stockRowKey($row): string
+    {
+        return implode('|', [
+            strtoupper(trim((string) $row->warehouse_code)),
+            strtoupper(trim((string) $row->location_code)),
+            strtoupper(trim((string) ($row->ma_hh ?? $row->ma_sp ?? ''))),
+            trim((string) $row->internal_item_code),
+            trim((string) $row->size),
+            trim((string) $row->color),
+            trim((string) $row->side),
+        ]);
     }
 }

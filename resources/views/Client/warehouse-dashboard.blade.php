@@ -84,6 +84,7 @@
             <div class="wms-panel__body wms-actions">
                 <a class="wms-btn" href="{{ url('/client/ton-kho-noi-bo') }}"><i data-lucide="warehouse"></i> Kiểm tra tồn</a>
                 <a class="wms-btn" href="{{ url('/client/kiem-ton-kho') }}"><i data-lucide="map"></i> Sơ đồ và vị trí</a>
+                <a class="wms-btn" href="{{ url('/client/theo-doi-san-xuat') }}"><i data-lucide="workflow"></i> Hàng đang sản xuất</a>
                 <a class="wms-btn" href="{{ url('/client/kiem-ton-kho?view=entry') }}"><i data-lucide="package-plus"></i> Nhập thành phẩm</a>
                 <a class="wms-btn" href="{{ url('/client/xuat-vat-tu-noi-bo?type=production') }}"><i data-lucide="factory"></i> Xuất BTP sản xuất</a>
                 <a class="wms-btn" href="{{ url('/client/xuat-vat-tu-noi-bo?type=material') }}"><i data-lucide="package-minus"></i> Xuất vật tư</a>

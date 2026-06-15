@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\InternalInventoryCount;
 use App\Models\InternalOpeningStock;
 use App\Models\InventoryPackage;
+use App\Services\InternalStockLedger;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -225,63 +226,12 @@ class InventoryComparisonController extends Controller
 
     private function internalStockRows(string $monthStart, string $monthEnd, string $warehouseCode)
     {
-        $opening = DB::connection('internal')->table('internal_opening_stocks')
+        $query = app(InternalStockLedger::class)
+            ->query($monthStart, $monthEnd)
             ->select(
                 'warehouse_code',
                 'location_code',
                 DB::raw('ma_hh as ma_sp'),
-                'internal_item_code',
-                'size',
-                'color',
-                'side',
-                DB::raw('SUM(quantity) as opening_quantity'),
-                DB::raw('0 as receipt_quantity'),
-                DB::raw('0 as issue_quantity')
-            )
-            ->whereDate('period_month', $monthStart)
-            ->groupBy('warehouse_code', 'location_code', 'ma_hh', 'internal_item_code', 'size', 'color', 'side');
-
-        $receipts = DB::connection('internal')->table('internal_material_receipt_lines as l')
-            ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
-            ->select(
-                DB::raw("COALESCE(r.warehouse_code, '') as warehouse_code"),
-                DB::raw("COALESCE(l.location_code, r.location_code, '') as location_code"),
-                DB::raw('l.ma_hh as ma_sp'),
-                DB::raw("COALESCE(l.internal_item_code, '') as internal_item_code"),
-                DB::raw("COALESCE(l.size, '') as size"),
-                DB::raw("COALESCE(l.color, '') as color"),
-                DB::raw("COALESCE(l.side, '') as side"),
-                DB::raw('0 as opening_quantity'),
-                DB::raw('SUM(l.quantity) as receipt_quantity'),
-                DB::raw('0 as issue_quantity')
-            )
-            ->whereBetween('r.receipt_date', [$monthStart, $monthEnd])
-            ->where('r.source', 'Phieu nhap thanh pham')
-            ->groupBy('r.warehouse_code', DB::raw("COALESCE(l.location_code, r.location_code, '')"), 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color', 'l.side');
-
-        $issues = DB::connection('internal')->table('internal_material_issue_lines as l')
-            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
-            ->select(
-                DB::raw("COALESCE(i.warehouse_code, '') as warehouse_code"),
-                DB::raw("COALESCE(l.location_code, '') as location_code"),
-                DB::raw('l.ma_hh as ma_sp'),
-                DB::raw("COALESCE(l.internal_item_code, '') as internal_item_code"),
-                DB::raw("COALESCE(l.size, '') as size"),
-                DB::raw("COALESCE(l.color, '') as color"),
-                DB::raw("'' as side"),
-                DB::raw('0 as opening_quantity'),
-                DB::raw('0 as receipt_quantity'),
-                DB::raw('SUM(l.quantity) as issue_quantity')
-            )
-            ->whereBetween('i.issue_date', [$monthStart, $monthEnd])
-            ->groupBy('i.warehouse_code', 'l.location_code', 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color');
-
-        $query = DB::connection('internal')->query()
-            ->fromSub($opening->unionAll($receipts)->unionAll($issues), 'ledger')
-            ->select(
-                'warehouse_code',
-                'location_code',
-                'ma_sp',
                 'internal_item_code',
                 'size',
                 'color',
@@ -297,7 +247,7 @@ class InventoryComparisonController extends Controller
         }
 
         return $query
-            ->groupBy('warehouse_code', 'location_code', 'ma_sp', 'internal_item_code', 'size', 'color', 'side')
+            ->groupBy('warehouse_code', 'location_code', 'ma_hh', 'internal_item_code', 'size', 'color', 'side')
             ->havingRaw('SUM(opening_quantity + receipt_quantity - issue_quantity) != 0 OR SUM(opening_quantity) != 0 OR SUM(receipt_quantity) != 0 OR SUM(issue_quantity) != 0')
             ->get();
     }

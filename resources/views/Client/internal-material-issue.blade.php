@@ -107,19 +107,12 @@
                 <div class="col-md-2"><label class="form-label">Kho xuất</label><input id="warehouseCode" class="form-control" placeholder="KTPHAM"></div>
                 <div class="col-md-2"><label class="form-label">Người nhận</label><input id="receiverName" class="form-control"></div>
                 <div class="col-md-2"><label class="form-label">Bộ phận</label><input id="department" class="form-control"></div>
-                <div class="col-md-4">
-                    <label class="form-label">Lệnh sản xuất</label>
-                    <div class="input-group">
-                        <input id="productionOrder" class="form-control" list="productionOrderOptions" autocomplete="off" placeholder="Gõ lệnh SX">
-                        <button id="loadProductionOrderBtn" type="button" class="btn btn-outline-primary">Nạp lệnh</button>
-                    </div>
-                    <datalist id="productionOrderOptions"></datalist>
-                    <div id="productionOrderStatus" class="order-load-status hint">Có thể nạp nhiều lệnh vào cùng một phiếu.</div>
-                </div>
                 <div class="col-md-2"><label class="form-label">Mục đích</label><input id="purpose" class="form-control" placeholder="Sản xuất / bù hao..."></div>
                 <div class="col-12"><label class="form-label">Ghi chú phiếu</label><input id="issueNote" class="form-control"></div>
             </div>
 
+            <datalist id="productionOrderOptions"></datalist>
+            <div id="productionOrderStatus" class="order-load-status hint">Gõ Lệnh SX trực tiếp tại dòng hàng, nhấn Enter để lấy thông tin.</div>
             <div class="table-responsive">
                 <table class="table table-bordered line-table mb-0">
                     <thead class="table-light">
@@ -186,7 +179,7 @@
             tr.dataset.purchaseOrder = data.purchase_order || '';
             tr.dataset.customer = data.customer || '';
             tr.innerHTML = `
-                <td><input class="form-control line-production-order reference-value" value="${esc(data.production_order || '')}" readonly></td>
+                <td><input class="form-control line-production-order" list="productionOrderOptions" autocomplete="off" value="${esc(data.production_order || '')}" placeholder="Gõ lệnh SX"></td>
                 <td class="product-search">
                     <input class="form-control ma-hh" autocomplete="off" value="${esc(data.ma_hh || '')}" placeholder="Gõ mã/tên">
                     <div class="product-results d-none"></div>
@@ -228,8 +221,7 @@
             })).filter(line => line.ma_hh || line.quantity);
         }
 
-        function searchProductionOrders() {
-            const input = document.getElementById('productionOrder');
+        function searchProductionOrders(input) {
             const keyword = input.value.trim();
             clearTimeout(productionOrderSearchTimer);
             if (keyword.length < 2) return;
@@ -250,14 +242,37 @@
             }, 220);
         }
 
-        function loadProductionOrder() {
-            const code = value('productionOrder');
+        function fillIssueLine(row, data) {
+            row.dataset.productionOrderId = data.production_order_id || '';
+            row.dataset.purchaseOrder = data.purchase_order || '';
+            row.dataset.customer = data.customer || '';
+            row.querySelector('.line-production-order').value = data.production_order || '';
+            row.querySelector('.ma-hh').value = data.ma_hh || '';
+            row.querySelector('.ten-hh').value = data.ten_hh || '';
+            row.querySelector('.dvt').value = data.dvt || '';
+            row.querySelector('.ordered-quantity').value = data.ordered_quantity || '';
+            row.querySelector('.available-quantity').value = data.available_quantity || '';
+            row.querySelector('.quantity').value = '';
+            row.querySelector('.location-code').value = data.location_code || '';
+            row.querySelector('.internal-code').value = data.internal_item_code || '';
+            row.querySelector('.size').value = data.size || '';
+            row.querySelector('.color').value = data.color || '';
+
+            const availableCell = row.querySelector('.available-quantity').parentElement;
+            availableCell.querySelector('.stock-warning')?.remove();
+            if (!Number(data.available_quantity || 0)) {
+                availableCell.insertAdjacentHTML('beforeend', '<div class="stock-warning">Chưa khớp tồn</div>');
+            }
+        }
+
+        function loadProductionOrder(input) {
+            const code = input.value.trim();
             if (!code) return alert('Nhập Lệnh sản xuất cần nạp.');
 
             const status = document.getElementById('productionOrderStatus');
-            const button = document.getElementById('loadProductionOrderBtn');
+            const currentRow = input.closest('tr');
             status.textContent = `Đang tải ${code}...`;
-            button.disabled = true;
+            input.disabled = true;
 
             const params = new URLSearchParams({ production_order: code });
             if (value('warehouseCode')) params.set('warehouse_code', value('warehouseCode'));
@@ -268,19 +283,15 @@
                     const rows = result.data || [];
                     if (!rows.length) throw new Error(`Không tìm thấy lệnh ${code}.`);
 
-                    const existingKeys = new Set(Array.from(lineRows.querySelectorAll('tr')).map(row => [
+                    const existingKeys = new Set(Array.from(lineRows.querySelectorAll('tr'))
+                        .filter(row => row !== currentRow)
+                        .map(row => [
                         row.querySelector('.line-production-order').value.trim().toUpperCase(),
                         row.querySelector('.internal-code').value.trim().toUpperCase(),
                         row.querySelector('.size').value.trim().toUpperCase(),
                         row.querySelector('.color').value.trim().toUpperCase()
                     ].join('|')));
-
-                    const emptyRows = Array.from(lineRows.querySelectorAll('tr')).filter(row =>
-                        !row.querySelector('.ma-hh').value.trim() &&
-                        !row.querySelector('.internal-code').value.trim() &&
-                        !row.querySelector('.quantity').value
-                    );
-                    let added = 0;
+                    const newRows = [];
 
                     rows.forEach(data => {
                         const key = [
@@ -290,21 +301,23 @@
                             String(data.color || '').trim().toUpperCase()
                         ].join('|');
                         if (existingKeys.has(key)) return;
-
-                        if (emptyRows.length) emptyRows.shift().remove();
-                        addLine(data);
+                        newRows.push(data);
                         existingKeys.add(key);
-                        added++;
                     });
 
-                    status.textContent = `${code}: đã thêm ${added} dòng size/màu. Số lượng thực xuất đang để trống.`;
-                    document.getElementById('productionOrder').value = '';
+                    if (!newRows.length) {
+                        throw new Error(`Các dòng của lệnh ${code} đã có trong phiếu.`);
+                    }
+
+                    fillIssueLine(currentRow, newRows.shift());
+                    newRows.forEach(data => addLine(data));
+                    status.textContent = `${code}: đã nạp ${newRows.length + 1} dòng size/màu từ dòng đang chọn. SL thực xuất để trống.`;
                 })
                 .catch(error => {
                     status.textContent = error.message;
                     alert(error.message);
                 })
-                .finally(() => button.disabled = false);
+                .finally(() => input.disabled = false);
         }
 
         function applyIssueType(type) {
@@ -419,6 +432,18 @@
 
         lineRows.addEventListener('input', event => {
             if (event.target.classList.contains('ma-hh')) suggestMaterial(event.target);
+            if (event.target.classList.contains('line-production-order')) searchProductionOrders(event.target);
+        });
+
+        lineRows.addEventListener('change', event => {
+            if (event.target.classList.contains('line-production-order')) loadProductionOrder(event.target);
+        });
+
+        lineRows.addEventListener('keydown', event => {
+            if (event.target.classList.contains('line-production-order') && event.key === 'Enter') {
+                event.preventDefault();
+                loadProductionOrder(event.target);
+            }
         });
 
         lineRows.addEventListener('click', event => {
@@ -452,14 +477,6 @@
         });
 
         document.getElementById('addLineBtn').addEventListener('click', () => addLine());
-        document.getElementById('loadProductionOrderBtn').addEventListener('click', loadProductionOrder);
-        document.getElementById('productionOrder').addEventListener('input', searchProductionOrders);
-        document.getElementById('productionOrder').addEventListener('keydown', event => {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                loadProductionOrder();
-            }
-        });
         document.getElementById('saveBtn').addEventListener('click', saveIssue);
         document.getElementById('issueType').addEventListener('change', event => applyIssueType(event.target.value));
         document.getElementById('reloadBtn').addEventListener('click', loadIssues);

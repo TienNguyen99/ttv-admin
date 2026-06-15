@@ -32,4 +32,9 @@ class InternalMaterialIssueLine extends Model
         'ordered_quantity' => 'float',
         'quantity' => 'float',
     ];
+
+    public function allocations()
+    {
+        return $this->hasMany(InternalMaterialIssueAllocation::class, 'issue_line_id');
+    }
 }

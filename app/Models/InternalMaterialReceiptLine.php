@@ -13,6 +13,10 @@ class InternalMaterialReceiptLine extends Model
     protected $fillable = [
         'receipt_id',
         'inventory_package_id',
+        'production_order_id',
+        'production_order',
+        'purchase_order',
+        'customer',
         'ma_hh',
         'ten_hh',
         'dvt',

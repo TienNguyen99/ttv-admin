@@ -4,9 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\InternalInventoryCount;
 use App\Models\InternalMaterialIssue;
+use App\Models\InternalMaterialIssueAllocation;
 use App\Models\InternalProductionOrder;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
+use App\Services\InternalAudit;
+use App\Services\InternalDocumentNumber;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -16,6 +20,149 @@ class InternalMaterialIssueController extends Controller
     public function index()
     {
         return view('client.internal-material-issue');
+    }
+
+    public function productionTrackingIndex()
+    {
+        return view('client.production-wip');
+    }
+
+    public function productionTracking(Request $request)
+    {
+        $keyword = mb_strtoupper(trim((string) $request->query('keyword', '')));
+        $aging = trim((string) $request->query('aging', ''));
+
+        $issueLines = DB::connection('internal')->table('internal_material_issue_lines as l')
+            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->where('i.issue_code', 'like', 'PXBTP-%')
+            ->select(
+                'i.id as issue_id',
+                'i.issue_code',
+                'i.issue_date',
+                'i.warehouse_code',
+                'i.receiver_name',
+                'i.department',
+                DB::raw("COALESCE(NULLIF(l.production_order, ''), NULLIF(i.production_order, '')) as production_order"),
+                'l.purchase_order',
+                'l.customer',
+                'l.ma_hh',
+                'l.internal_item_code',
+                'l.size',
+                'l.color',
+                'l.dvt',
+                'l.quantity'
+            )
+            ->orderBy('i.issue_date')
+            ->orderBy('i.id')
+            ->get();
+
+        $groups = [];
+        foreach ($issueLines as $line) {
+            $order = trim((string) $line->production_order);
+            if ($order === '' || strpos($order, ',') !== false) {
+                continue;
+            }
+
+            $key = $this->productionTrackingKey($order, $line->size, $line->color);
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'production_order' => $order,
+                    'purchase_order' => trim((string) $line->purchase_order),
+                    'customer' => trim((string) $line->customer),
+                    'warehouse_code' => trim((string) $line->warehouse_code),
+                    'receiver_name' => trim((string) $line->receiver_name),
+                    'department' => trim((string) $line->department),
+                    'ma_hh' => trim((string) $line->ma_hh),
+                    'internal_item_code' => trim((string) $line->internal_item_code),
+                    'size' => trim((string) $line->size),
+                    'color' => trim((string) $line->color),
+                    'dvt' => trim((string) $line->dvt),
+                    'issued_quantity' => 0.0,
+                    'returned_quantity' => 0.0,
+                    'first_issue_date' => (string) $line->issue_date,
+                    'last_issue_date' => (string) $line->issue_date,
+                    'issue_codes' => [],
+                ];
+            }
+
+            $groups[$key]['issued_quantity'] += (float) $line->quantity;
+            $groups[$key]['first_issue_date'] = min($groups[$key]['first_issue_date'], (string) $line->issue_date);
+            $groups[$key]['last_issue_date'] = max($groups[$key]['last_issue_date'], (string) $line->issue_date);
+            $groups[$key]['issue_codes'][$line->issue_code] = true;
+        }
+
+        $orderNames = collect($groups)->pluck('production_order')->unique()->values();
+        if ($orderNames->isNotEmpty()) {
+            $receiptLines = DB::connection('internal')->table('internal_material_receipt_lines as l')
+                ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+                ->where('r.source', 'Phieu nhap thanh pham')
+                ->whereIn(DB::raw("COALESCE(NULLIF(l.production_order, ''), l.note)"), $orderNames->all())
+                ->select(
+                    DB::raw("COALESCE(NULLIF(l.production_order, ''), l.note) as production_order"),
+                    'l.size',
+                    'l.color',
+                    DB::raw('SUM(l.quantity) as quantity')
+                )
+                ->groupBy(DB::raw("COALESCE(NULLIF(l.production_order, ''), l.note)"), 'l.size', 'l.color')
+                ->get();
+
+            foreach ($receiptLines as $line) {
+                $key = $this->productionTrackingKey($line->production_order, $line->size, $line->color);
+                if (isset($groups[$key])) {
+                    $groups[$key]['returned_quantity'] += (float) $line->quantity;
+                }
+            }
+        }
+
+        $today = now()->startOfDay();
+        $rows = collect($groups)->map(function ($row) use ($today) {
+            $row['issue_codes'] = array_keys($row['issue_codes']);
+            $row['outstanding_quantity'] = max(0, $row['issued_quantity'] - $row['returned_quantity']);
+            $row['progress_percent'] = $row['issued_quantity'] > 0
+                ? min(100, round(($row['returned_quantity'] / $row['issued_quantity']) * 100, 1))
+                : 0;
+            $row['age_days'] = Carbon::parse($row['first_issue_date'])->startOfDay()->diffInDays($today);
+            $row['aging_status'] = $row['age_days'] >= 8 ? 'overdue' : ($row['age_days'] >= 4 ? 'warning' : 'normal');
+
+            return $row;
+        })->filter(function ($row) use ($keyword, $aging) {
+            if ($row['outstanding_quantity'] <= 0) {
+                return false;
+            }
+            if ($aging !== '' && $row['aging_status'] !== $aging) {
+                return false;
+            }
+            if ($keyword === '') {
+                return true;
+            }
+
+            $searchable = mb_strtoupper(implode(' ', [
+                $row['production_order'],
+                $row['purchase_order'],
+                $row['customer'],
+                $row['ma_hh'],
+                $row['internal_item_code'],
+                $row['size'],
+                $row['color'],
+                implode(' ', $row['issue_codes']),
+            ]));
+
+            return mb_strpos($searchable, $keyword) !== false;
+        })->sortByDesc(function ($row) {
+            return sprintf('%03d|%s', $row['age_days'], $row['first_issue_date']);
+        })->values();
+
+        return response()->json([
+            'data' => $rows,
+            'summary' => [
+                'order_count' => $rows->pluck('production_order')->unique()->count(),
+                'line_count' => $rows->count(),
+                'issued_quantity' => (float) $rows->sum('issued_quantity'),
+                'returned_quantity' => (float) $rows->sum('returned_quantity'),
+                'outstanding_quantity' => (float) $rows->sum('outstanding_quantity'),
+                'overdue_count' => $rows->where('aging_status', 'overdue')->count(),
+            ],
+        ]);
     }
 
     public function list(Request $request)
@@ -106,9 +253,7 @@ class InternalMaterialIssueController extends Controller
             ]);
 
             foreach ($data['lines'] as $line) {
-                $this->decreaseInternalStock($line, strtoupper(trim($data['warehouse_code'] ?? '')));
-
-                $issue->lines()->create([
+                $issueLine = $issue->lines()->create([
                     'production_order_id' => $line['production_order_id'] ?? null,
                     'production_order' => trim($line['production_order'] ?? ''),
                     'purchase_order' => trim($line['purchase_order'] ?? ''),
@@ -124,10 +269,21 @@ class InternalMaterialIssueController extends Controller
                     'color' => trim($line['color'] ?? ''),
                     'note' => trim($line['note'] ?? ''),
                 ]);
+
+                $this->decreaseInternalStock(
+                    $line,
+                    strtoupper(trim($data['warehouse_code'] ?? '')),
+                    $issueLine->id
+                );
             }
 
             return $issue->load('lines');
         });
+
+        app(InternalAudit::class)->model('issue.created', $issue, [
+            'line_count' => $issue->lines->count(),
+            'total_quantity' => (float) $issue->lines->sum('quantity'),
+        ], $request);
 
         return response()->json([
             'message' => $issueType === 'production'
@@ -211,10 +367,23 @@ class InternalMaterialIssueController extends Controller
 
     public function destroy(InternalMaterialIssue $issue)
     {
+        $auditPayload = [
+            'issue_code' => $issue->issue_code,
+            'issue_date' => optional($issue->issue_date)->format('Y-m-d'),
+        ];
+
         DB::connection('internal')->transaction(function () use ($issue) {
-            $issue->load('lines');
+            $issue->load('lines.allocations');
 
             foreach ($issue->lines as $line) {
+                if ($line->allocations->isNotEmpty()) {
+                    foreach ($line->allocations as $allocation) {
+                        $this->restoreAllocation($allocation);
+                    }
+
+                    continue;
+                }
+
                 $this->increaseInternalStock([
                     'ma_hh' => $line->ma_hh,
                     'quantity' => $line->quantity,
@@ -228,6 +397,15 @@ class InternalMaterialIssueController extends Controller
 
             $issue->delete();
         });
+
+        app(InternalAudit::class)->record(
+            'issue.deleted',
+            'InternalMaterialIssue',
+            (int) $issue->id,
+            $issue->issue_code,
+            $auditPayload,
+            request()
+        );
 
         return response()->json([
             'message' => 'Đã xóa phiếu xuất vật tư nội bộ.',
@@ -264,18 +442,18 @@ class InternalMaterialIssueController extends Controller
 
     private function nextIssueCode(string $issueType = 'material')
     {
-        $prefix = ($issueType === 'production' ? 'PXBTP-' : 'PXVT-') . now()->format('Ymd') . '-';
-        $last = InternalMaterialIssue::query()
-            ->where('issue_code', 'like', $prefix . '%')
-            ->orderByDesc('issue_code')
-            ->value('issue_code');
-
-        $number = $last ? ((int) substr($last, -4)) + 1 : 1;
-
-        return $prefix . str_pad((string) $number, 4, '0', STR_PAD_LEFT);
+        return app(InternalDocumentNumber::class)
+            ->next($issueType === 'production' ? 'PXBTP' : 'PXVT', 4);
     }
 
-    private function decreaseInternalStock(array $line, string $warehouseCode): void
+    private function productionTrackingKey($productionOrder, $size, $color): string
+    {
+        return implode('|', array_map(function ($value) {
+            return mb_strtoupper(trim((string) $value));
+        }, [$productionOrder, $size, $color]));
+    }
+
+    private function decreaseInternalStock(array $line, string $warehouseCode, int $issueLineId): void
     {
         $requestedQuantity = (float) $line['quantity'];
         $remaining = $requestedQuantity;
@@ -330,6 +508,25 @@ class InternalMaterialIssueController extends Controller
 
             $takeQuantity = min((float) $package->quantity, $remaining);
             $remaining -= $takeQuantity;
+
+            InternalMaterialIssueAllocation::query()->create([
+                'issue_line_id' => $issueLineId,
+                'inventory_package_id' => $package->id,
+                'warehouse_location_id' => $package->warehouse_location_id,
+                'inventory_count_id' => $package->inventory_count_id,
+                'source_package_code' => $package->package_code,
+                'location_code' => optional($package->location)->location_code,
+                'ma_hh' => $package->ma_sp,
+                'warehouse_code' => $package->ma_ko,
+                'internal_item_code' => $package->internal_item_code,
+                'size' => $package->size,
+                'color' => $package->color,
+                'side' => $package->side,
+                'checked_at' => $package->checked_at,
+                'quantity' => $takeQuantity,
+                'note' => $package->note,
+            ]);
+
             $package->quantity = (float) $package->quantity - $takeQuantity;
 
             $count = $package->inventory_count_id
@@ -415,14 +612,96 @@ class InternalMaterialIssueController extends Controller
 
     private function nextPackageCode()
     {
-        $prefix = 'PK-' . now()->format('Ymd') . '-';
-        $last = InventoryPackage::query()
-            ->where('package_code', 'like', $prefix . '%')
-            ->orderByDesc('package_code')
-            ->value('package_code');
+        return app(InternalDocumentNumber::class)->next('PK', 5);
+    }
 
-        $number = $last ? ((int) substr($last, -5)) + 1 : 1;
+    private function restoreAllocation(InternalMaterialIssueAllocation $allocation): void
+    {
+        $location = WarehouseLocation::query()->find($allocation->warehouse_location_id);
 
-        return $prefix . str_pad((string) $number, 5, '0', STR_PAD_LEFT);
+        if (!$location && $allocation->location_code) {
+            $location = WarehouseLocation::query()->firstOrCreate(
+                ['location_code' => $allocation->location_code],
+                [
+                    'warehouse_code' => $allocation->warehouse_code,
+                    'shelf_code' => 'CX',
+                    'tier' => 1,
+                    'grid_x' => 1,
+                    'grid_y' => 1,
+                    'grid_w' => 4,
+                    'grid_h' => 2,
+                    'location_name' => 'Vi tri khoi phuc',
+                ]
+            );
+        }
+
+        if (!$location) {
+            $location = WarehouseLocation::query()->firstOrCreate(
+                ['location_code' => 'CHUA-XEP'],
+                [
+                    'warehouse_code' => $allocation->warehouse_code,
+                    'shelf_code' => 'CX',
+                    'tier' => 1,
+                    'grid_x' => 1,
+                    'grid_y' => 1,
+                    'grid_w' => 4,
+                    'grid_h' => 2,
+                    'location_name' => 'Chua xep vi tri',
+                ]
+            );
+        }
+
+        $count = InternalInventoryCount::query()->firstOrCreate(
+            [
+                'ma_sp' => $allocation->ma_hh,
+                'ma_ko' => $allocation->warehouse_code ?: '',
+                'internal_item_code' => $allocation->internal_item_code ?: '',
+                'size' => $allocation->size ?: '',
+                'color' => $allocation->color ?: '',
+                'side' => $allocation->side ?: '',
+                'checked_at' => $allocation->checked_at,
+            ],
+            [
+                'counted_quantity' => 0,
+                'note' => $allocation->note,
+            ]
+        );
+        $count->counted_quantity = (float) $count->counted_quantity + (float) $allocation->quantity;
+        $count->save();
+
+        $package = InventoryPackage::query()
+            ->where('package_code', $allocation->source_package_code)
+            ->lockForUpdate()
+            ->first();
+
+        if ($package) {
+            $package->quantity = (float) $package->quantity + (float) $allocation->quantity;
+            $package->warehouse_location_id = $location->id;
+            $package->inventory_count_id = $count->id;
+            $package->save();
+        } else {
+            $package = InventoryPackage::query()->create([
+                'package_code' => $allocation->source_package_code,
+                'warehouse_location_id' => $location->id,
+                'inventory_count_id' => $count->id,
+                'ma_sp' => $allocation->ma_hh,
+                'ma_ko' => $allocation->warehouse_code ?: '',
+                'internal_item_code' => $allocation->internal_item_code ?: '',
+                'size' => $allocation->size ?: '',
+                'color' => $allocation->color ?: '',
+                'side' => $allocation->side ?: '',
+                'quantity' => $allocation->quantity,
+                'checked_at' => $allocation->checked_at,
+                'note' => $allocation->note,
+            ]);
+        }
+
+        $allocation->inventory_package_id = $package->id;
+        $allocation->inventory_count_id = $count->id;
+        $allocation->warehouse_location_id = $location->id;
+        $allocation->save();
+
+        $location->status = 'counting';
+        $location->save();
     }
 }

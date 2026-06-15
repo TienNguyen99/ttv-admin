@@ -150,6 +150,8 @@ Route::get('/client/phieu-nhap-thanh-pham-noi-bo/{receipt}/in', [InternalFinishe
 Route::get('/client/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'index']);
 Route::get('/api/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'list']);
 Route::get('/api/xuat-vat-tu-noi-bo/lenh-san-xuat', [InternalMaterialIssueController::class, 'productionOrderLines']);
+Route::get('/client/theo-doi-san-xuat', [InternalMaterialIssueController::class, 'productionTrackingIndex']);
+Route::get('/api/theo-doi-san-xuat', [InternalMaterialIssueController::class, 'productionTracking']);
 Route::post('/api/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'store']);
 Route::get('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'show']);
 Route::delete('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'destroy']);
@@ -178,6 +180,7 @@ Route::get('/api/kiem-ton-kho/kien', [WarehouseCountController::class, 'packages
 Route::post('/api/kiem-ton-kho/kien', [WarehouseCountController::class, 'storePackage']);
 Route::get('/api/kiem-ton-kho/phieu-nhap-tp', [WarehouseCountController::class, 'receipts']);
 Route::post('/api/kiem-ton-kho/phieu-nhap-tp', [WarehouseCountController::class, 'storeReceiptBatch']);
+Route::patch('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}/vi-tri', [WarehouseCountController::class, 'updateReceiptLocation']);
 Route::delete('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}', [WarehouseCountController::class, 'destroyReceipt']);
 Route::patch('/api/kiem-ton-kho/kien/{inventoryPackage}/chuyen-vi-tri', [WarehouseCountController::class, 'movePackage']);
 Route::delete('/api/kiem-ton-kho/kien/{inventoryPackage}', [WarehouseCountController::class, 'destroyPackage']);
