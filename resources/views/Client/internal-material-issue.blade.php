@@ -46,6 +46,54 @@
         .order-load-status { min-height: 20px; margin-top: 5px; font-size: 12px; }
         .reference-value { min-width: 92px; background: #f8fafc !important; color: #475569; }
         .stock-warning { color: #b91c1c; font-size: 11px; font-weight: 700; white-space: nowrap; }
+        .paste-dialog {
+            width: min(1120px, calc(100vw - 32px));
+            max-height: calc(100vh - 32px);
+            padding: 0;
+            border: 0;
+            border-radius: 8px;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, .28);
+        }
+        .paste-dialog::backdrop { background: rgba(15, 23, 42, .55); }
+        .paste-dialog__header, .paste-dialog__footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-bottom: 1px solid #dbe2ea;
+        }
+        .paste-dialog__footer { border-top: 1px solid #dbe2ea; border-bottom: 0; }
+        .paste-dialog__body { padding: 16px; overflow: auto; max-height: calc(100vh - 170px); }
+        .paste-box {
+            min-height: 180px;
+            resize: vertical;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.45;
+            white-space: pre;
+        }
+        .column-guide {
+            padding: 10px 12px;
+            background: #f0f6ff;
+            border: 1px solid #bed5f4;
+            border-radius: 5px;
+            color: #17365d;
+            font-size: 12px;
+        }
+        .paste-summary { display: flex; flex-wrap: wrap; gap: 8px; }
+        .paste-summary span {
+            padding: 5px 8px;
+            border: 1px solid #dbe2ea;
+            border-radius: 4px;
+            background: #fff;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .paste-preview { min-width: 900px; font-size: 12px; }
+        .paste-preview td, .paste-preview th { padding: 7px 8px; }
+        .paste-row-warning td { background: #fff8e8 !important; }
+        .paste-warning { color: #9a5b00; font-size: 11px; }
         @media (max-width: 767.98px) {
             .line-table { min-width: 980px; }
         }
@@ -98,7 +146,10 @@
                     <h2 class="section-title">Thông tin phiếu</h2>
                     <div class="hint">Tạo phiếu sẽ trừ tồn nội bộ theo mã, vị trí, mã nội bộ, size và màu nếu có nhập.</div>
                 </div>
-                <button id="addLineBtn" type="button" class="btn btn-outline-primary btn-sm">Thêm dòng</button>
+                <div class="d-flex gap-2">
+                    <button id="openPasteImportBtn" type="button" class="btn btn-outline-primary btn-sm"><i data-lucide="clipboard-paste"></i> Paste Excel</button>
+                    <button id="addLineBtn" type="button" class="btn btn-outline-primary btn-sm">Thêm dòng</button>
+                </div>
             </div>
 
             <div class="row g-2 mb-3">
@@ -112,6 +163,7 @@
             </div>
 
             <datalist id="productionOrderOptions"></datalist>
+            <datalist id="internalCatalogOptions"></datalist>
             <div id="productionOrderStatus" class="order-load-status hint">Gõ Lệnh SX trực tiếp tại dòng hàng, nhấn Enter để lấy thông tin.</div>
             <div class="table-responsive">
                 <table class="table table-bordered line-table mb-0">
@@ -155,12 +207,84 @@
         </section>
     </main>
 
+    <dialog id="pasteImportDialog" class="paste-dialog">
+        <div class="paste-dialog__header">
+            <div>
+                <h2 class="section-title">Nhập phiếu khách hàng từ Excel</h2>
+                <div class="hint">Chọn khách, copy các dòng trong Excel rồi dán vào ô bên dưới.</div>
+            </div>
+            <button id="closePasteImportBtn" type="button" class="btn btn-outline-secondary btn-sm" aria-label="Đóng"><i data-lucide="x"></i></button>
+        </div>
+        <div class="paste-dialog__body">
+            <div class="row g-2 mb-3">
+                <div class="col-md-3">
+                    <label class="form-label" for="pasteCustomer">Khách hàng</label>
+                    <select id="pasteCustomer" class="form-select">
+                        <option value="UNIPAX">UNIPAX</option>
+                        <option value="ELITE">ELITE</option>
+                        <option value="CUSTOM">Khách khác / có tiêu đề cột</option>
+                    </select>
+                </div>
+                <div class="col-md-9">
+                    <label class="form-label">Thứ tự cột</label>
+                    <div id="pasteColumnGuide" class="column-guide"></div>
+                </div>
+            </div>
+            <label class="form-label" for="pasteExcelData">Dữ liệu copy từ Excel</label>
+            <textarea id="pasteExcelData" class="form-control paste-box" spellcheck="false" placeholder="Dán các dòng Excel tại đây..."></textarea>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2 mb-3">
+                <div class="hint">Có thể dán cả hàng tiêu đề. Dòng trống sẽ tự bỏ qua.</div>
+                <button id="analyzePasteBtn" type="button" class="btn btn-primary"><i data-lucide="scan-search"></i> Kiểm tra dữ liệu</button>
+            </div>
+            <div id="pasteResultArea" class="d-none">
+                <div id="pasteSummary" class="paste-summary mb-2"></div>
+                <div class="table-responsive border rounded">
+                    <table class="table table-bordered paste-preview mb-0">
+                        <thead>
+                            <tr>
+                                <th>Dòng</th><th>Lệnh/PS#</th><th>Mã nội bộ</th><th>Mã kế toán</th>
+                                <th>Size</th><th>Màu</th><th class="text-end">SL</th>
+                                <th>Vị trí</th><th>Kiểm tra</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pastePreviewRows"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="paste-dialog__footer">
+            <div id="pasteFooterHint" class="hint">Chưa có dữ liệu kiểm tra.</div>
+            <div class="d-flex gap-2">
+                <button id="cancelPasteImportBtn" type="button" class="btn btn-outline-secondary">Hủy</button>
+                <button id="applyPastedLinesBtn" type="button" class="btn btn-primary" disabled><i data-lucide="list-plus"></i> <span id="applyPastedLinesLabel">Tạo phiếu nhập UNIPAX</span></button>
+            </div>
+        </div>
+    </dialog>
+
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const lineRows = document.getElementById('lineRows');
         const issueRows = document.getElementById('issueRows');
         let searchTimers = {};
         let productionOrderSearchTimer = null;
+        let internalCatalogSearchTimer = null;
+        let internalCatalogItems = [];
+        let analyzedPastedLines = [];
+
+        const pastePresets = {
+            UNIPAX: {
+                guide: 'Mã vật tư (mã nội bộ) | PS# | Size | Màu | Logo color (màu in) | ĐVT | Q’TY đơn hàng | Đạt | Lỗi | Ghi chú | Vị trí',
+                columns: ['internal_item_code','ps_number','size','color','logo_color','dvt','order_reference','quantity','error_quantity','note','location_code']
+            },
+            ELITE: {
+                guide: 'Ngày xuất | ITEM# (mã nội bộ) | PS# / Lệnh | Size | Màu | Logo color | ĐVT | SL đơn hàng | SL xuất | Ghi chú | Vị trí',
+                columns: ['issue_date','internal_item_code','production_order','size','color','logo_color','dvt','ordered_quantity','quantity','note','location_code']
+            },
+            CUSTOM: {
+                guide: 'Dán kèm hàng tiêu đề. Nhận các cột: Mã kế toán, ITEM/Mã nội bộ, PS#/Lệnh SX, Size, Màu, ĐVT, Số lượng/Đạt, Vị trí, Ghi chú.',
+                columns: []
+            }
+        };
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const value = id => document.getElementById(id).value.trim();
@@ -193,7 +317,7 @@
                 </td>
                 <td><input class="form-control quantity text-end" type="number" step="0.001" min="0" value="${esc(data.quantity || '')}"></td>
                 <td><input class="form-control location-code" value="${esc(data.location_code || '')}" placeholder="A01"></td>
-                <td><input class="form-control internal-code" value="${esc(data.internal_item_code || '')}"></td>
+                <td><input class="form-control internal-code" list="internalCatalogOptions" autocomplete="off" value="${esc(data.internal_item_code || '')}" placeholder="Mã DANH MỤC"></td>
                 <td><input class="form-control size" value="${esc(data.size || '')}"></td>
                 <td><input class="form-control color" value="${esc(data.color || '')}"></td>
                 <td><input class="form-control line-note" value="${esc(data.note || '')}"></td>
@@ -234,12 +358,50 @@
                             (result.data || []).map(order => [order.production_order, order])
                         ).values());
                         document.getElementById('productionOrderOptions').innerHTML = uniqueOrders.map(order => {
-                            const label = [order.customer, order.purchase_order, order.item_code].filter(Boolean).join(' · ');
+                            const label = [
+                                order.customer,
+                                order.purchase_order,
+                                order.item_code,
+                                order.size ? `Size ${order.size}` : '',
+                                order.color ? `Màu ${order.color}` : ''
+                            ].filter(Boolean).join(' · ');
                             return `<option value="${esc(order.production_order)}" label="${esc(label)}"></option>`;
                         }).join('');
                     })
                     .catch(() => {});
             }, 220);
+        }
+
+        function searchInternalCatalog(input) {
+            const keyword = input.value.trim();
+            clearTimeout(internalCatalogSearchTimer);
+            if (keyword.length < 1) return;
+
+            internalCatalogSearchTimer = setTimeout(() => {
+                fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(keyword)}&limit=30`)
+                    .then(response => jsonOrError(response, 'Không tải được DANH MỤC'))
+                    .then(result => {
+                        internalCatalogItems = result.data || [];
+                        document.getElementById('internalCatalogOptions').innerHTML = internalCatalogItems.map(item => {
+                            const label = [item.name, item.unit, item.shelf ? `Kệ ${item.shelf}` : ''].filter(Boolean).join(' · ');
+                            return `<option value="${esc(item.code)}" label="${esc(label)}"></option>`;
+                        }).join('');
+                    })
+                    .catch(() => {});
+            }, 180);
+        }
+
+        function applyInternalCatalog(input) {
+            const code = input.value.trim().toUpperCase();
+            const item = internalCatalogItems.find(row => String(row.code || '').trim().toUpperCase() === code);
+            if (!item) return;
+
+            const row = input.closest('tr');
+            if (!row.querySelector('.ten-hh').value.trim()) row.querySelector('.ten-hh').value = item.name || '';
+            if (!row.querySelector('.dvt').value.trim()) row.querySelector('.dvt').value = item.unit || '';
+            if (!row.querySelector('.location-code').value.trim() && item.shelf) {
+                row.querySelector('.location-code').value = item.shelf;
+            }
         }
 
         function fillIssueLine(row, data) {
@@ -368,6 +530,246 @@
             }, 250);
         }
 
+        function normalizeHeader(text) {
+            return String(text || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim();
+        }
+
+        function headerField(text) {
+            const header = normalizeHeader(text);
+            const aliases = [
+                ['issue_date', ['ngay xuat', 'export date', 'date']],
+                ['ma_hh', ['ma ke toan', 'sku ke toan']],
+                ['internal_item_code', ['item', 'item code', 'ma hang', 'ma noi bo', 'ma vat tu', 'sku']],
+                ['production_order', ['ps', 'ps sub', 'lenh sx', 'lenh san xuat', 'don hang']],
+                ['size', ['size', 'kich co']],
+                ['color', ['mau', 'fabric color', 'mau vai']],
+                ['dvt', ['dvt', 'unit']],
+                ['ordered_quantity', ['qty don hang', 'quantity order', 'so luong dat hang']],
+                ['quantity', ['quantity dat', 'sl dat', 'so luong', 'quantity', 'sl xuat', 'dat']],
+                ['location_code', ['vi tri', 'location']],
+                ['note', ['ghi chu', 'note']],
+            ];
+
+            const match = aliases.find(([, names]) => names.some(name => header === name || header.includes(name)));
+            return match ? match[0] : null;
+        }
+
+        function parsePasteNumber(value) {
+            let text = String(value ?? '').trim().replace(/\s/g, '');
+            if (!text) return 0;
+            if (/^-?\d{1,3}([.,]\d{3})+$/.test(text)) text = text.replace(/[.,]/g, '');
+            else if (text.includes(',') && !text.includes('.')) text = text.replace(',', '.');
+            else if (text.includes(',') && text.includes('.')) text = text.replace(/\./g, '').replace(',', '.');
+            const number = Number(text.replace(/[^\d.-]/g, ''));
+            return Number.isFinite(number) ? number : 0;
+        }
+
+        function parsePasteDate(value) {
+            const text = String(value || '').trim();
+            const match = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+            if (match) return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+            return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+        }
+
+        function parseExcelPaste() {
+            const customer = value('pasteCustomer');
+            const preset = pastePresets[customer];
+            const rows = document.getElementById('pasteExcelData').value
+                .split(/\r?\n/)
+                .map(row => row.split('\t').map(cell => cell.trim()))
+                .filter(row => row.some(Boolean));
+
+            if (!rows.length) throw new Error('Chưa có dữ liệu Excel để kiểm tra.');
+
+            const detectedHeaders = rows[0].map(headerField);
+            const hasHeader = detectedHeaders.filter(Boolean).length >= 2;
+            let columns = preset.columns;
+            if (hasHeader) {
+                columns = detectedHeaders;
+                if (customer === 'UNIPAX') {
+                    columns = columns.map(field => field === 'production_order' ? 'ps_number' : field);
+                }
+                rows.shift();
+            } else if (customer === 'CUSTOM') {
+                throw new Error('Khách khác cần dán kèm hàng tiêu đề.');
+            }
+
+            return rows.map(cells => {
+                const line = { customer };
+                columns.forEach((field, index) => {
+                    if (field) line[field] = cells[index] || '';
+                });
+                line.issue_date = parsePasteDate(line.issue_date);
+                line.quantity = parsePasteNumber(line.quantity);
+                line.ordered_quantity = parsePasteNumber(line.ordered_quantity);
+                const extraNotes = [];
+                if (line.order_reference) {
+                    const orderedNumber = parsePasteNumber(line.order_reference);
+                    if (orderedNumber > 0) line.ordered_quantity = orderedNumber;
+                    else extraNotes.push(`Q'TY đơn hàng: ${line.order_reference}`);
+                }
+                if (line.logo_color) extraNotes.push(`Màu in: ${line.logo_color}`);
+                if (parsePasteNumber(line.error_quantity) > 0) extraNotes.push(`Lỗi: ${line.error_quantity}`);
+                if (line.ps_number) extraNotes.push(`PS#: ${line.ps_number}`);
+                line.note = [...extraNotes, line.note].filter(Boolean).join(' - ');
+                line.ma_hh = String(line.ma_hh || '').toUpperCase();
+                line.location_code = String(line.location_code || '').toUpperCase();
+                line.internal_item_code = String(line.internal_item_code || '').trim();
+                return line;
+            }).filter(line => line.ma_hh || line.internal_item_code || line.quantity);
+        }
+
+        function renderPastePreview(result) {
+            analyzedPastedLines = result.data || [];
+            const summary = result.summary || {};
+            document.getElementById('pasteResultArea').classList.remove('d-none');
+            document.getElementById('pasteSummary').innerHTML = `
+                <span>${num(summary.line_count)} dòng</span>
+                <span>${num(summary.total_quantity)} tổng SL</span>
+                <span class="text-success">${num(summary.valid_count)} hợp lệ</span>
+                <span class="text-warning">${num(summary.warning_count)} cần kiểm tra</span>
+            `;
+            document.getElementById('pastePreviewRows').innerHTML = analyzedPastedLines.map(line => `
+                <tr class="${line.is_valid ? '' : 'paste-row-warning'}">
+                    <td>${num(line.source_row)}</td>
+                    <td>${esc(line.purchase_order || line.production_order)}</td>
+                    <td>${esc(line.internal_item_code)}</td>
+                    <td>${esc(line.ma_hh || 'Chưa khớp')}</td>
+                    <td>${esc(line.size)}</td>
+                    <td>${esc(line.color)}</td>
+                    <td class="text-end">${num(line.quantity)}</td>
+                    <td>${esc(line.location_code || 'Chưa chọn')}</td>
+                    <td>${line.warnings?.length
+                        ? `<div class="paste-warning">${line.warnings.map(esc).join('<br>')}</div>`
+                        : '<span class="text-success">Sẵn sàng</span>'}</td>
+                </tr>
+            `).join('');
+            document.getElementById('pasteFooterHint').textContent = summary.warning_count
+                ? 'Các dòng cảnh báo vẫn được đưa vào phiếu để bạn sửa trực tiếp.'
+                : 'Dữ liệu đã sẵn sàng đưa vào phiếu.';
+            document.getElementById('applyPastedLinesBtn').disabled = !analyzedPastedLines.length;
+            if (value('pasteCustomer') === 'UNIPAX') {
+                const receiptCount = Math.ceil(analyzedPastedLines.length / 20);
+                document.getElementById('applyPastedLinesLabel').textContent =
+                    `Tạo ${receiptCount} phiếu nhập UNIPAX`;
+            }
+        }
+
+        function analyzePastedData() {
+            let lines;
+            try {
+                lines = parseExcelPaste();
+            } catch (error) {
+                return alert(error.message);
+            }
+            if (!lines.length) return alert('Không đọc được dòng dữ liệu nào.');
+
+            const button = document.getElementById('analyzePasteBtn');
+            button.disabled = true;
+            fetch('/api/xuat-vat-tu-noi-bo/phan-tich-paste', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({ customer: value('pasteCustomer'), lines })
+            }).then(response => jsonOrError(response, 'Không kiểm tra được dữ liệu paste'))
+              .then(renderPastePreview)
+              .catch(error => alert(error.message))
+              .finally(() => button.disabled = false);
+        }
+
+        function applyPastedLines() {
+            if (!analyzedPastedLines.length) return;
+            if (value('pasteCustomer') === 'UNIPAX') {
+                saveUnipaxReceipt();
+                return;
+            }
+            lineRows.innerHTML = '';
+            analyzedPastedLines.forEach(line => addLine(line));
+            const firstDate = analyzedPastedLines.find(line => line.issue_date)?.issue_date;
+            if (firstDate) document.getElementById('issueDate').value = firstDate;
+            if (!value('issueNote')) {
+                document.getElementById('issueNote').value = `Paste phiếu ${value('pasteCustomer')}`;
+            }
+            document.getElementById('pasteImportDialog').close();
+            lineRows.querySelector('input')?.focus();
+        }
+
+        function saveUnipaxReceipt() {
+            const warehouseCode = value('warehouseCode');
+            if (!warehouseCode) return alert('Nhập Kho xuất/nhập ở phần thông tin phiếu trước.');
+            if (!value('issueDate')) return alert('Chọn ngày nhập kho.');
+
+            const lines = analyzedPastedLines.map(line => ({
+                ma_sp: line.ma_hh || '',
+                internal_item_code: line.internal_item_code || '',
+                size: line.size || '',
+                color: line.color || '',
+                side: '',
+                dvt: line.dvt || '',
+                quantity: line.quantity || 0,
+                location_code: line.location_code || '',
+                purchase_order: line.purchase_order || '',
+                customer: 'UNIPAX',
+                note: line.note || '',
+            }));
+            if (lines.some(line => !line.internal_item_code || !Number(line.quantity))) {
+                return alert('Mỗi dòng UNIPAX cần Mã vật tư nội bộ và số lượng Đạt.');
+            }
+
+            const batches = [];
+            for (let index = 0; index < lines.length; index += 20) {
+                batches.push(lines.slice(index, index + 20));
+            }
+
+            const button = document.getElementById('applyPastedLinesBtn');
+            button.disabled = true;
+            const printWindows = batches.map(() => window.open('', '_blank'));
+            const createdReceipts = [];
+
+            batches.reduce((promise, batchLines, index) => promise.then(() => {
+                button.querySelector('span').textContent = `Đang tạo phiếu ${index + 1}/${batches.length}`;
+                return fetch('/api/kiem-ton-kho/phieu-nhap-tp', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                    body: JSON.stringify({
+                        location_code: '',
+                        ma_ko: warehouseCode,
+                        checked_at: value('issueDate'),
+                        note: `Nhập kho từ phiếu xuất UNIPAX - phần ${index + 1}/${batches.length}`,
+                        lines: batchLines
+                    })
+                }).then(response => jsonOrError(response, `Không tạo được phiếu nhập UNIPAX phần ${index + 1}`))
+                  .then(result => {
+                      createdReceipts.push(result);
+                      if (result.receipt_print_url && printWindows[index]) {
+                          printWindows[index].location.href = result.receipt_print_url;
+                      }
+                  });
+            }), Promise.resolve())
+              .then(() => {
+                  document.getElementById('pasteImportDialog').close();
+                  document.getElementById('pasteExcelData').value = '';
+                  analyzedPastedLines = [];
+                  alert(`Đã tạo ${createdReceipts.length} phiếu nhập kho UNIPAX và cộng tồn nội bộ.`);
+              })
+              .catch(error => {
+                  printWindows.slice(createdReceipts.length).forEach(printWindow => printWindow?.close());
+                  const completed = createdReceipts.length
+                      ? ` Đã tạo thành công ${createdReceipts.length} phiếu trước khi gặp lỗi.`
+                      : '';
+                  alert(error.message + completed);
+              })
+              .finally(() => {
+                  button.disabled = false;
+                  button.querySelector('span').textContent =
+                      `Tạo ${Math.max(1, batches.length)} phiếu nhập UNIPAX`;
+              });
+        }
+
         function saveIssue() {
             const lines = collectLines();
             if (!lines.length) return alert('Nhập ít nhất một dòng vật tư.');
@@ -433,10 +835,12 @@
         lineRows.addEventListener('input', event => {
             if (event.target.classList.contains('ma-hh')) suggestMaterial(event.target);
             if (event.target.classList.contains('line-production-order')) searchProductionOrders(event.target);
+            if (event.target.classList.contains('internal-code')) searchInternalCatalog(event.target);
         });
 
         lineRows.addEventListener('change', event => {
             if (event.target.classList.contains('line-production-order')) loadProductionOrder(event.target);
+            if (event.target.classList.contains('internal-code')) applyInternalCatalog(event.target);
         });
 
         lineRows.addEventListener('keydown', event => {
@@ -477,6 +881,25 @@
         });
 
         document.getElementById('addLineBtn').addEventListener('click', () => addLine());
+        document.getElementById('openPasteImportBtn').addEventListener('click', () => {
+            document.getElementById('pasteColumnGuide').textContent = pastePresets[value('pasteCustomer')].guide;
+            document.getElementById('pasteImportDialog').showModal();
+            setTimeout(() => document.getElementById('pasteExcelData').focus(), 0);
+        });
+        document.getElementById('closePasteImportBtn').addEventListener('click', () => document.getElementById('pasteImportDialog').close());
+        document.getElementById('cancelPasteImportBtn').addEventListener('click', () => document.getElementById('pasteImportDialog').close());
+        document.getElementById('pasteCustomer').addEventListener('change', event => {
+            document.getElementById('pasteColumnGuide').textContent = pastePresets[event.target.value].guide;
+            document.getElementById('applyPastedLinesLabel').textContent = event.target.value === 'UNIPAX'
+                ? 'Tạo phiếu nhập UNIPAX'
+                : 'Đưa vào phiếu xuất';
+            analyzedPastedLines = [];
+            document.getElementById('pasteResultArea').classList.add('d-none');
+            document.getElementById('applyPastedLinesBtn').disabled = true;
+            document.getElementById('pasteFooterHint').textContent = 'Chưa có dữ liệu kiểm tra.';
+        });
+        document.getElementById('analyzePasteBtn').addEventListener('click', analyzePastedData);
+        document.getElementById('applyPastedLinesBtn').addEventListener('click', applyPastedLines);
         document.getElementById('saveBtn').addEventListener('click', saveIssue);
         document.getElementById('issueType').addEventListener('change', event => applyIssueType(event.target.value));
         document.getElementById('reloadBtn').addEventListener('click', loadIssues);
@@ -497,6 +920,7 @@
         });
 
         const requestedType = new URLSearchParams(window.location.search).get('type');
+        document.getElementById('pasteColumnGuide').textContent = pastePresets.UNIPAX.guide;
         document.getElementById('issueType').value = requestedType === 'material' ? 'material' : 'production';
         applyIssueType(document.getElementById('issueType').value);
         addLine();

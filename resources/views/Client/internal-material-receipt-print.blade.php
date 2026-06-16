@@ -76,6 +76,9 @@
         if ($pages->isEmpty()) {
             $pages = collect([collect()]);
         }
+        $formatQuantity = static function ($value) {
+            return rtrim(rtrim(number_format((float) $value, 3, ',', '.'), '0'), ',');
+        };
     @endphp
 
     @foreach ($pages as $pageIndex => $pageLines)
@@ -128,7 +131,7 @@
                                     <td>{{ optional($line)->ma_hh }}</td>
                                     <td>{{ optional($line)->color }}</td>
                                     <td class="center">{{ optional($line)->size }}</td>
-                                    <td class="right">{{ $line ? number_format($line->quantity, 3, ',', '.') : '' }}</td>
+                                    <td class="right">{{ $line ? $formatQuantity($line->quantity) : '' }}</td>
                                     <td class="center">{{ optional($line)->dvt }}</td>
                                     <td>{{ optional($line)->note }}</td>
                                     <td>{{ $line ? $receipt->note : '' }}</td>

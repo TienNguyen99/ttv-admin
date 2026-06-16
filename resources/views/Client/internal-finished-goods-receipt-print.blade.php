@@ -41,6 +41,12 @@
         <button type="button" onclick="window.close()">Đóng</button>
     </div>
 
+    @php
+        $formatQuantity = static function ($value) {
+            return rtrim(rtrim(number_format((float) $value, 3, ',', '.'), '0'), ',');
+        };
+    @endphp
+
     <main class="sheet">
         <header class="header">
             <div class="brand">
@@ -87,7 +93,7 @@
                         <td></td>
                         <td></td>
                         <td></td>
-                        <td class="right">{{ $index === 0 ? number_format($receipt->quantity, 3, ',', '.') : '' }}</td>
+                        <td class="right">{{ $index === 0 ? $formatQuantity($receipt->quantity) : '' }}</td>
                         <td class="center">{{ $index === 0 ? $receipt->dvt : '' }}</td>
                         <td></td>
                         <td>{{ $index === 0 ? $receipt->note : '' }}</td>

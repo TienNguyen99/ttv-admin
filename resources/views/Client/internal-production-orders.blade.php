@@ -21,7 +21,7 @@
         <h1 class="wms-topbar__title">WMS May Mặc</h1>
         <div class="wms-global-search">
             <i data-lucide="search"></i>
-            <input id="topProductionKeyword" aria-label="Tìm lệnh sản xuất" placeholder="Tìm lệnh, PO, khách hàng hoặc mã hàng...">
+            <input id="topProductionKeyword" aria-label="Tìm lệnh sản xuất" placeholder="Tìm trên tất cả cột: lệnh, size, màu, mã hàng...">
         </div>
         <div class="wms-topbar__actions">
             <button id="syncProductionBtn" class="wms-btn wms-btn--primary"><i data-lucide="refresh-cw"></i> Đồng bộ Google Sheet</button>
@@ -48,7 +48,7 @@
         </section>
 
         <section class="wms-filterbar" style="grid-template-columns:minmax(240px,1.4fr) minmax(150px,.7fr) minmax(150px,.7fr) minmax(160px,.7fr) auto">
-            <div><label for="productionKeyword">Tìm kiếm</label><input id="productionKeyword" class="form-control" placeholder="Lệnh SX, PO, khách hàng, mã hàng..."></div>
+            <div><label for="productionKeyword">Tìm toàn bộ cột</label><input id="productionKeyword" class="form-control" placeholder="Lệnh SX, PO, size, màu, mô tả, vị trí, ngày..."></div>
             <div><label for="productionFromDate">Hẹn giao từ</label><input id="productionFromDate" type="date" class="form-control"></div>
             <div><label for="productionToDate">Đến ngày</label><input id="productionToDate" type="date" class="form-control"></div>
             <div><label for="productionStatus">Trạng thái</label><select id="productionStatus" class="form-select"><option value="">Tất cả</option><option value="late">Quá hẹn</option><option value="due">Sắp đến hạn</option><option value="scheduled">Đã lên lịch</option><option value="pending">Chưa có ngày</option></select></div>

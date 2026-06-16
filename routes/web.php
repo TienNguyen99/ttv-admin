@@ -20,6 +20,7 @@ use App\Http\Controllers\InternalOrderTrackingController;
 use App\Http\Controllers\InternalProductionOrderController;
 use App\Http\Controllers\InternalFinishedGoodsReceiptController;
 use App\Http\Controllers\InternalMaterialIssueController;
+use App\Http\Controllers\InternalItemCatalogController;
 use Google\Service\Dfareporting\Order;
 
 
@@ -150,6 +151,8 @@ Route::get('/client/phieu-nhap-thanh-pham-noi-bo/{receipt}/in', [InternalFinishe
 Route::get('/client/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'index']);
 Route::get('/api/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'list']);
 Route::get('/api/xuat-vat-tu-noi-bo/lenh-san-xuat', [InternalMaterialIssueController::class, 'productionOrderLines']);
+Route::post('/api/xuat-vat-tu-noi-bo/phan-tich-paste', [InternalMaterialIssueController::class, 'resolvePastedLines']);
+Route::get('/api/ma-noi-bo-danh-muc', [InternalItemCatalogController::class, 'suggestions']);
 Route::get('/client/theo-doi-san-xuat', [InternalMaterialIssueController::class, 'productionTrackingIndex']);
 Route::get('/api/theo-doi-san-xuat', [InternalMaterialIssueController::class, 'productionTracking']);
 Route::post('/api/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'store']);
@@ -165,6 +168,9 @@ Route::post('/api/don-hang-noi-bo/import', [InternalOrderTrackingController::cla
 Route::get('/client/lenh-san-xuat-sheet', [InternalProductionOrderController::class, 'index']);
 Route::get('/api/lenh-san-xuat-sheet', [InternalProductionOrderController::class, 'data']);
 Route::post('/api/lenh-san-xuat-sheet/dong-bo', [InternalProductionOrderController::class, 'sync']);
+Route::get('/client/danh-muc-noi-bo', [InternalItemCatalogController::class, 'index']);
+Route::get('/api/danh-muc-noi-bo', [InternalItemCatalogController::class, 'data']);
+Route::post('/api/danh-muc-noi-bo/dong-bo', [InternalItemCatalogController::class, 'sync']);
 Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
 Route::get('/client/ton-kho-noi-bo', [WarehouseCountController::class, 'stockIndex']);
 Route::get('/api/ton-kho-noi-bo/kho', [WarehouseCountController::class, 'stockWarehouses']);

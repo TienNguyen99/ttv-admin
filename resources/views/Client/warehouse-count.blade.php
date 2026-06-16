@@ -292,6 +292,7 @@
                 </div>
                 <datalist id="receiptProductOptions"></datalist>
                 <datalist id="productionOrderOptions"></datalist>
+                <datalist id="internalCatalogOptions"></datalist>
                 <div class="table-responsive">
                     <table class="table align-middle receipt-entry-table">
                         <thead>
@@ -312,7 +313,7 @@
                                 <tr>
                                     <td class="text-muted fw-bold">{{ $i }}</td>
                                     <td><input class="form-control receipt-note" placeholder="TP / KCS"></td>
-                                    <td><input class="form-control receipt-internal-code" placeholder="Mã nội bộ"></td>
+                                    <td><input class="form-control receipt-internal-code" list="internalCatalogOptions" autocomplete="off" placeholder="Mã DANH MỤC"></td>
                                     <td><input class="form-control receipt-ma-sp" list="receiptProductOptions" autocomplete="off" placeholder="Có thể thêm sau"></td>
                                     <td><input class="form-control receipt-color"></td>
                                     <td><input class="form-control receipt-size"></td>
@@ -459,6 +460,8 @@
         let editingLocationId = null;
         let selectedAccountingProduct = '';
         let productSearchTimer;
+        let internalCatalogSearchTimer = null;
+        let internalCatalogItems = [];
         let voiceRecognition = null;
 
         function refreshIcons() {
@@ -683,6 +686,35 @@
             }, 250);
         }
 
+        function searchInternalCatalog(input) {
+            const keyword = input.value.trim();
+            clearTimeout(internalCatalogSearchTimer);
+            if (!keyword) return;
+
+            internalCatalogSearchTimer = setTimeout(() => {
+                fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(keyword)}&limit=30`)
+                    .then(r => jsonOrError(r, 'Không tải được DANH MỤC'))
+                    .then(result => {
+                        internalCatalogItems = result.data || [];
+                        document.getElementById('internalCatalogOptions').innerHTML = internalCatalogItems.map(item => {
+                            const label = [item.name, item.unit, item.shelf ? `Kệ ${item.shelf}` : ''].filter(Boolean).join(' · ');
+                            return `<option value="${escapeHtml(item.code)}" label="${escapeHtml(label)}"></option>`;
+                        }).join('');
+                    })
+                    .catch(() => {});
+            }, 180);
+        }
+
+        function applyInternalCatalog(input) {
+            const code = input.value.trim().toUpperCase();
+            const item = internalCatalogItems.find(row => String(row.code || '').trim().toUpperCase() === code);
+            if (!item) return;
+
+            const row = input.closest('tr');
+            if (!row.querySelector('.receipt-note').value.trim()) row.querySelector('.receipt-note').value = item.name || '';
+            if (!row.querySelector('.receipt-dvt').value.trim()) row.querySelector('.receipt-dvt').value = item.unit || '';
+        }
+
         let productionOrderSearchTimer = null;
         let productionOrderOptions = [];
 
@@ -700,7 +732,13 @@
                     .then(result => {
                         productionOrderOptions = result.data || [];
                         document.getElementById('productionOrderOptions').innerHTML = productionOrderOptions.map(order => {
-                            const label = [order.customer, order.item_code, order.description].filter(Boolean).join(' · ');
+                            const label = [
+                                order.customer,
+                                order.item_code,
+                                order.size ? `Size ${order.size}` : '',
+                                order.color ? `Màu ${order.color}` : '',
+                                order.description
+                            ].filter(Boolean).join(' · ');
                             return `<option value="${escapeHtml(order.production_order)}" label="${escapeHtml(label)}"></option>`;
                         }).join('');
                         applyProductionOrder(input);
@@ -1429,9 +1467,11 @@
         document.getElementById('receiptEntryRows').addEventListener('input', event => {
             if (event.target.classList.contains('receipt-ma-sp')) searchReceiptProducts(event.target);
             if (event.target.classList.contains('receipt-order')) searchProductionOrders(event.target);
+            if (event.target.classList.contains('receipt-internal-code')) searchInternalCatalog(event.target);
         });
         document.getElementById('receiptEntryRows').addEventListener('change', event => {
             if (event.target.classList.contains('receipt-order')) applyProductionOrder(event.target);
+            if (event.target.classList.contains('receipt-internal-code')) applyInternalCatalog(event.target);
         });
         document.getElementById('voiceLookupBtn').addEventListener('click', startVoiceLookup);
         document.getElementById('voiceSearchBtn').addEventListener('click', () => lookupWarehouseByVoice());

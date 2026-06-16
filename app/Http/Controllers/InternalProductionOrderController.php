@@ -36,8 +36,21 @@ class InternalProductionOrderController extends Controller
                     ->orWhere('purchase_order', 'like', '%' . $keyword . '%')
                     ->orWhere('customer', 'like', '%' . $keyword . '%')
                     ->orWhere('item_code', 'like', '%' . $keyword . '%')
+                    ->orWhere('specification', 'like', '%' . $keyword . '%')
                     ->orWhere('description', 'like', '%' . $keyword . '%')
-                    ->orWhere('tracking_staff', 'like', '%' . $keyword . '%');
+                    ->orWhere('tracking_staff', 'like', '%' . $keyword . '%')
+                    ->orWhere('size', 'like', '%' . $keyword . '%')
+                    ->orWhere('color', 'like', '%' . $keyword . '%')
+                    ->orWhere('unit', 'like', '%' . $keyword . '%')
+                    ->orWhere('location', 'like', '%' . $keyword . '%')
+                    ->orWhere('delivery_place', 'like', '%' . $keyword . '%')
+                    ->orWhere('status', 'like', '%' . $keyword . '%')
+                    ->orWhere('order_quantity', 'like', '%' . $keyword . '%')
+                    ->orWhere('received_date', 'like', '%' . $keyword . '%')
+                    ->orWhere('promised_date', 'like', '%' . $keyword . '%')
+                    ->orWhere('customer_requested_date', 'like', '%' . $keyword . '%')
+                    ->orWhere('source_row', 'like', '%' . $keyword . '%')
+                    ->orWhereRaw('CAST(raw_data AS CHAR) LIKE ?', ['%' . $keyword . '%']);
             });
         }
 

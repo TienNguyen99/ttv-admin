@@ -761,7 +761,7 @@ class WarehouseCountController extends Controller
             'ma_ko' => 'nullable|string|max:50',
             'checked_at' => 'required|date',
             'note' => 'nullable|string|max:500',
-            'lines' => 'required|array|min:1|max:50',
+            'lines' => 'required|array|min:1|max:500',
             'lines.*.category' => 'nullable|string|max:255',
             'lines.*.ma_sp' => 'nullable|string|max:100',
             'lines.*.internal_item_code' => 'nullable|string|max:100',
@@ -770,6 +770,7 @@ class WarehouseCountController extends Controller
             'lines.*.side' => 'nullable|string|max:100',
             'lines.*.dvt' => 'nullable|string|max:50',
             'lines.*.quantity' => 'nullable|numeric|min:0',
+            'lines.*.location_code' => 'nullable|string|max:100',
             'lines.*.note' => 'nullable|string|max:500',
             'lines.*.production_order_id' => 'nullable|integer',
             'lines.*.production_order' => 'nullable|string|max:100',
@@ -788,6 +789,7 @@ class WarehouseCountController extends Controller
                     'side' => trim((string) ($line['side'] ?? '')),
                     'dvt' => trim((string) ($line['dvt'] ?? '')),
                     'quantity' => (float) ($line['quantity'] ?? 0),
+                    'location_code' => strtoupper(trim((string) ($line['location_code'] ?? ''))),
                     'note' => trim((string) ($line['note'] ?? '')),
                     'production_order_id' => $line['production_order_id'] ?? null,
                     'production_order' => trim((string) ($line['production_order'] ?? '')),
@@ -808,6 +810,10 @@ class WarehouseCountController extends Controller
 
         $locationCode = strtoupper(trim($data['location_code'] ?? '')) ?: 'CHUA-XEP';
         $warehouseCode = strtoupper(trim($data['ma_ko'] ?? ''));
+        $lineLocationCodes = $lines->pluck('location_code')->filter()->unique()->values();
+        $receiptLocationCode = $lineLocationCodes->count() === 1
+            ? $lineLocationCodes->first()
+            : ($lineLocationCodes->isEmpty() ? $locationCode : '');
 
         $accountingCodes = $lines->pluck('ma_sp')->filter()->unique()->all();
         $catalogItems = empty($accountingCodes)
@@ -818,7 +824,7 @@ class WarehouseCountController extends Controller
                 ->get()
                 ->keyBy('Ma_hh');
 
-        [$receipt, $packages] = DB::connection('internal')->transaction(function () use ($data, $lines, $locationCode, $warehouseCode, $catalogItems) {
+        [$receipt, $packages] = DB::connection('internal')->transaction(function () use ($data, $lines, $locationCode, $receiptLocationCode, $warehouseCode, $catalogItems) {
             $location = WarehouseLocation::query()->firstOrCreate(
                 ['location_code' => $locationCode],
                 [
@@ -843,7 +849,7 @@ class WarehouseCountController extends Controller
                 'receipt_code' => $this->nextMaterialReceiptCode(),
                 'receipt_date' => $data['checked_at'],
                 'warehouse_code' => $warehouseCode,
-                'location_code' => $location->location_code,
+                'location_code' => $receiptLocationCode,
                 'receiver_name' => '',
                 'source' => 'Phieu nhap thanh pham',
                 'status' => 'posted',
@@ -853,6 +859,28 @@ class WarehouseCountController extends Controller
             $packages = collect();
 
             foreach ($lines as $line) {
+                $lineLocation = $location;
+                if ($line['location_code'] !== '' && $line['location_code'] !== $location->location_code) {
+                    $lineLocation = WarehouseLocation::query()->firstOrCreate(
+                        ['location_code' => $line['location_code']],
+                        [
+                            'warehouse_code' => $warehouseCode,
+                            'shelf_code' => 'CX',
+                            'tier' => 1,
+                            'bay_code' => null,
+                            'grid_x' => 1,
+                            'grid_y' => 1,
+                            'grid_w' => 4,
+                            'grid_h' => 2,
+                            'location_name' => $line['location_code'],
+                        ]
+                    );
+                    if ($warehouseCode !== '' && !$lineLocation->warehouse_code) {
+                        $lineLocation->warehouse_code = $warehouseCode;
+                        $lineLocation->save();
+                    }
+                }
+
                 $attributes = [
                     'ma_sp' => $line['ma_sp'],
                     'ma_ko' => $warehouseCode,
@@ -877,7 +905,7 @@ class WarehouseCountController extends Controller
 
                 $package = InventoryPackage::query()->create(array_merge($attributes, [
                     'package_code' => $this->nextPackageCode(),
-                    'warehouse_location_id' => $location->id,
+                    'warehouse_location_id' => $lineLocation->id,
                     'inventory_count_id' => $count->id,
                     'quantity' => $line['quantity'],
                     'note' => $line['note'] ?: null,
@@ -895,7 +923,7 @@ class WarehouseCountController extends Controller
                     'ten_hh' => $catalogItem->Ten_hh ?? $line['category'],
                     'dvt' => $catalogItem->Dvt ?? $line['dvt'],
                     'quantity' => $line['quantity'],
-                    'location_code' => $location->location_code,
+                    'location_code' => $lineLocation->location_code,
                     'internal_item_code' => $line['internal_item_code'],
                     'size' => $line['size'],
                     'color' => $line['color'],
@@ -904,6 +932,9 @@ class WarehouseCountController extends Controller
                 ]);
 
                 $packages->push($package);
+
+                $lineLocation->status = 'counting';
+                $lineLocation->save();
             }
 
             $location->status = 'counting';

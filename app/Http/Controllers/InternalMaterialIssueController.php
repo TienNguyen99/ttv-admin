@@ -10,6 +10,7 @@ use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
 use App\Services\InternalAudit;
 use App\Services\InternalDocumentNumber;
+use App\Services\GoogleSheetInternalCatalog;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -232,6 +233,11 @@ class InternalMaterialIssueController extends Controller
             'lines.*.note' => 'nullable|string|max:500',
             'lines.*.production_order_id' => 'nullable|integer',
             'lines.*.production_order' => 'nullable|string|max:100',
+            'lines.*.ps_number' => 'nullable|string|max:100',
+            'lines.*.order_reference' => 'nullable|string|max:100',
+            'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
+            'lines.*.logo_color' => 'nullable|string|max:100',
+            'lines.*.error_quantity' => 'nullable',
             'lines.*.purchase_order' => 'nullable|string|max:1000',
             'lines.*.customer' => 'nullable|string|max:200',
             'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
@@ -354,6 +360,168 @@ class InternalMaterialIssueController extends Controller
                 'variant_count' => $data->count(),
                 'ordered_quantity' => (float) $data->sum('ordered_quantity'),
                 'available_quantity' => (float) $data->sum('available_quantity'),
+            ],
+        ]);
+    }
+
+    public function resolvePastedLines(Request $request)
+    {
+        $data = $request->validate([
+            'customer' => 'required|string|max:100',
+            'lines' => 'required|array|min:1|max:500',
+            'lines.*.issue_date' => 'nullable|date',
+            'lines.*.production_order' => 'nullable|string|max:100',
+            'lines.*.ma_hh' => 'nullable|string|max:100',
+            'lines.*.internal_item_code' => 'nullable|string|max:100',
+            'lines.*.size' => 'nullable|string|max:100',
+            'lines.*.color' => 'nullable|string|max:100',
+            'lines.*.dvt' => 'nullable|string|max:50',
+            'lines.*.quantity' => 'nullable|numeric|min:0',
+            'lines.*.location_code' => 'nullable|string|max:100',
+            'lines.*.note' => 'nullable|string|max:500',
+        ]);
+
+        $catalog = app(GoogleSheetInternalCatalog::class);
+        $rows = collect($data['lines'])->map(function ($line, $index) use ($data, $catalog) {
+            $maHh = strtoupper(trim((string) ($line['ma_hh'] ?? '')));
+            $internalCode = trim((string) ($line['internal_item_code'] ?? ''));
+            $size = trim((string) ($line['size'] ?? ''));
+            $color = trim((string) ($line['color'] ?? ''));
+            $locationCode = strtoupper(trim((string) ($line['location_code'] ?? '')));
+            $productionOrderCode = trim((string) ($line['production_order'] ?? ''));
+            $psNumber = trim((string) ($line['ps_number'] ?? ''));
+            $productionOrder = null;
+            $catalogItem = $internalCode !== '' ? $catalog->find($internalCode) : null;
+
+            if ($internalCode === '' && $productionOrderCode !== '') {
+                $productionOrderQuery = InternalProductionOrder::query()
+                    ->where('is_active', true)
+                    ->where('production_order', $productionOrderCode);
+
+                if ($size !== '') {
+                    $productionOrderQuery->whereRaw('UPPER(TRIM(size)) = ?', [mb_strtoupper($size)]);
+                }
+                if ($color !== '') {
+                    $productionOrderQuery->whereRaw('UPPER(TRIM(color)) = ?', [mb_strtoupper($color)]);
+                }
+
+                $productionOrder = $productionOrderQuery->orderBy('source_row')->first();
+                if ($productionOrder) {
+                    $internalCode = trim((string) $productionOrder->item_code);
+                }
+            }
+
+            $query = InventoryPackage::query()
+                ->with('location:id,location_code')
+                ->where('quantity', '>', 0);
+
+            if ($maHh !== '') {
+                $query->whereRaw('UPPER(TRIM(ma_sp)) = ?', [$maHh]);
+            }
+            if ($internalCode !== '') {
+                $query->whereRaw('UPPER(TRIM(internal_item_code)) = ?', [mb_strtoupper($internalCode)]);
+            }
+            if ($size !== '') {
+                $query->whereRaw('UPPER(TRIM(size)) = ?', [mb_strtoupper($size)]);
+            }
+            if ($color !== '') {
+                $query->whereRaw('UPPER(TRIM(color)) = ?', [mb_strtoupper($color)]);
+            }
+            if ($locationCode !== '') {
+                $query->whereHas('location', function ($locationQuery) use ($locationCode) {
+                    $locationQuery->whereRaw('UPPER(TRIM(location_code)) = ?', [$locationCode]);
+                });
+            }
+
+            $packages = ($maHh !== '' || $internalCode !== '')
+                ? $query->orderBy('checked_at')->orderBy('id')->get()
+                : collect();
+            $accountingCodes = $packages->pluck('ma_sp')->filter()->unique()->values();
+            $locations = $packages->pluck('location.location_code')->filter()->unique()->values();
+            $warnings = [];
+            $isUnipaxReceipt = mb_strtoupper(trim((string) $data['customer'])) === 'UNIPAX';
+
+            if ($isUnipaxReceipt) {
+                if ($internalCode === '') {
+                    $warnings[] = 'Thiếu mã vật tư nội bộ.';
+                } elseif (!$catalogItem) {
+                    $warnings[] = 'Mã nội bộ không có trong sheet DANH MỤC.';
+                }
+                if ($locationCode === '') {
+                    $warnings[] = 'Chưa có vị trí, khi nhập sẽ đưa vào CHUA-XEP.';
+                }
+            } else {
+                if ($internalCode === '' && $maHh === '') {
+                    $warnings[] = $productionOrderCode !== ''
+                        ? 'Lệnh sản xuất chưa khớp dữ liệu.'
+                        : 'Thiếu mã hàng để đối chiếu tồn.';
+                } elseif ($packages->isEmpty()) {
+                    $warnings[] = 'Không tìm thấy tồn nội bộ phù hợp.';
+                } else {
+                    if ($maHh === '' && $accountingCodes->isEmpty()) {
+                        $warnings[] = 'Tồn nội bộ chưa được gán mã kế toán.';
+                    }
+                    if ($maHh === '' && $accountingCodes->count() > 1) {
+                        $warnings[] = 'Có nhiều mã kế toán, cần chọn lại.';
+                    }
+                    if ($locationCode === '' && $locations->count() > 1) {
+                        $warnings[] = 'Hàng nằm ở nhiều vị trí.';
+                    }
+                }
+            }
+
+            $quantity = (float) ($line['quantity'] ?? 0);
+            $available = (float) $packages->sum('quantity');
+            if ($quantity <= 0) {
+                $warnings[] = 'Số lượng xuất chưa hợp lệ.';
+            } elseif (!$isUnipaxReceipt && $available > 0 && $quantity > $available + 0.0001) {
+                $warnings[] = 'Số lượng xuất lớn hơn tồn phù hợp.';
+            }
+
+            return [
+                'source_row' => $index + 1,
+                'issue_date' => $line['issue_date'] ?? null,
+                'customer' => trim($data['customer']),
+                'production_order_id' => $productionOrder->id ?? null,
+                'production_order' => $productionOrderCode,
+                'purchase_order' => $psNumber ?: ($productionOrder->purchase_order ?? ''),
+                'ma_hh' => $maHh ?: ($accountingCodes->count() === 1 ? $accountingCodes->first() : ''),
+                'ten_hh' => $catalogItem['name'] ?? ($productionOrder->description ?? ''),
+                'internal_item_code' => $internalCode,
+                'size' => $size,
+                'color' => $color,
+                'dvt' => trim((string) ($line['dvt'] ?? '')) ?: ($catalogItem['unit'] ?? ''),
+                'ordered_quantity' => (float) ($line['ordered_quantity'] ?? 0),
+                'quantity' => $quantity,
+                'location_code' => $locationCode ?: ($locations->count() === 1 ? $locations->first() : ''),
+                'available_quantity' => $available,
+                'note' => trim((string) ($line['note'] ?? '')),
+                'warnings' => $warnings,
+                'is_valid' => empty($warnings),
+            ];
+        })->values();
+
+        return response()->json([
+            'data' => $rows,
+            'summary' => [
+                'line_count' => $rows->count(),
+                'valid_count' => $rows->where('is_valid', true)->count(),
+                'warning_count' => $rows->where('is_valid', false)->count(),
+                'total_quantity' => (float) $rows->sum('quantity'),
+            ],
+        ]);
+    }
+
+    public function internalCatalog(Request $request)
+    {
+        $keyword = trim((string) $request->query('keyword', ''));
+        $limit = min(max((int) $request->query('limit', 30), 1), 100);
+
+        return response()->json([
+            'data' => app(GoogleSheetInternalCatalog::class)->search($keyword, $limit),
+            'source' => [
+                'sheet' => 'DANH MỤC',
+                'mode' => 'read_only',
             ],
         ]);
     }
