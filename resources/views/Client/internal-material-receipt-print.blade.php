@@ -48,9 +48,18 @@
         .department { position: absolute; right: 15mm; top: 9mm; font-size: 11px; font-weight: 700; }
         .receipt-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9px; }
         .receipt-table th,
-        .receipt-table td { border: 1px solid #111; padding: 1px 2px; vertical-align: middle; overflow: hidden; }
+        .receipt-table td {
+            border: 1px solid #111;
+            padding: 1px 2px;
+            vertical-align: middle;
+            overflow: visible;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.12;
+        }
         .receipt-table th { height: 8mm; text-align: center; font-size: 9px; font-style: italic; font-weight: 700; }
-        .receipt-table tbody td { height: 6.2mm; }
+        .receipt-table tbody td { min-height: 6.2mm; }
         .center { text-align: center; }
         .right { text-align: right; }
         .signatures { position: relative; height: 25mm; padding-top: 2px; font-size: 10px; font-weight: 700; }
@@ -122,21 +131,24 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @for ($index = 0; $index < 10; $index++)
-                                @php $line = $pageLines->get($index); @endphp
+                            @forelse ($pageLines as $index => $line)
                                 <tr>
                                     <td class="center">{{ $index + 1 }}</td>
-                                    <td>{{ optional($line)->ten_hh }}</td>
-                                    <td>{{ optional($line)->internal_item_code }}</td>
-                                    <td>{{ optional($line)->ma_hh }}</td>
-                                    <td>{{ optional($line)->color }}</td>
-                                    <td class="center">{{ optional($line)->size }}</td>
-                                    <td class="right">{{ $line ? $formatQuantity($line->quantity) : '' }}</td>
-                                    <td class="center">{{ optional($line)->dvt }}</td>
-                                    <td>{{ optional($line)->note }}</td>
-                                    <td>{{ $line ? $receipt->note : '' }}</td>
+                                    <td>{{ $line->ten_hh }}</td>
+                                    <td>{{ $line->internal_item_code }}</td>
+                                    <td>{{ $line->ma_hh }}</td>
+                                    <td>{{ $line->color }}</td>
+                                    <td class="center">{{ $line->size }}</td>
+                                    <td class="right">{{ $formatQuantity($line->quantity) }}</td>
+                                    <td class="center">{{ $line->dvt }}</td>
+                                    <td>{{ $line->note }}</td>
+                                    <td>{{ $receipt->note }}</td>
                                 </tr>
-                            @endfor
+                            @empty
+                                <tr>
+                                    <td colspan="10" class="center">Chưa có dữ liệu</td>
+                                </tr>
+                            @endforelse
                         </tbody>
                     </table>
 

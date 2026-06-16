@@ -18,9 +18,17 @@
         h1 { margin: 0; text-align: center; font-size: 22px; font-weight: 800; text-transform: uppercase; }
         .department { position: absolute; right: 22mm; top: 15mm; font-size: 14px; font-weight: 700; }
         table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
-        th, td { border: 1px solid #111; padding: 4px 3px; vertical-align: middle; }
+        th, td {
+            border: 1px solid #111;
+            padding: 4px 3px;
+            vertical-align: middle;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.15;
+        }
         th { height: 12mm; text-align: center; font-style: italic; }
-        tbody td { height: 10mm; }
+        tbody td { min-height: 10mm; }
         .center { text-align: center; }
         .right { text-align: right; }
         .signatures { position: relative; min-height: 40mm; padding-top: 5px; font-size: 14px; font-weight: 700; }
@@ -85,20 +93,18 @@
                 </tr>
             </thead>
             <tbody>
-                @for ($index = 0; $index < 8; $index++)
-                    <tr>
-                        <td class="center">{{ $index + 1 }}</td>
-                        <td>{{ $index === 0 ? $receipt->ten_hh : '' }}</td>
-                        <td>{{ $index === 0 ? $receipt->ma_sp : '' }}</td>
-                        <td></td>
-                        <td></td>
-                        <td></td>
-                        <td class="right">{{ $index === 0 ? $formatQuantity($receipt->quantity) : '' }}</td>
-                        <td class="center">{{ $index === 0 ? $receipt->dvt : '' }}</td>
-                        <td></td>
-                        <td>{{ $index === 0 ? $receipt->note : '' }}</td>
-                    </tr>
-                @endfor
+                <tr>
+                    <td class="center">1</td>
+                    <td>{{ $receipt->ten_hh }}</td>
+                    <td>{{ $receipt->ma_sp }}</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td class="right">{{ $formatQuantity($receipt->quantity) }}</td>
+                    <td class="center">{{ $receipt->dvt }}</td>
+                    <td></td>
+                    <td>{{ $receipt->note }}</td>
+                </tr>
             </tbody>
         </table>
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\InternalInventoryCount;
 use App\Models\InternalMaterialIssue;
 use App\Models\InternalMaterialIssueAllocation;
+use App\Models\InternalMaterialReceipt;
 use App\Models\InternalProductionOrder;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
@@ -213,7 +214,7 @@ class InternalMaterialIssueController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'issue_type' => 'nullable|in:material,production',
+            'issue_type' => 'nullable|in:material,production,customer',
             'issue_date' => 'required|date',
             'warehouse_code' => 'nullable|string|max:50',
             'receiver_name' => 'nullable|string|max:150',
@@ -248,12 +249,13 @@ class InternalMaterialIssueController extends Controller
         $issue = DB::connection('internal')->transaction(function () use ($data, $issueType) {
             $issue = InternalMaterialIssue::query()->create([
                 'issue_code' => $this->nextIssueCode($issueType),
+                'issue_type' => $issueType,
                 'issue_date' => $data['issue_date'],
                 'warehouse_code' => strtoupper(trim($data['warehouse_code'] ?? '')),
                 'receiver_name' => trim($data['receiver_name'] ?? ''),
-                'department' => trim($data['department'] ?? '') ?: ($issueType === 'production' ? 'Sản xuất' : ''),
+                'department' => trim($data['department'] ?? '') ?: ($issueType === 'production' ? 'Sản xuất' : ($issueType === 'customer' ? 'Kinh doanh' : '')),
                 'production_order' => trim($data['production_order'] ?? ''),
-                'purpose' => trim($data['purpose'] ?? '') ?: ($issueType === 'production' ? 'Xuất BTP đi sản xuất' : 'Xuất vật tư'),
+                'purpose' => trim($data['purpose'] ?? '') ?: ($issueType === 'production' ? 'Xuất BTP đi sản xuất' : ($issueType === 'customer' ? 'Xuất thành phẩm cho khách hàng' : 'Xuất vật tư')),
                 'status' => 'posted',
                 'note' => trim($data['note'] ?? ''),
             ]);
@@ -294,7 +296,100 @@ class InternalMaterialIssueController extends Controller
         return response()->json([
             'message' => $issueType === 'production'
                 ? 'Đã tạo phiếu xuất BTP đi sản xuất.'
-                : 'Đã tạo phiếu xuất vật tư nội bộ.',
+                : ($issueType === 'customer' ? 'Đã tạo phiếu xuất thành phẩm cho khách hàng.' : 'Đã tạo phiếu xuất vật tư nội bộ.'),
+            'data' => $issue,
+            'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in'),
+        ]);
+    }
+
+    public function createFromReceipt(Request $request, InternalMaterialReceipt $receipt)
+    {
+        $data = $request->validate([
+            'issue_date' => 'nullable|date',
+            'receiver_name' => 'nullable|string|max:150',
+            'department' => 'nullable|string|max:150',
+            'purpose' => 'nullable|string|max:255',
+            'note' => 'nullable|string|max:1000',
+        ]);
+
+        $receipt->load('lines');
+        if ($receipt->lines->isEmpty()) {
+            return response()->json(['message' => 'Phiếu nhập không có dòng hàng để xuất.'], 422);
+        }
+
+        $existingIssue = InternalMaterialIssue::query()
+            ->where(function ($query) use ($receipt) {
+                $query->where('source_receipt_id', $receipt->id)
+                    ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%');
+            })
+            ->first();
+
+        if ($existingIssue) {
+            return response()->json([
+                'message' => 'Phiếu nhập này đã được tạo phiếu xuất trước đó: ' . $existingIssue->issue_code,
+                'data' => $existingIssue,
+                'existing' => true,
+                'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $existingIssue->id . '/in'),
+            ]);
+        }
+
+        $issueDate = $data['issue_date'] ?? now()->format('Y-m-d');
+        $warehouseCode = strtoupper(trim((string) $receipt->warehouse_code));
+        $productionOrders = $receipt->lines
+            ->pluck('production_order')
+            ->filter()
+            ->unique()
+            ->values()
+            ->implode(', ');
+
+        $issue = DB::connection('internal')->transaction(function () use ($receipt, $data, $issueDate, $warehouseCode, $productionOrders) {
+            $issue = InternalMaterialIssue::query()->create([
+                'source_receipt_id' => $receipt->id,
+                'issue_code' => $this->nextIssueCode('customer'),
+                'issue_type' => 'customer',
+                'issue_date' => $issueDate,
+                'warehouse_code' => $warehouseCode,
+                'receiver_name' => trim($data['receiver_name'] ?? '') ?: 'Khách hàng',
+                'department' => trim($data['department'] ?? '') ?: 'Kinh doanh',
+                'production_order' => $productionOrders,
+                'purpose' => trim($data['purpose'] ?? '') ?: 'Xuất thành phẩm cho khách hàng',
+                'status' => 'posted',
+                'note' => trim($data['note'] ?? '') ?: ('Tạo từ phiếu nhập ' . $receipt->receipt_code),
+            ]);
+
+            foreach ($receipt->lines as $receiptLine) {
+                $line = [
+                    'production_order_id' => $receiptLine->production_order_id,
+                    'production_order' => trim((string) $receiptLine->production_order),
+                    'purchase_order' => trim((string) $receiptLine->purchase_order),
+                    'customer' => trim((string) $receiptLine->customer),
+                    'ma_hh' => strtoupper(trim((string) $receiptLine->ma_hh)),
+                    'ten_hh' => trim((string) $receiptLine->ten_hh),
+                    'dvt' => trim((string) $receiptLine->dvt),
+                    'quantity' => (float) $receiptLine->quantity,
+                    'location_code' => strtoupper(trim((string) ($receiptLine->location_code ?: $receipt->location_code))),
+                    'internal_item_code' => trim((string) $receiptLine->internal_item_code),
+                    'size' => trim((string) $receiptLine->size),
+                    'color' => trim((string) $receiptLine->color),
+                    'note' => trim((string) $receiptLine->note),
+                ];
+
+                $issueLine = $issue->lines()->create($line);
+                $this->decreaseInternalStock($line, $warehouseCode, $issueLine->id);
+            }
+
+            return $issue->load('lines');
+        });
+
+        app(InternalAudit::class)->model('issue.created_from_receipt', $issue, [
+            'receipt_id' => $receipt->id,
+            'receipt_code' => $receipt->receipt_code,
+            'line_count' => $issue->lines->count(),
+            'total_quantity' => (float) $issue->lines->sum('quantity'),
+        ], $request);
+
+        return response()->json([
+            'message' => 'Đã tạo phiếu xuất thành phẩm từ phiếu nhập ' . $receipt->receipt_code . '.',
             'data' => $issue,
             'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in'),
         ]);
@@ -610,8 +705,15 @@ class InternalMaterialIssueController extends Controller
 
     private function nextIssueCode(string $issueType = 'material')
     {
+        $prefix = 'PXVT';
+        if ($issueType === 'production') {
+            $prefix = 'PXBTP';
+        } elseif ($issueType === 'customer') {
+            $prefix = 'PXTP';
+        }
+
         return app(InternalDocumentNumber::class)
-            ->next($issueType === 'production' ? 'PXBTP' : 'PXVT', 4);
+            ->next($prefix, 4);
     }
 
     private function productionTrackingKey($productionOrder, $size, $color): string

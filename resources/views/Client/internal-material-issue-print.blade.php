@@ -37,6 +37,20 @@
     @php
         $isProductionIssue = strpos((string) $issue->issue_code, 'PXBTP-') === 0
             || trim((string) $issue->purpose) === 'Xuất BTP đi sản xuất';
+        $isCustomerFinishedGoodsIssue = (string) $issue->issue_type === 'customer'
+            || strpos((string) $issue->issue_code, 'PXTP-') === 0
+            || trim((string) $issue->purpose) === 'Xuất thành phẩm cho khách hàng';
+        $documentTitle = $isCustomerFinishedGoodsIssue
+            ? 'Phiếu Xuất Kho Thành Phẩm'
+            : ($isProductionIssue ? 'Phiếu Xuất Bán Thành Phẩm' : 'Phiếu Xuất Vật Tư Nội Bộ');
+        $documentNote = $isCustomerFinishedGoodsIssue
+            ? 'Phiếu xuất thành phẩm cho khách hàng, dùng để trừ tồn kho nội bộ.'
+            : ($isProductionIssue ? 'Phiếu giao bán thành phẩm cho bộ phận sản xuất.' : 'Phiếu nội bộ, dùng để thủ kho xuất vật tư và bàn giao chứng từ.');
+        $materialColumnTitle = $isCustomerFinishedGoodsIssue ? 'Mã TP' : 'Mã vật tư';
+        $nameColumnTitle = $isCustomerFinishedGoodsIssue ? 'Tên hàng' : 'Tên vật tư';
+        $formatQuantity = static function ($value) {
+            return rtrim(rtrim(number_format((float) $value, 3, ',', '.'), '0'), ',');
+        };
     @endphp
     <div class="toolbar">
         <button class="btn" onclick="window.print()">In phiếu</button>
@@ -47,7 +61,7 @@
         <div class="top">
             <div>
                 <div class="company">Công ty TNHH Nhãn Thời Gian Việt Tiến</div>
-                <div>{{ $isProductionIssue ? 'Phiếu giao bán thành phẩm cho bộ phận sản xuất.' : 'Phiếu nội bộ, dùng để thủ kho xuất vật tư và bàn giao chứng từ.' }}</div>
+                <div>{{ $documentNote }}</div>
             </div>
             <div class="code-box">
                 <div>Số phiếu: <strong>{{ $issue->issue_code }}</strong></div>
@@ -55,7 +69,7 @@
             </div>
         </div>
 
-        <h1>{{ $isProductionIssue ? 'Phiếu Xuất Bán Thành Phẩm' : 'Phiếu Xuất Vật Tư Nội Bộ' }}</h1>
+        <h1>{{ $documentTitle }}</h1>
         <div class="subtitle">Ngày {{ optional($issue->issue_date)->format('d/m/Y') }}</div>
 
         <section class="meta">
@@ -72,8 +86,8 @@
                 <tr>
                     <th style="width: 42px;">STT</th>
                     <th style="width: 82px;">Lệnh SX</th>
-                    <th style="width: 110px;">Mã vật tư</th>
-                    <th>Tên vật tư</th>
+                    <th style="width: 110px;">{{ $materialColumnTitle }}</th>
+                    <th>{{ $nameColumnTitle }}</th>
                     <th style="width: 58px;">ĐVT</th>
                     <th style="width: 70px;">SL lệnh</th>
                     <th style="width: 76px;">Thực xuất</th>
@@ -89,15 +103,15 @@
                         <td>{{ $line->ma_hh }}</td>
                         <td>{{ $line->ten_hh }}</td>
                         <td class="text-center">{{ $line->dvt }}</td>
-                        <td class="text-end">{{ $line->ordered_quantity !== null ? number_format($line->ordered_quantity, 3, ',', '.') : '' }}</td>
-                        <td class="text-end">{{ number_format($line->quantity, 3, ',', '.') }}</td>
+                        <td class="text-end">{{ $line->ordered_quantity !== null ? $formatQuantity($line->ordered_quantity) : '' }}</td>
+                        <td class="text-end">{{ $formatQuantity($line->quantity) }}</td>
                         <td>{{ $line->location_code }}</td>
                         <td>{{ $line->internal_item_code }}{{ $line->size ? ' / ' . $line->size : '' }}</td>
                     </tr>
                 @endforeach
                 <tr>
                     <td colspan="6" class="text-end"><strong>Tổng cộng</strong></td>
-                    <td class="text-end"><strong>{{ number_format($issue->lines->sum('quantity'), 3, ',', '.') }}</strong></td>
+                    <td class="text-end"><strong>{{ $formatQuantity($issue->lines->sum('quantity')) }}</strong></td>
                     <td colspan="2"></td>
                 </tr>
             </tbody>

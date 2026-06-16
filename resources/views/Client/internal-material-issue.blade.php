@@ -383,8 +383,13 @@
                     .then(result => {
                         internalCatalogItems = result.data || [];
                         document.getElementById('internalCatalogOptions').innerHTML = internalCatalogItems.map(item => {
-                            const label = [item.name, item.unit, item.shelf ? `Kệ ${item.shelf}` : ''].filter(Boolean).join(' · ');
-                            return `<option value="${esc(item.code)}" label="${esc(label)}"></option>`;
+                            const label = [
+                                item.name,
+                                item.unit,
+                                item.shelf ? `Kệ ${item.shelf}` : '',
+                                item.has_code ? '' : 'Chưa có mã'
+                            ].filter(Boolean).join(' · ');
+                            return `<option value="${esc(item.value || item.code || item.name || '')}" label="${esc(label)}"></option>`;
                         }).join('');
                     })
                     .catch(() => {});
@@ -393,12 +398,15 @@
 
         function applyInternalCatalog(input) {
             const code = input.value.trim().toUpperCase();
-            const item = internalCatalogItems.find(row => String(row.code || '').trim().toUpperCase() === code);
+            const item = internalCatalogItems.find(row => {
+                return [row.code, row.value, row.name].some(value => String(value || '').trim().toUpperCase() === code);
+            });
             if (!item) return;
 
             const row = input.closest('tr');
             if (!row.querySelector('.ten-hh').value.trim()) row.querySelector('.ten-hh').value = item.name || '';
             if (!row.querySelector('.dvt').value.trim()) row.querySelector('.dvt').value = item.unit || '';
+            if (item.code) input.value = item.code;
             if (!row.querySelector('.location-code').value.trim() && item.shelf) {
                 row.querySelector('.location-code').value = item.shelf;
             }

@@ -11,7 +11,9 @@ class InternalMaterialIssue extends Model
     protected $table = 'internal_material_issues';
 
     protected $fillable = [
+        'source_receipt_id',
         'issue_code',
+        'issue_type',
         'issue_date',
         'warehouse_code',
         'receiver_name',

@@ -361,6 +361,7 @@
                             <th>Vị trí</th>
                             <th class="text-end">Số dòng</th>
                             <th class="text-end">Tổng SL</th>
+                            <th>Xuất TP</th>
                             <th>Ghi chú</th>
                             <th></th>
                         </tr>
@@ -697,8 +698,13 @@
                     .then(result => {
                         internalCatalogItems = result.data || [];
                         document.getElementById('internalCatalogOptions').innerHTML = internalCatalogItems.map(item => {
-                            const label = [item.name, item.unit, item.shelf ? `Kệ ${item.shelf}` : ''].filter(Boolean).join(' · ');
-                            return `<option value="${escapeHtml(item.code)}" label="${escapeHtml(label)}"></option>`;
+                            const label = [
+                                item.name,
+                                item.unit,
+                                item.shelf ? `Kệ ${item.shelf}` : '',
+                                item.has_code ? '' : 'Chưa có mã'
+                            ].filter(Boolean).join(' · ');
+                            return `<option value="${escapeHtml(item.value || item.code || item.name || '')}" label="${escapeHtml(label)}"></option>`;
                         }).join('');
                     })
                     .catch(() => {});
@@ -707,12 +713,15 @@
 
         function applyInternalCatalog(input) {
             const code = input.value.trim().toUpperCase();
-            const item = internalCatalogItems.find(row => String(row.code || '').trim().toUpperCase() === code);
+            const item = internalCatalogItems.find(row => {
+                return [row.code, row.value, row.name].some(value => String(value || '').trim().toUpperCase() === code);
+            });
             if (!item) return;
 
             const row = input.closest('tr');
             if (!row.querySelector('.receipt-note').value.trim()) row.querySelector('.receipt-note').value = item.name || '';
             if (!row.querySelector('.receipt-dvt').value.trim()) row.querySelector('.receipt-dvt').value = item.unit || '';
+            if (item.code) input.value = item.code;
         }
 
         let productionOrderSearchTimer = null;
@@ -800,6 +809,44 @@
             row.firstElementChild.textContent = body.children.length + 1;
             body.appendChild(row);
             return row;
+        }
+
+        function focusReceiptInput(input) {
+            if (!input) return;
+            input.focus();
+            if (typeof input.select === 'function') input.select();
+        }
+
+        function moveReceiptEntryByEnter(input) {
+            const row = input.closest('tr');
+            if (!row) return;
+
+            if (input.classList.contains('receipt-internal-code')) {
+                applyInternalCatalog(input);
+                focusReceiptInput(row.querySelector('.receipt-quantity'));
+                return;
+            }
+
+            if (input.classList.contains('receipt-ma-sp')) {
+                focusReceiptInput(row.querySelector('.receipt-quantity'));
+                return;
+            }
+
+            if (input.classList.contains('receipt-color') || input.classList.contains('receipt-size')) {
+                focusReceiptInput(row.querySelector('.receipt-quantity'));
+                return;
+            }
+
+            if (input.classList.contains('receipt-quantity')) {
+                let nextRow = row.nextElementSibling;
+                if (!nextRow) nextRow = appendReceiptRow();
+                focusReceiptInput(nextRow.querySelector('.receipt-internal-code'));
+                return;
+            }
+
+            const inputs = Array.from(row.querySelectorAll('input'));
+            const nextInput = inputs[inputs.indexOf(input) + 1];
+            focusReceiptInput(nextInput || row.querySelector('.receipt-quantity'));
         }
 
         function expandProductionOrder(input, variants) {
@@ -1168,14 +1215,23 @@
                     <td>${escapeHtml(receipt.location_code || '')}</td>
                     <td class="text-end">${formatNumber(receipt.lines_count || 0)}</td>
                     <td class="text-end">${formatNumber(receipt.total_quantity || 0)}</td>
+                    <td>${receipt.issue_status === 'exported'
+                        ? `<span class="badge text-bg-success">Đã xuất ${escapeHtml(receipt.issue_code || '')}</span>`
+                        : '<span class="badge text-bg-secondary">Chưa xuất</span>'}</td>
                     <td>${escapeHtml(receipt.note || '')}</td>
                     <td class="text-end text-nowrap">
                         <a class="btn btn-sm btn-outline-primary btn-icon" target="_blank" href="${receipt.print_url}"><i data-lucide="printer"></i>In lại</a>
+                        <button type="button" class="btn btn-sm ${receipt.issue_status === 'exported' ? 'btn-outline-secondary' : 'btn-outline-success'} btn-icon issue-from-receipt-btn"
+                            data-id="${receipt.id}"
+                            data-code="${escapeHtml(receipt.receipt_code)}"
+                            data-print-url="${escapeHtml(receipt.issue_print_url || '')}">
+                            <i data-lucide="${receipt.issue_status === 'exported' ? 'file-check-2' : 'send'}"></i>${receipt.issue_status === 'exported' ? 'In PXTP' : 'Xuất TP'}
+                        </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary btn-icon assign-receipt-location-btn" data-id="${receipt.id}" data-code="${escapeHtml(receipt.receipt_code)}" data-location="${escapeHtml(receipt.location_code || '')}"><i data-lucide="map-pin"></i>Vị trí</button>
                         <button type="button" class="btn btn-sm btn-outline-danger delete-receipt-btn" data-id="${receipt.id}" data-code="${escapeHtml(receipt.receipt_code)}"><i data-lucide="trash-2"></i>Xóa</button>
                     </td>
-                </tr>`).join('') || '<tr><td colspan="8" class="empty-state text-center">Chưa có phiếu nhập trong ngày/kho đang chọn</td></tr>';
-                document.getElementById('receiptListSummary').textContent = `${formatNumber(result.summary?.receipt_count || 0)} phiếu · ${formatNumber(result.summary?.line_count || 0)} dòng · SL ${formatNumber(result.summary?.total_quantity || 0)}`;
+                </tr>`).join('') || '<tr><td colspan="9" class="empty-state text-center">Chưa có phiếu nhập trong ngày/kho đang chọn</td></tr>';
+                document.getElementById('receiptListSummary').textContent = `${formatNumber(result.summary?.receipt_count || 0)} phiếu · ${formatNumber(result.summary?.line_count || 0)} dòng · SL ${formatNumber(result.summary?.total_quantity || 0)} · Đã xuất ${formatNumber(result.summary?.exported_count || 0)}`;
                 refreshIcons();
             });
         }
@@ -1296,6 +1352,47 @@
         });
 
         document.getElementById('receiptRows').addEventListener('click', event => {
+            const issueButton = event.target.closest('.issue-from-receipt-btn');
+            if (issueButton) {
+                if (issueButton.dataset.printUrl) {
+                    window.open(issueButton.dataset.printUrl, '_blank');
+                    return;
+                }
+
+                const receiver = prompt(`Khách hàng/người nhận cho phiếu xuất TP từ ${issueButton.dataset.code}:`, 'Khách hàng');
+                if (receiver === null) return;
+                if (!confirm(`Tạo phiếu xuất thành phẩm cho khách từ toàn bộ dòng của ${issueButton.dataset.code}? Phiếu này sẽ trừ tồn nội bộ.`)) return;
+
+                issueButton.disabled = true;
+                fetch(`/api/xuat-vat-tu-noi-bo/tu-phieu-nhap/${issueButton.dataset.id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                    body: JSON.stringify({
+                        issue_date: value('checkedAt') || new Date().toISOString().slice(0, 10),
+                        receiver_name: receiver.trim() || 'Khách hàng',
+                        department: 'Kinh doanh',
+                        purpose: 'Xuất thành phẩm cho khách hàng'
+                    })
+                }).then(r => jsonOrError(r, 'Không tạo được phiếu xuất từ phiếu nhập'))
+                  .then(result => {
+                      if (result.print_url) window.open(result.print_url, '_blank');
+                      loadReceipts();
+                      loadPackages();
+                      loadLocations();
+                      loadWarehouseStats();
+                      loadWarehouseMap();
+                      loadLocationContents();
+                  })
+                  .catch(e => {
+                      alert(e.message);
+                      if (e.message.includes('đã được tạo phiếu xuất') || e.message.includes('đã được tạo')) {
+                          loadReceipts();
+                      }
+                  })
+                  .finally(() => { issueButton.disabled = false; });
+                return;
+            }
+
             const assignButton = event.target.closest('.assign-receipt-location-btn');
             if (assignButton) {
                 editingReceiptId = assignButton.dataset.id;
@@ -1468,6 +1565,11 @@
             if (event.target.classList.contains('receipt-ma-sp')) searchReceiptProducts(event.target);
             if (event.target.classList.contains('receipt-order')) searchProductionOrders(event.target);
             if (event.target.classList.contains('receipt-internal-code')) searchInternalCatalog(event.target);
+        });
+        document.getElementById('receiptEntryRows').addEventListener('keydown', event => {
+            if (event.key !== 'Enter' || !event.target.matches('input')) return;
+            event.preventDefault();
+            moveReceiptEntryByEnter(event.target);
         });
         document.getElementById('receiptEntryRows').addEventListener('change', event => {
             if (event.target.classList.contains('receipt-order')) applyProductionOrder(event.target);

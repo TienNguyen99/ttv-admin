@@ -44,6 +44,7 @@ class InternalDocumentNumber
             'PNTP' => ['internal_material_receipts', 'receipt_code'],
             'PXVT' => ['internal_material_issues', 'issue_code'],
             'PXBTP' => ['internal_material_issues', 'issue_code'],
+            'PXTP' => ['internal_material_issues', 'issue_code'],
             'PK' => ['inventory_packages', 'package_code'],
         ];
 

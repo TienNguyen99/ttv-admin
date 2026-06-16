@@ -57,27 +57,50 @@ class InternalItemCatalogController extends Controller
     {
         $keyword = trim((string) $request->query('keyword', ''));
         $limit = min(max((int) $request->query('limit', 30), 1), 100);
-        $query = InternalItemCatalog::query()
-            ->where('is_active', true)
-            ->whereNotNull('item_code')
-            ->where('item_code', '<>', '');
-
-        if ($keyword !== '') {
-            $query->where(function ($q) use ($keyword) {
-                $q->where('item_code', 'like', '%' . $keyword . '%')
-                    ->orWhere('item_name', 'like', '%' . $keyword . '%');
-            });
-        }
+        $normalizedKeyword = $this->normalizeSearchText($keyword);
+        $tokens = collect(explode(' ', $normalizedKeyword))->filter()->values();
 
         return response()->json([
-            'data' => $query->orderBy('item_code')->limit($limit)->get()->map(function ($row) {
-                return [
-                    'code' => $row->item_code,
-                    'name' => $row->item_name,
-                    'unit' => $row->unit,
-                    'shelf' => $row->shelf_code,
-                ];
-            }),
+            'data' => InternalItemCatalog::query()
+                ->where('is_active', true)
+                ->orderByRaw("CASE WHEN item_code IS NULL OR item_code = '' THEN 1 ELSE 0 END")
+                ->orderBy('item_code')
+                ->orderBy('item_name')
+                ->get()
+                ->filter(function ($row) use ($tokens) {
+                    if ($tokens->isEmpty()) {
+                        return true;
+                    }
+
+                    $haystack = $this->normalizeSearchText(implode(' ', [
+                        $row->item_code,
+                        $row->item_name,
+                        $row->unit,
+                        $row->shelf_code,
+                    ]));
+
+                    return $tokens->every(function ($token) use ($haystack) {
+                        return strpos($haystack, $token) !== false;
+                    });
+                })
+                ->take($limit)
+                ->values()
+                ->map(function ($row) {
+                    $code = trim((string) $row->item_code);
+
+                    return [
+                        'code' => $code,
+                        'value' => $code !== '' ? $code : $row->item_name,
+                        'has_code' => $code !== '',
+                        'name' => $row->item_name,
+                        'unit' => $row->unit,
+                        'shelf' => $row->shelf_code,
+                    ];
+                })
+                ->unique(function ($row) {
+                    return mb_strtoupper(($row['code'] ?: $row['name']) . '|' . $row['unit']);
+                })
+                ->values(),
             'source' => ['sheet' => self::SHEET_NAME, 'mode' => 'internal_cache'],
         ]);
     }
@@ -182,6 +205,13 @@ class InternalItemCatalogController extends Controller
     private function normalizeHeader($value): string
     {
         $value = preg_replace('/[^a-z0-9]+/', ' ', Str::ascii(mb_strtolower(trim((string) $value))));
+        return trim(preg_replace('/\s+/', ' ', $value));
+    }
+
+    private function normalizeSearchText($value): string
+    {
+        $value = Str::ascii(mb_strtolower(trim((string) $value)));
+        $value = preg_replace('/[^a-z0-9]+/', ' ', $value);
         return trim(preg_replace('/\s+/', ' ', $value));
     }
 

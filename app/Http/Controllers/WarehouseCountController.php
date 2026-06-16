@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternalInventoryCount;
+use App\Models\InternalMaterialIssue;
 use App\Models\InternalMaterialReceipt;
 use App\Models\InternalOpeningStock;
 use App\Models\InventoryPackage;
@@ -181,6 +182,12 @@ class WarehouseCountController extends Controller
 
         return response()->json([
             'data' => $receipts->map(function ($receipt) {
+                $issue = InternalMaterialIssue::query()
+                    ->where('source_receipt_id', $receipt->id)
+                    ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%')
+                    ->orderByDesc('id')
+                    ->first();
+
                 return [
                     'id' => $receipt->id,
                     'receipt_code' => $receipt->receipt_code,
@@ -190,6 +197,10 @@ class WarehouseCountController extends Controller
                     'note' => $receipt->note,
                     'lines_count' => (int) $receipt->lines_count,
                     'total_quantity' => (float) ($receipt->total_quantity ?? 0),
+                    'issue_status' => $issue ? 'exported' : 'not_exported',
+                    'issue_code' => $issue->issue_code ?? null,
+                    'issue_id' => $issue->id ?? null,
+                    'issue_print_url' => $issue ? url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in') : null,
                     'print_url' => url('/client/nhap-thanh-pham-noi-bo/' . $receipt->id . '/in'),
                 ];
             }),
@@ -197,6 +208,12 @@ class WarehouseCountController extends Controller
                 'receipt_count' => $receipts->count(),
                 'line_count' => (int) $receipts->sum('lines_count'),
                 'total_quantity' => (float) $receipts->sum('total_quantity'),
+                'exported_count' => $receipts->filter(function ($receipt) {
+                    return InternalMaterialIssue::query()
+                        ->where('source_receipt_id', $receipt->id)
+                        ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%')
+                        ->exists();
+                })->count(),
             ],
         ]);
     }

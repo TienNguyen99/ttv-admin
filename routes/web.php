@@ -156,6 +156,7 @@ Route::get('/api/ma-noi-bo-danh-muc', [InternalItemCatalogController::class, 'su
 Route::get('/client/theo-doi-san-xuat', [InternalMaterialIssueController::class, 'productionTrackingIndex']);
 Route::get('/api/theo-doi-san-xuat', [InternalMaterialIssueController::class, 'productionTracking']);
 Route::post('/api/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'store']);
+Route::post('/api/xuat-vat-tu-noi-bo/tu-phieu-nhap/{receipt}', [InternalMaterialIssueController::class, 'createFromReceipt']);
 Route::get('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'show']);
 Route::delete('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'destroy']);
 Route::get('/client/xuat-vat-tu-noi-bo/{issue}/in', [InternalMaterialIssueController::class, 'print']);
