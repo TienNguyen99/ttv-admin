@@ -21,6 +21,10 @@ class GoogleSheetInternalCatalog
                     'code' => $row->item_code,
                     'unit' => $row->unit,
                     'shelf' => $row->shelf_code,
+                    'size' => $row->size,
+                    'color' => $row->color,
+                    'logo_color' => $row->logo_color,
+                    'side' => $row->side,
                 ];
             });
     }
@@ -36,7 +40,11 @@ class GoogleSheetInternalCatalog
                 }
 
                 return mb_strpos(mb_strtoupper($row['code']), $keyword) !== false
-                    || mb_strpos(mb_strtoupper($row['name']), $keyword) !== false;
+                    || mb_strpos(mb_strtoupper($row['name']), $keyword) !== false
+                    || mb_strpos(mb_strtoupper((string) ($row['size'] ?? '')), $keyword) !== false
+                    || mb_strpos(mb_strtoupper((string) ($row['color'] ?? '')), $keyword) !== false
+                    || mb_strpos(mb_strtoupper((string) ($row['logo_color'] ?? '')), $keyword) !== false
+                    || mb_strpos(mb_strtoupper((string) ($row['side'] ?? '')), $keyword) !== false;
             })
             ->take($limit)
             ->values();

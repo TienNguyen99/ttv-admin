@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
@@ -81,7 +81,7 @@
     </div>
 
     @php
-        $pages = $receipt->lines->values()->chunk(10);
+        $pages = $receipt->lines->values()->chunk(8);
         if ($pages->isEmpty()) {
             $pages = collect([collect()]);
         }
@@ -106,22 +106,21 @@
                     <table class="receipt-table">
                         <colgroup>
                             <col style="width:4%">
-                            <col style="width:15%">
+                            <col style="width:20%">
+                            <col style="width:16%">
                             <col style="width:14%">
-                            <col style="width:14%">
-                            <col style="width:10%">
+                            <col style="width:9%">
                             <col style="width:7%">
                             <col style="width:9%">
                             <col style="width:5%">
-                            <col style="width:13%">
-                            <col style="width:9%">
+                            <col style="width:12%">
+                            <col style="width:4%">
                         </colgroup>
                         <thead>
                             <tr>
                                 <th>Stt</th>
                                 <th>Danh mục</th>
                                 <th>Mã nội bộ</th>
-                                <th>Mã kế toán</th>
                                 <th>Màu sắc</th>
                                 <th>Size</th>
                                 <th>Số lượng</th>
@@ -136,7 +135,6 @@
                                     <td class="center">{{ $index + 1 }}</td>
                                     <td>{{ $line->ten_hh }}</td>
                                     <td>{{ $line->internal_item_code }}</td>
-                                    <td>{{ $line->ma_hh }}</td>
                                     <td>{{ $line->color }}</td>
                                     <td class="center">{{ $line->size }}</td>
                                     <td class="right">{{ $formatQuantity($line->quantity) }}</td>
@@ -146,7 +144,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="10" class="center">Chưa có dữ liệu</td>
+                                    <td colspan="9" class="center">Chưa có dữ liệu</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -178,3 +176,4 @@
     @endforeach
 </body>
 </html>
+

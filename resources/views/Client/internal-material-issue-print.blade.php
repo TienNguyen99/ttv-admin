@@ -42,12 +42,11 @@
             || trim((string) $issue->purpose) === 'Xuất thành phẩm cho khách hàng';
         $documentTitle = $isCustomerFinishedGoodsIssue
             ? 'Phiếu Xuất Kho Thành Phẩm'
-            : ($isProductionIssue ? 'Phiếu Xuất Bán Thành Phẩm' : 'Phiếu Xuất Vật Tư Nội Bộ');
+            : ($isProductionIssue ? 'Phiếu Xuất Bán Thành Phẩm' : 'Phiếu Xuất Kho Nội Bộ');
         $documentNote = $isCustomerFinishedGoodsIssue
             ? 'Phiếu xuất thành phẩm cho khách hàng, dùng để trừ tồn kho nội bộ.'
-            : ($isProductionIssue ? 'Phiếu giao bán thành phẩm cho bộ phận sản xuất.' : 'Phiếu nội bộ, dùng để thủ kho xuất vật tư và bàn giao chứng từ.');
-        $materialColumnTitle = $isCustomerFinishedGoodsIssue ? 'Mã TP' : 'Mã vật tư';
-        $nameColumnTitle = $isCustomerFinishedGoodsIssue ? 'Tên hàng' : 'Tên vật tư';
+            : ($isProductionIssue ? 'Phiếu giao bán thành phẩm cho bộ phận sản xuất.' : 'Phiếu xuất kho nội bộ, dùng để thủ kho bàn giao chứng từ.');
+        $nameColumnTitle = 'Tên hàng';
         $formatQuantity = static function ($value) {
             return rtrim(rtrim(number_format((float) $value, 3, ',', '.'), '0'), ',');
         };
@@ -86,7 +85,6 @@
                 <tr>
                     <th style="width: 42px;">STT</th>
                     <th style="width: 82px;">Lệnh SX</th>
-                    <th style="width: 110px;">{{ $materialColumnTitle }}</th>
                     <th>{{ $nameColumnTitle }}</th>
                     <th style="width: 58px;">ĐVT</th>
                     <th style="width: 70px;">SL lệnh</th>
@@ -100,7 +98,6 @@
                     <tr>
                         <td class="text-center">{{ $index + 1 }}</td>
                         <td>{{ $line->production_order }}</td>
-                        <td>{{ $line->ma_hh }}</td>
                         <td>{{ $line->ten_hh }}</td>
                         <td class="text-center">{{ $line->dvt }}</td>
                         <td class="text-end">{{ $line->ordered_quantity !== null ? $formatQuantity($line->ordered_quantity) : '' }}</td>
@@ -110,7 +107,7 @@
                     </tr>
                 @endforeach
                 <tr>
-                    <td colspan="6" class="text-end"><strong>Tổng cộng</strong></td>
+                    <td colspan="5" class="text-end"><strong>Tổng cộng</strong></td>
                     <td class="text-end"><strong>{{ $formatQuantity($issue->lines->sum('quantity')) }}</strong></td>
                     <td colspan="2"></td>
                 </tr>

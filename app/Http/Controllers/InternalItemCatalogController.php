@@ -30,7 +30,11 @@ class InternalItemCatalogController extends Controller
                 $q->where('item_code', 'like', '%' . $keyword . '%')
                     ->orWhere('item_name', 'like', '%' . $keyword . '%')
                     ->orWhere('unit', 'like', '%' . $keyword . '%')
-                    ->orWhere('shelf_code', 'like', '%' . $keyword . '%');
+                    ->orWhere('shelf_code', 'like', '%' . $keyword . '%')
+                    ->orWhere('size', 'like', '%' . $keyword . '%')
+                    ->orWhere('color', 'like', '%' . $keyword . '%')
+                    ->orWhere('logo_color', 'like', '%' . $keyword . '%')
+                    ->orWhere('side', 'like', '%' . $keyword . '%');
             });
         }
 
@@ -77,6 +81,10 @@ class InternalItemCatalogController extends Controller
                         $row->item_name,
                         $row->unit,
                         $row->shelf_code,
+                        $row->size,
+                        $row->color,
+                        $row->logo_color,
+                        $row->side,
                     ]));
 
                     return $tokens->every(function ($token) use ($haystack) {
@@ -95,10 +103,21 @@ class InternalItemCatalogController extends Controller
                         'name' => $row->item_name,
                         'unit' => $row->unit,
                         'shelf' => $row->shelf_code,
+                        'size' => $row->size,
+                        'color' => $row->color,
+                        'logo_color' => $row->logo_color,
+                        'side' => $row->side,
                     ];
                 })
                 ->unique(function ($row) {
-                    return mb_strtoupper(($row['code'] ?: $row['name']) . '|' . $row['unit']);
+                    return mb_strtoupper(implode('|', [
+                        $row['code'] ?: $row['name'],
+                        $row['unit'],
+                        $row['size'],
+                        $row['color'],
+                        $row['logo_color'],
+                        $row['side'],
+                    ]));
                 })
                 ->values(),
             'source' => ['sheet' => self::SHEET_NAME, 'mode' => 'internal_cache'],
@@ -164,6 +183,10 @@ class InternalItemCatalogController extends Controller
                         'item_code' => $code !== '' ? $code : null,
                         'item_name' => $name,
                         'unit' => $this->pick($row, ['dvt']),
+                        'size' => $this->pick($row, ['size', 'kich co']),
+                        'color' => $this->pick($row, ['mau', 'mau vai', 'fabric color', 'color']),
+                        'logo_color' => $this->pick($row, ['mau in', 'logo color']),
+                        'side' => $this->pick($row, ['mat', 'vi tri', 'side', 'position']),
                         'shelf_code' => $this->pick($row, ['ke']),
                         'opening_quantity' => $this->number($this->pick($row, ['ton dau'])),
                         'image_url' => $this->pick($row, ['anh']),

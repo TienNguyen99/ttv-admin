@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Xuất vật tư nội bộ</title>
+    <title>Xuất kho nội bộ</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="{{ asset('css/warehouse-wms.css') }}" rel="stylesheet">
     <style>
@@ -114,7 +114,7 @@
         <h1 class="wms-topbar__title">WMS May Mặc</h1>
         <div class="wms-global-search">
             <i data-lucide="search"></i>
-            <input id="topIssueKeyword" aria-label="Tìm phiếu xuất" placeholder="Tìm phiếu xuất, mã vật tư hoặc người nhận...">
+            <input id="topIssueKeyword" aria-label="Tìm phiếu xuất" placeholder="Tìm phiếu xuất, mã hàng hoặc người nhận...">
         </div>
         <div class="wms-topbar__actions">
             <a class="wms-btn" href="{{ url('/client/ton-kho-noi-bo') }}"><i data-lucide="boxes"></i> Xem tồn</a>
@@ -135,7 +135,7 @@
 
         <section class="wms-kpis">
             <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="clipboard-list"></i></div><div><div class="wms-kpi__label">Phiếu trong danh sách</div><div id="issueCount" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Theo bộ lọc</div></div></article>
-            <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="list-ordered"></i></div><div><div class="wms-kpi__label">Dòng vật tư</div><div id="lineCount" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Chi tiết các phiếu</div></div></article>
+            <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="list-ordered"></i></div><div><div class="wms-kpi__label">Dòng hàng</div><div id="lineCount" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Chi tiết các phiếu</div></div></article>
             <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="package-minus"></i></div><div><div class="wms-kpi__label">Tổng số lượng</div><div id="totalQuantity" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Đã xuất nội bộ</div></div></article>
             <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="factory"></i></div><div><div class="wms-kpi__label">Luồng xuất</div><div id="issueTypeMetric" class="wms-kpi__value" style="font-size:18px">BTP sản xuất</div><div class="wms-kpi__meta">Chọn tại thông tin phiếu</div></div></article>
         </section>
@@ -144,7 +144,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h2 class="section-title">Thông tin phiếu</h2>
-                    <div class="hint">Tạo phiếu sẽ trừ tồn nội bộ theo mã, vị trí, mã nội bộ, size và màu nếu có nhập.</div>
+                    <div class="hint">Tạo phiếu sẽ trừ tồn nội bộ theo mã, vị trí, mã nội bộ, size, màu và mặt nếu có nhập.</div>
                 </div>
                 <div class="d-flex gap-2">
                     <button id="openPasteImportBtn" type="button" class="btn btn-outline-primary btn-sm"><i data-lucide="clipboard-paste"></i> Paste Excel</button>
@@ -153,7 +153,7 @@
             </div>
 
             <div class="row g-2 mb-3">
-                <div class="col-md-2"><label class="form-label">Nghiệp vụ</label><select id="issueType" class="form-select"><option value="production">Xuất BTP đi sản xuất</option><option value="material">Xuất vật tư</option></select></div>
+                <div class="col-md-2"><label class="form-label">Nghiệp vụ</label><select id="issueType" class="form-select"><option value="production">Xuất BTP đi sản xuất</option><option value="customer">Xuất thành phẩm cho khách</option></select></div>
                 <div class="col-md-2"><label class="form-label">Ngày xuất</label><input id="issueDate" type="date" class="form-control" value="{{ now()->format('Y-m-d') }}"></div>
                 <div class="col-md-2"><label class="form-label">Kho xuất</label><input id="warehouseCode" class="form-control" placeholder="KTPHAM"></div>
                 <div class="col-md-2"><label class="form-label">Người nhận</label><input id="receiverName" class="form-control"></div>
@@ -170,8 +170,8 @@
                     <thead class="table-light">
                         <tr>
                             <th style="width:130px">Lệnh SX</th>
-                            <th style="width:220px">Mã vật tư</th>
-                            <th>Tên vật tư</th>
+                            <th style="width:220px">Mã hàng</th>
+                            <th>Tên hàng</th>
                             <th style="width:80px">ĐVT</th>
                             <th style="width:105px">SL theo lệnh</th>
                             <th style="width:105px">Tồn khả dụng</th>
@@ -193,7 +193,7 @@
             <div class="row g-2 align-items-end mb-3">
                 <div class="col-md-2"><label class="form-label">Từ ngày</label><input id="fromDate" type="date" class="form-control"></div>
                 <div class="col-md-2"><label class="form-label">Đến ngày</label><input id="toDate" type="date" class="form-control"></div>
-                <div class="col-md-5"><label class="form-label">Tìm phiếu / mã vật tư / người nhận</label><input id="keyword" class="form-control"></div>
+                <div class="col-md-5"><label class="form-label">Tìm phiếu / mã hàng / người nhận</label><input id="keyword" class="form-control"></div>
                 <div class="col-md-3"><button id="clearFilterBtn" type="button" class="btn btn-outline-secondary w-100">Xóa lọc</button></div>
             </div>
             <div class="table-responsive">
@@ -242,9 +242,9 @@
                     <table class="table table-bordered paste-preview mb-0">
                         <thead>
                             <tr>
-                                <th>Dòng</th><th>Lệnh/PS#</th><th>Mã nội bộ</th><th>Mã kế toán</th>
-                                <th>Size</th><th>Màu</th><th class="text-end">SL</th>
-                                <th>Vị trí</th><th>Kiểm tra</th>
+                                <th>Dòng</th><th>Lệnh/PS#</th><th>Mã nội bộ</th>
+                                <th>Size</th><th>Màu</th><th>Mặt</th><th class="text-end">SL</th>
+                                <th>Kệ kho</th><th>Kiểm tra</th>
                             </tr>
                         </thead>
                         <tbody id="pastePreviewRows"></tbody>
@@ -256,7 +256,7 @@
             <div id="pasteFooterHint" class="hint">Chưa có dữ liệu kiểm tra.</div>
             <div class="d-flex gap-2">
                 <button id="cancelPasteImportBtn" type="button" class="btn btn-outline-secondary">Hủy</button>
-                <button id="applyPastedLinesBtn" type="button" class="btn btn-primary" disabled><i data-lucide="list-plus"></i> <span id="applyPastedLinesLabel">Tạo phiếu nhập UNIPAX</span></button>
+                <button id="applyPastedLinesBtn" type="button" class="btn btn-primary" disabled><i data-lucide="list-plus"></i> <span id="applyPastedLinesLabel">Tạo PNTP + PXTP UNIPAX</span></button>
             </div>
         </div>
     </dialog>
@@ -273,15 +273,15 @@
 
         const pastePresets = {
             UNIPAX: {
-                guide: 'Mã vật tư (mã nội bộ) | PS# | Size | Màu | Logo color (màu in) | ĐVT | Q’TY đơn hàng | Đạt | Lỗi | Ghi chú | Vị trí',
-                columns: ['internal_item_code','ps_number','size','color','logo_color','dvt','order_reference','quantity','error_quantity','note','location_code']
+                guide: 'STT | Ngày xuất | ITEM# (mã nội bộ) | PS# | Size | Màu | Logo color | ĐVT | QTY đơn hàng | Quantity Đạt | Quantity Lỗi | Ghi chú | Vị trí/mặt',
+                columns: [null,'issue_date','internal_item_code','ps_number','size','color','logo_color','dvt','ordered_quantity','quantity','error_quantity','note','side']
             },
             ELITE: {
-                guide: 'Ngày xuất | ITEM# (mã nội bộ) | PS# / Lệnh | Size | Màu | Logo color | ĐVT | SL đơn hàng | SL xuất | Ghi chú | Vị trí',
-                columns: ['issue_date','internal_item_code','production_order','size','color','logo_color','dvt','ordered_quantity','quantity','note','location_code']
+                guide: 'Ngày xuất | ITEM# (mã nội bộ) | PS# / Lệnh | Size | Màu | Logo color | ĐVT | SL đơn hàng | SL xuất | Ghi chú | Vị trí/mặt',
+                columns: ['issue_date','internal_item_code','production_order','size','color','logo_color','dvt','ordered_quantity','quantity','note','side']
             },
             CUSTOM: {
-                guide: 'Dán kèm hàng tiêu đề. Nhận các cột: Mã kế toán, ITEM/Mã nội bộ, PS#/Lệnh SX, Size, Màu, ĐVT, Số lượng/Đạt, Vị trí, Ghi chú.',
+                guide: 'Dán kèm hàng tiêu đề. Nhận các cột: mã đối chiếu nếu có, ITEM/Mã nội bộ, PS#/Lệnh SX, Size, Màu, ĐVT, Số lượng/Đạt, Vị trí, Ghi chú.',
                 columns: []
             }
         };
@@ -385,6 +385,10 @@
                         document.getElementById('internalCatalogOptions').innerHTML = internalCatalogItems.map(item => {
                             const label = [
                                 item.name,
+                                item.size ? `Size ${item.size}` : '',
+                                item.color ? `Màu ${item.color}` : '',
+                                item.logo_color ? `Màu in ${item.logo_color}` : '',
+                                item.side ? `Mặt ${item.side}` : '',
                                 item.unit,
                                 item.shelf ? `Kệ ${item.shelf}` : '',
                                 item.has_code ? '' : 'Chưa có mã'
@@ -406,6 +410,11 @@
             const row = input.closest('tr');
             if (!row.querySelector('.ten-hh').value.trim()) row.querySelector('.ten-hh').value = item.name || '';
             if (!row.querySelector('.dvt').value.trim()) row.querySelector('.dvt').value = item.unit || '';
+            if (!row.querySelector('.size').value.trim()) row.querySelector('.size').value = item.size || '';
+            if (!row.querySelector('.color').value.trim()) row.querySelector('.color').value = item.color || '';
+            if (!row.querySelector('.line-note').value.trim()) {
+                row.querySelector('.line-note').value = [item.logo_color ? `Màu in: ${item.logo_color}` : '', item.side ? `Mặt: ${item.side}` : ''].filter(Boolean).join(' - ');
+            }
             if (item.code) input.value = item.code;
             if (!row.querySelector('.location-code').value.trim() && item.shelf) {
                 row.querySelector('.location-code').value = item.shelf;
@@ -492,18 +501,20 @@
 
         function applyIssueType(type) {
             const isProduction = type === 'production';
-            document.getElementById('issueTypeMetric').textContent = isProduction ? 'BTP sản xuất' : 'Vật tư';
-            document.getElementById('pageTitle').textContent = isProduction ? 'Xuất bán thành phẩm đi sản xuất' : 'Xuất vật tư nội bộ';
+            const isCustomer = type === 'customer';
+            document.getElementById('issueTypeMetric').textContent = isProduction ? 'BTP sản xuất' : 'TP khách hàng';
+            document.getElementById('pageTitle').textContent = isProduction ? 'Xuất bán thành phẩm đi sản xuất' : 'Xuất thành phẩm cho khách';
             document.getElementById('pageHint').textContent = isProduction
                 ? 'Xuất BTP khỏi kho nội bộ để giao sản xuất. Khi hoàn thành, nhập lại bằng Phiếu nhập thành phẩm.'
-                : 'Xuất vật tư khỏi tồn nội bộ theo mã, vị trí, size và màu.';
-            document.getElementById('saveBtn').textContent = isProduction ? 'Xuất BTP + in phiếu' : 'Xuất vật tư + in phiếu';
+                : 'Xuất thành phẩm cho khách hàng và trừ tồn kho nội bộ theo mã, size, màu và mặt.';
+            document.getElementById('saveBtn').textContent = isProduction ? 'Xuất BTP + in phiếu' : 'Xuất TP + in phiếu';
 
             if (isProduction) {
-                if (!value('department')) document.getElementById('department').value = 'Sản xuất';
-                if (!value('purpose') || value('purpose') === 'Xuất vật tư') document.getElementById('purpose').value = 'Xuất BTP đi sản xuất';
-            } else if (value('purpose') === 'Xuất BTP đi sản xuất') {
-                document.getElementById('purpose').value = 'Xuất vật tư';
+                if (!value('department') || value('department') === 'Kinh doanh') document.getElementById('department').value = 'Sản xuất';
+                if (!value('purpose') || value('purpose') === 'Xuất thành phẩm cho khách hàng') document.getElementById('purpose').value = 'Xuất BTP đi sản xuất';
+            } else if (isCustomer) {
+                if (!value('department') || value('department') === 'Sản xuất') document.getElementById('department').value = 'Kinh doanh';
+                if (!value('purpose') || value('purpose') === 'Xuất BTP đi sản xuất') document.getElementById('purpose').value = 'Xuất thành phẩm cho khách hàng';
             }
         }
 
@@ -521,7 +532,7 @@
 
             searchTimers[cell.parentElement.dataset.rowId] = setTimeout(() => {
                 fetch(`/api/vat-tu-ke-toan/goi-y?keyword=${encodeURIComponent(keyword)}`)
-                    .then(response => jsonOrError(response, 'Không tải được danh mục vật tư'))
+                    .then(response => jsonOrError(response, 'Không tải được danh mục hàng nội bộ'))
                     .then(result => {
                         results.innerHTML = (result.data || []).map(item => `
                             <button type="button" class="product-option" data-code="${esc(item.Ma_hh)}" data-name="${esc(item.Ten_hh || '')}" data-dvt="${esc(item.Dvt || '')}">
@@ -554,11 +565,15 @@
                 ['ma_hh', ['ma ke toan', 'sku ke toan']],
                 ['internal_item_code', ['item', 'item code', 'ma hang', 'ma noi bo', 'ma vat tu', 'sku']],
                 ['production_order', ['ps', 'ps sub', 'lenh sx', 'lenh san xuat', 'don hang']],
+                ['ps_number', ['ps']],
                 ['size', ['size', 'kich co']],
                 ['color', ['mau', 'fabric color', 'mau vai']],
+                ['logo_color', ['logo color', 'mau in']],
                 ['dvt', ['dvt', 'unit']],
                 ['ordered_quantity', ['qty don hang', 'quantity order', 'so luong dat hang']],
                 ['quantity', ['quantity dat', 'sl dat', 'so luong', 'quantity', 'sl xuat', 'dat']],
+                ['error_quantity', ['quantity loi', 'sl loi', 'loi']],
+                ['side', ['mat', 'side', 'position', 'vi tri in']],
                 ['location_code', ['vi tri', 'location']],
                 ['note', ['ghi chu', 'note']],
             ];
@@ -622,11 +637,13 @@
                     else extraNotes.push(`Q'TY đơn hàng: ${line.order_reference}`);
                 }
                 if (line.logo_color) extraNotes.push(`Màu in: ${line.logo_color}`);
+                if (line.side) extraNotes.push(`Mặt: ${line.side}`);
                 if (parsePasteNumber(line.error_quantity) > 0) extraNotes.push(`Lỗi: ${line.error_quantity}`);
                 if (line.ps_number) extraNotes.push(`PS#: ${line.ps_number}`);
                 line.note = [...extraNotes, line.note].filter(Boolean).join(' - ');
                 line.ma_hh = String(line.ma_hh || '').toUpperCase();
                 line.location_code = String(line.location_code || '').toUpperCase();
+                line.side = String(line.side || '').toUpperCase();
                 line.internal_item_code = String(line.internal_item_code || '').trim();
                 return line;
             }).filter(line => line.ma_hh || line.internal_item_code || line.quantity);
@@ -647,9 +664,9 @@
                     <td>${num(line.source_row)}</td>
                     <td>${esc(line.purchase_order || line.production_order)}</td>
                     <td>${esc(line.internal_item_code)}</td>
-                    <td>${esc(line.ma_hh || 'Chưa khớp')}</td>
                     <td>${esc(line.size)}</td>
                     <td>${esc(line.color)}</td>
+                    <td>${esc(line.side || '-')}</td>
                     <td class="text-end">${num(line.quantity)}</td>
                     <td>${esc(line.location_code || 'Chưa chọn')}</td>
                     <td>${line.warnings?.length
@@ -663,8 +680,10 @@
             document.getElementById('applyPastedLinesBtn').disabled = !analyzedPastedLines.length;
             if (value('pasteCustomer') === 'UNIPAX') {
                 const receiptCount = Math.ceil(analyzedPastedLines.length / 20);
+                const firstDate = analyzedPastedLines.find(line => line.issue_date)?.issue_date;
+                if (firstDate) document.getElementById('issueDate').value = firstDate;
                 document.getElementById('applyPastedLinesLabel').textContent =
-                    `Tạo ${receiptCount} phiếu nhập UNIPAX`;
+                    `Tạo ${receiptCount} PNTP + ${receiptCount} PXTP UNIPAX`;
             }
         }
 
@@ -713,48 +732,79 @@
 
             const lines = analyzedPastedLines.map(line => ({
                 ma_sp: line.ma_hh || '',
+                category: line.ten_hh || '',
                 internal_item_code: line.internal_item_code || '',
                 size: line.size || '',
                 color: line.color || '',
-                side: '',
+                side: line.side || '',
                 dvt: line.dvt || '',
                 quantity: line.quantity || 0,
                 location_code: line.location_code || '',
                 purchase_order: line.purchase_order || '',
                 customer: 'UNIPAX',
                 note: line.note || '',
+                issue_date: line.issue_date || value('issueDate'),
             }));
             if (lines.some(line => !line.internal_item_code || !Number(line.quantity))) {
-                return alert('Mỗi dòng UNIPAX cần Mã vật tư nội bộ và số lượng Đạt.');
+                return alert('Mỗi dòng UNIPAX cần mã nội bộ và số lượng Đạt.');
             }
 
             const batches = [];
-            for (let index = 0; index < lines.length; index += 20) {
-                batches.push(lines.slice(index, index + 20));
-            }
+            const byDate = lines.reduce((groups, line) => {
+                const date = line.issue_date || value('issueDate');
+                groups[date] = groups[date] || [];
+                groups[date].push(line);
+                return groups;
+            }, {});
+            Object.entries(byDate).forEach(([date, dateLines]) => {
+                for (let index = 0; index < dateLines.length; index += 20) {
+                    batches.push({date, lines: dateLines.slice(index, index + 20)});
+                }
+            });
 
             const button = document.getElementById('applyPastedLinesBtn');
             button.disabled = true;
-            const printWindows = batches.map(() => window.open('', '_blank'));
+            const receiptPrintWindows = batches.map(() => window.open('', '_blank'));
+            const issuePrintWindows = batches.map(() => window.open('', '_blank'));
             const createdReceipts = [];
+            const createdIssues = [];
 
-            batches.reduce((promise, batchLines, index) => promise.then(() => {
-                button.querySelector('span').textContent = `Đang tạo phiếu ${index + 1}/${batches.length}`;
+            batches.reduce((promise, batch, index) => promise.then(() => {
+                button.querySelector('span').textContent = `Đang tạo PNTP ${index + 1}/${batches.length}`;
                 return fetch('/api/kiem-ton-kho/phieu-nhap-tp', {
                     method: 'POST',
                     headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                     body: JSON.stringify({
                         location_code: '',
                         ma_ko: warehouseCode,
-                        checked_at: value('issueDate'),
+                        checked_at: batch.date,
                         note: `Nhập kho từ phiếu xuất UNIPAX - phần ${index + 1}/${batches.length}`,
-                        lines: batchLines
+                        lines: batch.lines
                     })
                 }).then(response => jsonOrError(response, `Không tạo được phiếu nhập UNIPAX phần ${index + 1}`))
                   .then(result => {
                       createdReceipts.push(result);
-                      if (result.receipt_print_url && printWindows[index]) {
-                          printWindows[index].location.href = result.receipt_print_url;
+                      if (result.receipt_print_url && receiptPrintWindows[index]) {
+                          receiptPrintWindows[index].location.href = result.receipt_print_url;
+                      }
+                      button.querySelector('span').textContent = `Đang tạo PXTP ${index + 1}/${batches.length}`;
+                      return fetch(`/api/xuat-vat-tu-noi-bo/tu-phieu-nhap/${result.data.id}`, {
+                          method: 'POST',
+                          headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                          body: JSON.stringify({
+                              issue_date: batch.date,
+                              receiver_name: 'UNIPAX',
+                              department: 'Kinh doanh',
+                              purpose: 'Xuất thành phẩm cho khách hàng',
+                              note: `Tạo từ phiếu xuất UNIPAX - ${result.data.receipt_code}`
+                          })
+                      });
+                  })
+                  .then(response => jsonOrError(response, `Không tạo được phiếu xuất UNIPAX phần ${index + 1}`))
+                  .then(result => {
+                      createdIssues.push(result);
+                      if (result.print_url && issuePrintWindows[index]) {
+                          issuePrintWindows[index].location.href = result.print_url;
                       }
                   });
             }), Promise.resolve())
@@ -762,26 +812,28 @@
                   document.getElementById('pasteImportDialog').close();
                   document.getElementById('pasteExcelData').value = '';
                   analyzedPastedLines = [];
-                  alert(`Đã tạo ${createdReceipts.length} phiếu nhập kho UNIPAX và cộng tồn nội bộ.`);
+                  loadIssues();
+                  alert(`Đã tạo ${createdReceipts.length} phiếu nhập kho và ${createdIssues.length} phiếu xuất UNIPAX.`);
               })
               .catch(error => {
-                  printWindows.slice(createdReceipts.length).forEach(printWindow => printWindow?.close());
+                  receiptPrintWindows.slice(createdReceipts.length).forEach(printWindow => printWindow?.close());
+                  issuePrintWindows.slice(createdIssues.length).forEach(printWindow => printWindow?.close());
                   const completed = createdReceipts.length
-                      ? ` Đã tạo thành công ${createdReceipts.length} phiếu trước khi gặp lỗi.`
+                      ? ` Đã tạo thành công ${createdReceipts.length} phiếu nhập và ${createdIssues.length} phiếu xuất trước khi gặp lỗi.`
                       : '';
                   alert(error.message + completed);
               })
               .finally(() => {
                   button.disabled = false;
                   button.querySelector('span').textContent =
-                      `Tạo ${Math.max(1, batches.length)} phiếu nhập UNIPAX`;
+                      `Tạo ${Math.max(1, batches.length)} PNTP + ${Math.max(1, batches.length)} PXTP UNIPAX`;
               });
         }
 
         function saveIssue() {
             const lines = collectLines();
-            if (!lines.length) return alert('Nhập ít nhất một dòng vật tư.');
-            if (lines.some(line => !line.ma_hh || !Number(line.quantity))) return alert('Mỗi dòng cần mã vật tư và số lượng.');
+            if (!lines.length) return alert('Nhập ít nhất một dòng hàng.');
+            if (lines.some(line => !line.ma_hh || !Number(line.quantity))) return alert('Mỗi dòng cần mã hàng và số lượng.');
 
             fetch('/api/xuat-vat-tu-noi-bo', {
                 method: 'POST',
@@ -797,7 +849,7 @@
                     note: value('issueNote'),
                     lines
                 })
-            }).then(response => jsonOrError(response, 'Không tạo được phiếu xuất vật tư'))
+            }).then(response => jsonOrError(response, 'Không tạo được phiếu xuất kho'))
               .then(result => {
                   window.open(result.print_url, '_blank');
                   lineRows.innerHTML = '';
@@ -878,7 +930,7 @@
 
         issueRows.addEventListener('click', event => {
             const button = event.target.closest('.delete-issue');
-            if (!button || !confirm('Xóa phiếu xuất vật tư nội bộ này?')) return;
+            if (!button || !confirm('Xóa phiếu xuất kho nội bộ này?')) return;
 
             fetch(`/api/xuat-vat-tu-noi-bo/${button.dataset.id}`, {
                 method: 'DELETE',
@@ -899,7 +951,7 @@
         document.getElementById('pasteCustomer').addEventListener('change', event => {
             document.getElementById('pasteColumnGuide').textContent = pastePresets[event.target.value].guide;
             document.getElementById('applyPastedLinesLabel').textContent = event.target.value === 'UNIPAX'
-                ? 'Tạo phiếu nhập UNIPAX'
+                ? 'Tạo PNTP + PXTP UNIPAX'
                 : 'Đưa vào phiếu xuất';
             analyzedPastedLines = [];
             document.getElementById('pasteResultArea').classList.add('d-none');

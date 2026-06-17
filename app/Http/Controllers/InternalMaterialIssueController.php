@@ -231,6 +231,7 @@ class InternalMaterialIssueController extends Controller
             'lines.*.internal_item_code' => 'nullable|string|max:100',
             'lines.*.size' => 'nullable|string|max:100',
             'lines.*.color' => 'nullable|string|max:100',
+            'lines.*.side' => 'nullable|string|max:100',
             'lines.*.note' => 'nullable|string|max:500',
             'lines.*.production_order_id' => 'nullable|integer',
             'lines.*.production_order' => 'nullable|string|max:100',
@@ -255,7 +256,7 @@ class InternalMaterialIssueController extends Controller
                 'receiver_name' => trim($data['receiver_name'] ?? ''),
                 'department' => trim($data['department'] ?? '') ?: ($issueType === 'production' ? 'Sản xuất' : ($issueType === 'customer' ? 'Kinh doanh' : '')),
                 'production_order' => trim($data['production_order'] ?? ''),
-                'purpose' => trim($data['purpose'] ?? '') ?: ($issueType === 'production' ? 'Xuất BTP đi sản xuất' : ($issueType === 'customer' ? 'Xuất thành phẩm cho khách hàng' : 'Xuất vật tư')),
+                'purpose' => trim($data['purpose'] ?? '') ?: ($issueType === 'production' ? 'Xuất BTP đi sản xuất' : ($issueType === 'customer' ? 'Xuất thành phẩm cho khách hàng' : 'Xuất kho nội bộ')),
                 'status' => 'posted',
                 'note' => trim($data['note'] ?? ''),
             ]);
@@ -275,6 +276,7 @@ class InternalMaterialIssueController extends Controller
                     'internal_item_code' => trim($line['internal_item_code'] ?? ''),
                     'size' => trim($line['size'] ?? ''),
                     'color' => trim($line['color'] ?? ''),
+                    'side' => trim($line['side'] ?? ''),
                     'note' => trim($line['note'] ?? ''),
                 ]);
 
@@ -296,7 +298,7 @@ class InternalMaterialIssueController extends Controller
         return response()->json([
             'message' => $issueType === 'production'
                 ? 'Đã tạo phiếu xuất BTP đi sản xuất.'
-                : ($issueType === 'customer' ? 'Đã tạo phiếu xuất thành phẩm cho khách hàng.' : 'Đã tạo phiếu xuất vật tư nội bộ.'),
+                : ($issueType === 'customer' ? 'Đã tạo phiếu xuất thành phẩm cho khách hàng.' : 'Đã tạo phiếu xuất kho nội bộ.'),
             'data' => $issue,
             'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in'),
         ]);
@@ -371,6 +373,7 @@ class InternalMaterialIssueController extends Controller
                     'internal_item_code' => trim((string) $receiptLine->internal_item_code),
                     'size' => trim((string) $receiptLine->size),
                     'color' => trim((string) $receiptLine->color),
+                    'side' => trim((string) $receiptLine->side),
                     'note' => trim((string) $receiptLine->note),
                 ];
 
@@ -470,6 +473,7 @@ class InternalMaterialIssueController extends Controller
             'lines.*.internal_item_code' => 'nullable|string|max:100',
             'lines.*.size' => 'nullable|string|max:100',
             'lines.*.color' => 'nullable|string|max:100',
+            'lines.*.side' => 'nullable|string|max:100',
             'lines.*.dvt' => 'nullable|string|max:50',
             'lines.*.quantity' => 'nullable|numeric|min:0',
             'lines.*.location_code' => 'nullable|string|max:100',
@@ -482,6 +486,7 @@ class InternalMaterialIssueController extends Controller
             $internalCode = trim((string) ($line['internal_item_code'] ?? ''));
             $size = trim((string) ($line['size'] ?? ''));
             $color = trim((string) ($line['color'] ?? ''));
+            $side = trim((string) ($line['side'] ?? ''));
             $locationCode = strtoupper(trim((string) ($line['location_code'] ?? '')));
             $productionOrderCode = trim((string) ($line['production_order'] ?? ''));
             $psNumber = trim((string) ($line['ps_number'] ?? ''));
@@ -538,12 +543,9 @@ class InternalMaterialIssueController extends Controller
 
             if ($isUnipaxReceipt) {
                 if ($internalCode === '') {
-                    $warnings[] = 'Thiếu mã vật tư nội bộ.';
+                    $warnings[] = 'Thiếu mã nội bộ.';
                 } elseif (!$catalogItem) {
                     $warnings[] = 'Mã nội bộ không có trong sheet DANH MỤC.';
-                }
-                if ($locationCode === '') {
-                    $warnings[] = 'Chưa có vị trí, khi nhập sẽ đưa vào CHUA-XEP.';
                 }
             } else {
                 if ($internalCode === '' && $maHh === '') {
@@ -583,8 +585,9 @@ class InternalMaterialIssueController extends Controller
                 'ma_hh' => $maHh ?: ($accountingCodes->count() === 1 ? $accountingCodes->first() : ''),
                 'ten_hh' => $catalogItem['name'] ?? ($productionOrder->description ?? ''),
                 'internal_item_code' => $internalCode,
-                'size' => $size,
-                'color' => $color,
+                'size' => $size ?: ($catalogItem['size'] ?? ''),
+                'color' => $color ?: ($catalogItem['color'] ?? ''),
+                'side' => $side ?: ($catalogItem['side'] ?? ''),
                 'dvt' => trim((string) ($line['dvt'] ?? '')) ?: ($catalogItem['unit'] ?? ''),
                 'ordered_quantity' => (float) ($line['ordered_quantity'] ?? 0),
                 'quantity' => $quantity,
@@ -671,7 +674,7 @@ class InternalMaterialIssueController extends Controller
         );
 
         return response()->json([
-            'message' => 'Đã xóa phiếu xuất vật tư nội bộ.',
+            'message' => 'Đã xóa phiếu xuất kho nội bộ.',
         ]);
     }
 
@@ -732,6 +735,7 @@ class InternalMaterialIssueController extends Controller
         $internalCode = trim($line['internal_item_code'] ?? '');
         $size = trim($line['size'] ?? '');
         $color = trim($line['color'] ?? '');
+        $side = trim($line['side'] ?? '');
 
         $query = InventoryPackage::query()
             ->where('ma_sp', $maHh)
@@ -760,6 +764,10 @@ class InternalMaterialIssueController extends Controller
 
         if ($color !== '') {
             $query->where('color', $color);
+        }
+
+        if ($side !== '') {
+            $query->where('side', $side);
         }
 
         $packages = $query->get();

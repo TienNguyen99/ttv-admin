@@ -8,7 +8,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="{{ asset('css/warehouse-wms.css') }}" rel="stylesheet">
     <style>
-        .catalog-table { min-width: 900px; }
+        .catalog-table { min-width: 1280px; }
         .catalog-table .name-cell { min-width: 320px; white-space: normal; }
         .sync-note { color:#64748b; font-size:12px; }
     </style>
@@ -55,8 +55,8 @@
             <div class="wms-panel__header"><h2>Danh sách mã nội bộ</h2><span id="catalogResultLabel" class="text-secondary small">Đang tải...</span></div>
             <div class="wms-table-wrap">
                 <table class="wms-table catalog-table">
-                    <thead><tr><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Kệ</th><th class="text-end">Tồn đầu trên sheet</th><th>Dòng nguồn</th></tr></thead>
-                    <tbody id="catalogRows"><tr><td colspan="6" class="wms-loading">Chưa có dữ liệu. Bấm Đồng bộ DANH MỤC.</td></tr></tbody>
+                    <thead><tr><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Size</th><th>Màu</th><th>Màu in</th><th>Mặt</th><th>Kệ</th><th class="text-end">Tồn đầu</th><th>Dòng nguồn</th></tr></thead>
+                    <tbody id="catalogRows"><tr><td colspan="10" class="wms-loading">Chưa có dữ liệu. Bấm Đồng bộ DANH MỤC.</td></tr></tbody>
                 </table>
             </div>
         </section>
@@ -79,7 +79,7 @@
         function loadCatalog() {
             const params = new URLSearchParams({limit:2000});
             if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
-            rowsEl.innerHTML = '<tr><td colspan="6" class="wms-loading">Đang tải dữ liệu...</td></tr>';
+            rowsEl.innerHTML = '<tr><td colspan="10" class="wms-loading">Đang tải dữ liệu...</td></tr>';
 
             fetch('/api/danh-muc-noi-bo?' + params.toString())
                 .then(response => jsonOrError(response, 'Không tải được danh mục nội bộ'))
@@ -96,12 +96,16 @@
                         <td class="wms-code">${esc(row.item_code)}</td>
                         <td class="name-cell">${esc(row.item_name || '-')}</td>
                         <td>${esc(row.unit || '-')}</td>
+                        <td>${esc(row.size || '-')}</td>
+                        <td>${esc(row.color || '-')}</td>
+                        <td>${esc(row.logo_color || '-')}</td>
+                        <td>${esc(row.side || '-')}</td>
                         <td>${esc(row.shelf_code || '-')}</td>
                         <td class="wms-number">${num(row.opening_quantity)}</td>
                         <td>${num(row.source_row)}</td>
-                    </tr>`).join('') || '<tr><td colspan="6" class="wms-empty">Không có mã phù hợp.</td></tr>';
+                    </tr>`).join('') || '<tr><td colspan="10" class="wms-empty">Không có mã phù hợp.</td></tr>';
                 })
-                .catch(error => rowsEl.innerHTML = `<tr><td colspan="6" class="wms-empty text-danger">${esc(error.message)}</td></tr>`);
+                .catch(error => rowsEl.innerHTML = `<tr><td colspan="10" class="wms-empty text-danger">${esc(error.message)}</td></tr>`);
         }
 
         document.getElementById('syncCatalogBtn').addEventListener('click', () => {

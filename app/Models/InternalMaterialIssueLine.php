@@ -25,6 +25,7 @@ class InternalMaterialIssueLine extends Model
         'internal_item_code',
         'size',
         'color',
+        'side',
         'note',
     ];
 

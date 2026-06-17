@@ -90,6 +90,32 @@
         </div>
     </div>
 
+    <div class="modal fade" id="stockLocationModal" tabindex="-1" aria-labelledby="stockLocationModalTitle" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="stockLocationModalTitle">Gán vị trí tồn kho</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Dòng tồn</label>
+                        <input id="stockLocationSummary" class="form-control" readonly>
+                    </div>
+                    <div>
+                        <label class="form-label">Vị trí mới</label>
+                        <select id="stockTargetLocation" class="form-select"></select>
+                        <div class="text-secondary small mt-2">Chỉ cập nhật dữ liệu kho nội bộ. Không ghi sang TSoft.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button id="saveStockLocationBtn" type="button" class="btn btn-primary">Lưu vị trí</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const warehouseSelect = document.getElementById('warehouseSelect');
@@ -99,8 +125,11 @@
         const rowsEl = document.getElementById('stockRows');
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const accountingCodeModal = new bootstrap.Modal(document.getElementById('accountingCodeModal'));
+        const stockLocationModal = new bootstrap.Modal(document.getElementById('stockLocationModal'));
         let searchTimer = null;
         let mappingSearchTimer = null;
+        let stockLocationPayload = null;
+        let locationOptionsLoaded = false;
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits: 3});
@@ -158,6 +187,18 @@
                             <td class="wms-number ${quantity < 0 ? 'text-danger' : ''}">${num(quantity)}</td>
                             <td>${status}</td>
                             <td class="text-nowrap">
+                                ${quantity > 0 && Number(row.issue_quantity || 0) === 0
+                                    ? `<button type="button" class="btn btn-sm btn-outline-primary assign-stock-location"
+                                        data-warehouse="${esc(row.warehouse_code || '')}"
+                                        data-location="${esc(row.location_code || '')}"
+                                        data-ma-hh="${esc(row.ma_sp || '')}"
+                                        data-internal-code="${esc(row.internal_item_code || '')}"
+                                        data-size="${esc(row.size || '')}"
+                                        data-color="${esc(row.color || '')}"
+                                        data-side="${esc(row.side || '')}"
+                                        data-label="${esc(row.internal_item_code || row.ma_sp || '-')}"
+                                        data-quantity="${esc(row.total_quantity || 0)}"><i data-lucide="map-pin"></i> Vị trí</button>`
+                                    : ''}
                                 ${!row.ma_sp && row.internal_item_code
                                     ? `<button type="button" class="btn btn-sm btn-outline-primary assign-accounting-code" data-internal-code="${esc(row.internal_item_code)}"><i data-lucide="link-2"></i> Gán mã</button>`
                                     : ''}
@@ -182,6 +223,23 @@
         }
 
         rowsEl.addEventListener('click', event => {
+            const locationButton = event.target.closest('.assign-stock-location');
+            if (locationButton) {
+                stockLocationPayload = {
+                    month: stockMonthEl.value,
+                    warehouse_code: locationButton.dataset.warehouse,
+                    location_code: locationButton.dataset.location,
+                    ma_hh: locationButton.dataset.maHh,
+                    internal_item_code: locationButton.dataset.internalCode,
+                    size: locationButton.dataset.size,
+                    color: locationButton.dataset.color,
+                    side: locationButton.dataset.side,
+                };
+                document.getElementById('stockLocationSummary').value = `${locationButton.dataset.label} · ${num(locationButton.dataset.quantity)} · ${locationButton.dataset.location || 'CHUA-XEP'}`;
+                openStockLocationModal(locationButton.dataset.location || '');
+                return;
+            }
+
             const assignButton = event.target.closest('.assign-accounting-code');
             if (assignButton) {
                 document.getElementById('mappingInternalCode').value = assignButton.dataset.internalCode;
@@ -216,6 +274,48 @@
                   button.disabled = false;
                   alert(error.message);
               });
+        });
+
+        function loadLocationOptions() {
+            if (locationOptionsLoaded) return Promise.resolve();
+            return fetch('/api/kiem-ton-kho/vi-tri')
+                .then(response => jsonOrError(response, 'Không tải được danh sách vị trí'))
+                .then(result => {
+                    document.getElementById('stockTargetLocation').innerHTML = (result.data || []).map(location =>
+                        `<option value="${esc(location.location_code)}">${esc(location.location_code)}${location.location_name ? ' · ' + esc(location.location_name) : ''}</option>`
+                    ).join('');
+                    locationOptionsLoaded = true;
+                });
+        }
+
+        function openStockLocationModal(currentLocation) {
+            loadLocationOptions().then(() => {
+                const select = document.getElementById('stockTargetLocation');
+                if (currentLocation && Array.from(select.options).some(option => option.value === currentLocation)) {
+                    select.value = currentLocation;
+                }
+                stockLocationModal.show();
+            }).catch(error => alert(error.message));
+        }
+
+        document.getElementById('saveStockLocationBtn').addEventListener('click', () => {
+            if (!stockLocationPayload) return;
+            const targetLocation = document.getElementById('stockTargetLocation').value;
+            if (!targetLocation) return alert('Chọn vị trí cần gán.');
+
+            const button = document.getElementById('saveStockLocationBtn');
+            button.disabled = true;
+            fetch('/api/ton-kho-noi-bo/vi-tri', {
+                method: 'PATCH',
+                headers: {'Content-Type':'application/json', 'Accept':'application/json', 'X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({...stockLocationPayload, target_location_code: targetLocation})
+            }).then(response => jsonOrError(response, 'Không gán được vị trí'))
+              .then(() => {
+                  stockLocationModal.hide();
+                  loadStock();
+              })
+              .catch(error => alert(error.message))
+              .finally(() => button.disabled = false);
         });
 
         document.getElementById('mappingAccountingCode').addEventListener('input', event => {

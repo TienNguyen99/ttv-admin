@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternalInventoryCount;
+use App\Models\InternalItemCatalog;
 use App\Models\InternalMaterialIssue;
 use App\Models\InternalMaterialReceipt;
 use App\Models\InternalOpeningStock;
@@ -80,6 +81,80 @@ class WarehouseCountController extends Controller
         );
 
         return response()->json(['data' => $location]);
+    }
+
+    public function bulkStoreLocations(Request $request)
+    {
+        $data = $request->validate([
+            'shelf_from' => 'required|string|max:1',
+            'shelf_to' => 'required|string|max:1',
+            'number_from' => 'required|integer|min:1|max:999',
+            'number_to' => 'required|integer|min:1|max:999',
+            'warehouse_code' => 'nullable|string|max:50',
+            'tier' => 'nullable|integer|min:1|max:2',
+            'name_prefix' => 'nullable|string|max:100',
+        ]);
+
+        $fromShelf = ord(strtoupper(trim($data['shelf_from'])));
+        $toShelf = ord(strtoupper(trim($data['shelf_to'])));
+        if ($fromShelf < 65 || $fromShelf > 90 || $toShelf < 65 || $toShelf > 90 || $fromShelf > $toShelf) {
+            return response()->json(['message' => 'Dãy kệ không hợp lệ. Ví dụ: A đến D.'], 422);
+        }
+
+        $fromNumber = (int) $data['number_from'];
+        $toNumber = (int) $data['number_to'];
+        if ($fromNumber > $toNumber) {
+            return response()->json(['message' => 'Số bắt đầu phải nhỏ hơn hoặc bằng số kết thúc.'], 422);
+        }
+
+        $warehouseCode = strtoupper(trim((string) ($data['warehouse_code'] ?? '')));
+        $tier = in_array((int) ($data['tier'] ?? 1), [1, 2], true) ? (int) ($data['tier'] ?? 1) : 1;
+        $namePrefix = trim((string) ($data['name_prefix'] ?? 'Kệ'));
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+
+        DB::connection('internal')->transaction(function () use ($fromShelf, $toShelf, $fromNumber, $toNumber, $warehouseCode, $tier, $namePrefix, &$created, &$updated, &$skipped) {
+            for ($shelfAscii = $fromShelf; $shelfAscii <= $toShelf; $shelfAscii++) {
+                $shelf = chr($shelfAscii);
+                for ($number = $fromNumber; $number <= $toNumber; $number++) {
+                    $locationCode = $shelf . $number;
+                    $existing = WarehouseLocation::query()->where('location_code', $locationCode)->first();
+
+                    if ($existing) {
+                        if ($warehouseCode !== '' && !$existing->warehouse_code) {
+                            $existing->warehouse_code = $warehouseCode;
+                            $existing->save();
+                            $updated++;
+                        } else {
+                            $skipped++;
+                        }
+                        continue;
+                    }
+
+                    $index = $number - $fromNumber;
+                    WarehouseLocation::query()->create([
+                        'location_code' => $locationCode,
+                        'warehouse_code' => $warehouseCode,
+                        'shelf_code' => $shelf,
+                        'tier' => $tier,
+                        'bay_code' => (string) $number,
+                        'grid_x' => (($index % 6) * 4) + 1,
+                        'grid_y' => (($shelfAscii - $fromShelf) * 18) + (int) floor($index / 6) * 3 + 1,
+                        'grid_w' => 4,
+                        'grid_h' => 2,
+                        'location_name' => trim($namePrefix . ' ' . $locationCode),
+                        'status' => 'pending',
+                    ]);
+                    $created++;
+                }
+            }
+        });
+
+        return response()->json([
+            'message' => "Đã tạo nhanh {$created} vị trí.",
+            'data' => compact('created', 'updated', 'skipped'),
+        ]);
     }
 
     public function updateLocationLayout(Request $request, WarehouseLocation $warehouseLocation)
@@ -533,6 +608,152 @@ class WarehouseCountController extends Controller
         ]);
     }
 
+    public function assignStockLocation(Request $request)
+    {
+        $data = $request->validate([
+            'month' => 'required|date_format:Y-m',
+            'warehouse_code' => 'nullable|string|max:50',
+            'location_code' => 'nullable|string|max:100',
+            'target_location_code' => 'required|string|max:100',
+            'ma_hh' => 'nullable|string|max:100',
+            'internal_item_code' => 'nullable|string|max:100',
+            'size' => 'nullable|string|max:100',
+            'color' => 'nullable|string|max:100',
+            'side' => 'nullable|string|max:100',
+        ]);
+
+        $month = Carbon::parse($data['month'] . '-01')->startOfMonth();
+        $monthStart = $month->format('Y-m-d');
+        $monthEnd = $month->copy()->endOfMonth()->format('Y-m-d');
+        $keys = [
+            'warehouse_code' => strtoupper(trim($data['warehouse_code'] ?? '')),
+            'location_code' => strtoupper(trim($data['location_code'] ?? '')),
+            'target_location_code' => strtoupper(trim($data['target_location_code'])),
+            'ma_hh' => strtoupper(trim($data['ma_hh'] ?? '')),
+            'internal_item_code' => trim($data['internal_item_code'] ?? ''),
+            'size' => trim($data['size'] ?? ''),
+            'color' => trim($data['color'] ?? ''),
+            'side' => trim($data['side'] ?? ''),
+        ];
+
+        if ($keys['target_location_code'] === '') {
+            return response()->json(['message' => 'Chọn vị trí cần gán.'], 422);
+        }
+
+        $targetLocation = WarehouseLocation::query()->firstOrCreate(
+            ['location_code' => $keys['target_location_code']],
+            [
+                'warehouse_code' => '',
+                'shelf_code' => $this->inferShelfCode($keys['target_location_code']),
+                'tier' => 1,
+                'bay_code' => preg_replace('/[^0-9]/', '', $keys['target_location_code']) ?: null,
+                'grid_x' => 1,
+                'grid_y' => 1,
+                'grid_w' => 4,
+                'grid_h' => 2,
+                'location_name' => $keys['target_location_code'],
+                'status' => 'pending',
+            ]
+        );
+
+        $hasIssues = DB::connection('internal')->table('internal_material_issue_lines as l')
+            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->whereBetween('i.issue_date', [$monthStart, $monthEnd])
+            ->whereRaw("UPPER(COALESCE(i.warehouse_code, '')) = ?", [$keys['warehouse_code']])
+            ->whereRaw("UPPER(COALESCE(l.location_code, '')) = ?", [$keys['location_code']])
+            ->whereRaw("UPPER(COALESCE(l.ma_hh, '')) = ?", [$keys['ma_hh']])
+            ->whereRaw("COALESCE(l.internal_item_code, '') = ?", [$keys['internal_item_code']])
+            ->whereRaw("COALESCE(l.size, '') = ?", [$keys['size']])
+            ->whereRaw("COALESCE(l.color, '') = ?", [$keys['color']])
+            ->exists();
+
+        if ($hasIssues) {
+            return response()->json([
+                'message' => 'Dòng này đã có phiếu xuất trong tháng. Không tự đổi vị trí để tránh sai lịch sử xuất kho.',
+            ], 422);
+        }
+
+        $updated = DB::connection('internal')->transaction(function () use ($keys, $monthStart, $monthEnd, $targetLocation) {
+            $updated = 0;
+            $movedPackageIds = [];
+
+            $openingRows = InternalOpeningStock::query()
+                ->whereDate('period_month', $monthStart)
+                ->where('warehouse_code', $keys['warehouse_code'])
+                ->where('location_code', $keys['location_code'])
+                ->whereRaw("UPPER(COALESCE(ma_hh, '')) = ?", [$keys['ma_hh']])
+                ->where('internal_item_code', $keys['internal_item_code'])
+                ->where('size', $keys['size'])
+                ->where('color', $keys['color'])
+                ->where('side', $keys['side'])
+                ->get();
+
+            foreach ($openingRows as $opening) {
+                if ($opening->inventory_package_id && !in_array((int) $opening->inventory_package_id, $movedPackageIds, true)) {
+                    $package = InventoryPackage::query()->lockForUpdate()->find($opening->inventory_package_id);
+                    if ($package) {
+                        $this->movePackageRecord($package, $targetLocation);
+                        $movedPackageIds[] = (int) $package->id;
+                        $updated++;
+                        continue;
+                    }
+                }
+
+                $opening->location_code = $targetLocation->location_code;
+                if ($targetLocation->warehouse_code) {
+                    $opening->warehouse_code = $targetLocation->warehouse_code;
+                }
+                $opening->save();
+                $updated++;
+            }
+
+            $receiptLines = DB::connection('internal')->table('internal_material_receipt_lines as l')
+                ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+                ->whereBetween('r.receipt_date', [$monthStart, $monthEnd])
+                ->where('r.source', 'Phieu nhap thanh pham')
+                ->whereRaw("UPPER(COALESCE(r.warehouse_code, '')) = ?", [$keys['warehouse_code']])
+                ->whereRaw("UPPER(COALESCE(l.location_code, r.location_code, '')) = ?", [$keys['location_code']])
+                ->whereRaw("UPPER(COALESCE(l.ma_hh, '')) = ?", [$keys['ma_hh']])
+                ->whereRaw("COALESCE(l.internal_item_code, '') = ?", [$keys['internal_item_code']])
+                ->whereRaw("COALESCE(l.size, '') = ?", [$keys['size']])
+                ->whereRaw("COALESCE(l.color, '') = ?", [$keys['color']])
+                ->whereRaw("COALESCE(l.side, '') = ?", [$keys['side']])
+                ->select('l.id', 'l.inventory_package_id')
+                ->get();
+
+            foreach ($receiptLines as $line) {
+                if ($line->inventory_package_id && !in_array((int) $line->inventory_package_id, $movedPackageIds, true)) {
+                    $package = InventoryPackage::query()->lockForUpdate()->find($line->inventory_package_id);
+                    if ($package) {
+                        $this->movePackageRecord($package, $targetLocation);
+                        $movedPackageIds[] = (int) $package->id;
+                        $updated++;
+                        continue;
+                    }
+                }
+
+                DB::connection('internal')->table('internal_material_receipt_lines')
+                    ->where('id', $line->id)
+                    ->update(['location_code' => $targetLocation->location_code]);
+                $updated++;
+            }
+
+            return $updated;
+        });
+
+        app(InternalAudit::class)->record('stock.location_assigned', 'InternalStockRow', null, $targetLocation->location_code, [
+            'source' => $keys,
+            'target_location_code' => $targetLocation->location_code,
+            'updated' => $updated,
+        ], $request);
+
+        return response()->json([
+            'message' => $updated > 0 ? 'Đã gán vị trí cho dòng tồn nội bộ.' : 'Không tìm thấy dòng tồn nội bộ phù hợp để gán vị trí.',
+            'updated' => $updated,
+            'location_code' => $targetLocation->location_code,
+        ], $updated > 0 ? 200 : 404);
+    }
+
     public function locationContents(Request $request)
     {
         $data = InventoryPackage::query()
@@ -840,8 +1061,15 @@ class WarehouseCountController extends Controller
                 ->select('Ma_hh', 'Ten_hh', 'Dvt')
                 ->get()
                 ->keyBy('Ma_hh');
+        $internalCatalogItems = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereIn('item_code', $lines->pluck('internal_item_code')->filter()->unique()->values())
+            ->get()
+            ->groupBy(function ($item) {
+                return mb_strtoupper(trim((string) $item->item_code));
+            });
 
-        [$receipt, $packages] = DB::connection('internal')->transaction(function () use ($data, $lines, $locationCode, $receiptLocationCode, $warehouseCode, $catalogItems) {
+        [$receipt, $packages] = DB::connection('internal')->transaction(function () use ($data, $lines, $locationCode, $receiptLocationCode, $warehouseCode, $catalogItems, $internalCatalogItems) {
             $location = WarehouseLocation::query()->firstOrCreate(
                 ['location_code' => $locationCode],
                 [
@@ -929,6 +1157,17 @@ class WarehouseCountController extends Controller
                 ]));
 
                 $catalogItem = $catalogItems->get($line['ma_sp']);
+                $internalCatalogGroup = $internalCatalogItems->get(mb_strtoupper(trim((string) $line['internal_item_code'])), collect());
+                $internalCatalogItem = $internalCatalogGroup->first(function ($item) use ($line) {
+                    foreach (['size', 'color', 'side'] as $field) {
+                        $catalogValue = mb_strtoupper(trim((string) $item->{$field}));
+                        $lineValue = mb_strtoupper(trim((string) $line[$field]));
+                        if ($catalogValue !== '' && $lineValue !== '' && $catalogValue !== $lineValue) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }) ?: $internalCatalogGroup->first();
 
                 $receipt->lines()->create([
                     'inventory_package_id' => $package->id,
@@ -937,8 +1176,8 @@ class WarehouseCountController extends Controller
                     'purchase_order' => $line['purchase_order'],
                     'customer' => $line['customer'],
                     'ma_hh' => $line['ma_sp'],
-                    'ten_hh' => $catalogItem->Ten_hh ?? $line['category'],
-                    'dvt' => $catalogItem->Dvt ?? $line['dvt'],
+                    'ten_hh' => $line['category'] ?: ($internalCatalogItem->item_name ?? ($catalogItem->Ten_hh ?? '')),
+                    'dvt' => $line['dvt'] ?: ($internalCatalogItem->unit ?? ($catalogItem->Dvt ?? '')),
                     'quantity' => $line['quantity'],
                     'location_code' => $lineLocation->location_code,
                     'internal_item_code' => $line['internal_item_code'],
@@ -1222,6 +1461,52 @@ class WarehouseCountController extends Controller
     public function printLocation(WarehouseLocation $warehouseLocation)
     {
         return view('client.labels.location', ['location' => $warehouseLocation]);
+    }
+
+    public function printLocations(Request $request)
+    {
+        $data = $request->validate([
+            'shelf_from' => 'nullable|string|max:1',
+            'shelf_to' => 'nullable|string|max:1',
+            'number_from' => 'nullable|integer|min:1|max:999',
+            'number_to' => 'nullable|integer|min:1|max:999',
+            'codes' => 'nullable|string|max:5000',
+        ]);
+
+        $codes = collect();
+        if (!empty($data['codes'])) {
+            $codes = collect(explode(',', (string) $data['codes']))
+                ->map(fn ($code) => strtoupper(trim($code)))
+                ->filter()
+                ->unique()
+                ->values();
+        } else {
+            $fromShelf = ord(strtoupper(trim((string) ($data['shelf_from'] ?? 'A'))));
+            $toShelf = ord(strtoupper(trim((string) ($data['shelf_to'] ?? 'D'))));
+            $fromNumber = (int) ($data['number_from'] ?? 1);
+            $toNumber = (int) ($data['number_to'] ?? 100);
+
+            if ($fromShelf < 65 || $fromShelf > 90 || $toShelf < 65 || $toShelf > 90 || $fromShelf > $toShelf || $fromNumber > $toNumber) {
+                abort(422, 'Dãy vị trí không hợp lệ.');
+            }
+
+            for ($shelfAscii = $fromShelf; $shelfAscii <= $toShelf; $shelfAscii++) {
+                for ($number = $fromNumber; $number <= $toNumber; $number++) {
+                    $codes->push(chr($shelfAscii) . $number);
+                }
+            }
+        }
+
+        $locations = WarehouseLocation::query()
+            ->whereIn('location_code', $codes)
+            ->get()
+            ->sortBy(fn ($location) => $codes->search($location->location_code))
+            ->values();
+
+        return view('client.labels.locations', [
+            'locations' => $locations,
+            'missingCodes' => $codes->diff($locations->pluck('location_code'))->values(),
+        ]);
     }
 
     public function printMaterialReceipt(InternalMaterialReceipt $receipt)

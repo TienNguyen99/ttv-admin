@@ -177,10 +177,12 @@ Route::get('/client/ton-kho-noi-bo', [WarehouseCountController::class, 'stockInd
 Route::get('/api/ton-kho-noi-bo/kho', [WarehouseCountController::class, 'stockWarehouses']);
 Route::get('/api/ton-kho-noi-bo', [WarehouseCountController::class, 'stockData']);
 Route::patch('/api/ton-kho-noi-bo/ma-ke-toan', [WarehouseCountController::class, 'assignAccountingCode']);
+Route::patch('/api/ton-kho-noi-bo/vi-tri', [WarehouseCountController::class, 'assignStockLocation']);
 Route::delete('/api/ton-kho-noi-bo', [WarehouseCountController::class, 'destroyOpeningStock']);
 Route::get('/client/kiem-ton-kho/vi-tri/{warehouseLocation}', [WarehouseCountController::class, 'showLocation']);
 Route::get('/api/kiem-ton-kho/vi-tri', [WarehouseCountController::class, 'locations']);
 Route::post('/api/kiem-ton-kho/vi-tri', [WarehouseCountController::class, 'storeLocation']);
+Route::post('/api/kiem-ton-kho/vi-tri/tao-nhanh', [WarehouseCountController::class, 'bulkStoreLocations']);
 Route::patch('/api/kiem-ton-kho/vi-tri/{warehouseLocation}/layout', [WarehouseCountController::class, 'updateLocationLayout']);
 Route::delete('/api/kiem-ton-kho/vi-tri/{warehouseLocation}', [WarehouseCountController::class, 'destroyLocation']);
 Route::get('/api/kiem-ton-kho/kien', [WarehouseCountController::class, 'packages']);
@@ -194,6 +196,7 @@ Route::delete('/api/kiem-ton-kho/kien/{inventoryPackage}', [WarehouseCountContro
 Route::get('/api/kiem-ton-kho/noi-dung-vi-tri', [WarehouseCountController::class, 'locationContents']);
 Route::get('/api/kiem-ton-kho/tra-cuu-giong-noi', [WarehouseCountController::class, 'voiceLookup']);
 Route::get('/client/kiem-ton-kho/tem-kien/{inventoryPackage}', [WarehouseCountController::class, 'printPackage']);
+Route::get('/client/kiem-ton-kho/tem-vi-tri-hang-loat', [WarehouseCountController::class, 'printLocations']);
 Route::get('/client/kiem-ton-kho/tem-vi-tri/{warehouseLocation}', [WarehouseCountController::class, 'printLocation']);
 Route::get('/client/nhap-thanh-pham-noi-bo/{receipt}/in', [WarehouseCountController::class, 'printMaterialReceipt']);
 Route::get('/client/nhap-vat-tu-noi-bo/{receipt}/in', [WarehouseCountController::class, 'printMaterialReceipt']);

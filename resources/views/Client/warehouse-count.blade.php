@@ -174,6 +174,8 @@
                 <div class="page-subtitle">Nhập thành phẩm, bố trí vị trí, in tem QR và theo dõi kiện nội bộ.</div>
             </div>
             <div class="d-flex gap-2 align-items-center">
+                <button type="button" class="btn btn-outline-primary btn-icon" onclick="openBulkLocationModal()"><i data-lucide="grid-2x2-plus"></i>Tạo nhanh vị trí</button>
+                <button type="button" class="btn btn-outline-primary btn-icon" onclick="openBulkPrintLocationModal()"><i data-lucide="qr-code"></i>In QR vị trí</button>
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="openLocationModal()"><i data-lucide="map-pin-plus"></i>Thêm vị trí</button>
                 <select id="warehouseFlowTop" class="form-select" style="width:180px" onchange="handleWarehouseFlow(this.value)">
                     <option value="receipt">Nhập thành phẩm</option>
@@ -426,6 +428,55 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="bulkLocationModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div><h5 class="modal-title">Tạo nhanh vị trí kệ</h5><div class="text-muted small">Ví dụ: A đến D, số 1 đến 100 sẽ tạo A1...D100.</div></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><label class="form-label">Kệ từ</label><input id="bulkShelfFrom" class="form-control text-uppercase" maxlength="1" value="A"></div>
+                        <div class="col-6"><label class="form-label">Kệ đến</label><input id="bulkShelfTo" class="form-control text-uppercase" maxlength="1" value="D"></div>
+                        <div class="col-6"><label class="form-label">Số từ</label><input id="bulkNumberFrom" type="number" min="1" max="999" class="form-control" value="1"></div>
+                        <div class="col-6"><label class="form-label">Số đến</label><input id="bulkNumberTo" type="number" min="1" max="999" class="form-control" value="100"></div>
+                        <div class="col-12"><label class="form-label">Tầng mặc định</label><select id="bulkTier" class="form-select"><option value="1">Tầng 1</option><option value="2">Tầng 2</option></select></div>
+                        <div class="col-12"><label class="form-label">Tên tiền tố</label><input id="bulkNamePrefix" class="form-control" value="Kệ"></div>
+                    </div>
+                    <div id="bulkLocationPreview" class="section-hint"></div>
+                    <div id="bulkLocationStatus" class="small mt-2"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button id="createBulkLocationsBtn" type="button" class="btn btn-primary btn-icon"><i data-lucide="grid-2x2-plus"></i>Tạo vị trí</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="bulkPrintLocationModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div><h5 class="modal-title">In QR vị trí hàng loạt</h5><div class="text-muted small">Chọn dãy vị trí đã tạo, ví dụ A đến D và 1 đến 100.</div></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><label class="form-label">Kệ từ</label><input id="printShelfFrom" class="form-control text-uppercase" maxlength="1" value="A"></div>
+                        <div class="col-6"><label class="form-label">Kệ đến</label><input id="printShelfTo" class="form-control text-uppercase" maxlength="1" value="D"></div>
+                        <div class="col-6"><label class="form-label">Số từ</label><input id="printNumberFrom" type="number" min="1" max="999" class="form-control" value="1"></div>
+                        <div class="col-6"><label class="form-label">Số đến</label><input id="printNumberTo" type="number" min="1" max="999" class="form-control" value="100"></div>
+                    </div>
+                    <div id="bulkPrintLocationPreview" class="section-hint"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button id="printBulkLocationsBtn" type="button" class="btn btn-primary btn-icon"><i data-lucide="printer"></i>Mở trang in</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal fade" id="receiptLocationModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -452,6 +503,8 @@
         const value = id => document.getElementById(id).value.trim();
         const locationModal = new bootstrap.Modal(document.getElementById('locationModal'));
         const movePackageModal = new bootstrap.Modal(document.getElementById('movePackageModal'));
+        const bulkLocationModal = new bootstrap.Modal(document.getElementById('bulkLocationModal'));
+        const bulkPrintLocationModal = new bootstrap.Modal(document.getElementById('bulkPrintLocationModal'));
         const receiptLocationModal = new bootstrap.Modal(document.getElementById('receiptLocationModal'));
         let editingReceiptId = null;
         let locations = [];
@@ -700,6 +753,10 @@
                         document.getElementById('internalCatalogOptions').innerHTML = internalCatalogItems.map(item => {
                             const label = [
                                 item.name,
+                                item.size ? `Size ${item.size}` : '',
+                                item.color ? `Màu ${item.color}` : '',
+                                item.logo_color ? `Màu in ${item.logo_color}` : '',
+                                item.side ? `Mặt ${item.side}` : '',
                                 item.unit,
                                 item.shelf ? `Kệ ${item.shelf}` : '',
                                 item.has_code ? '' : 'Chưa có mã'
@@ -721,6 +778,8 @@
             const row = input.closest('tr');
             if (!row.querySelector('.receipt-note').value.trim()) row.querySelector('.receipt-note').value = item.name || '';
             if (!row.querySelector('.receipt-dvt').value.trim()) row.querySelector('.receipt-dvt').value = item.unit || '';
+            if (!row.querySelector('.receipt-size').value.trim()) row.querySelector('.receipt-size').value = item.size || '';
+            if (!row.querySelector('.receipt-color').value.trim()) row.querySelector('.receipt-color').value = item.color || '';
             if (item.code) input.value = item.code;
         }
 
@@ -1169,6 +1228,71 @@
             locationModal.show();
         }
 
+        function bulkLocationPayload() {
+            return {
+                shelf_from: value('bulkShelfFrom').toUpperCase(),
+                shelf_to: value('bulkShelfTo').toUpperCase(),
+                number_from: Number(value('bulkNumberFrom') || 0),
+                number_to: Number(value('bulkNumberTo') || 0),
+                warehouse_code: '',
+                tier: Number(value('bulkTier') || 1),
+                name_prefix: value('bulkNamePrefix') || 'Kệ',
+            };
+        }
+
+        function updateBulkLocationPreview() {
+            const data = bulkLocationPayload();
+            const fromShelf = data.shelf_from.charCodeAt(0);
+            const toShelf = data.shelf_to.charCodeAt(0);
+            const shelfCount = fromShelf >= 65 && toShelf >= fromShelf ? (toShelf - fromShelf + 1) : 0;
+            const numberCount = data.number_to >= data.number_from ? (data.number_to - data.number_from + 1) : 0;
+            const total = shelfCount * numberCount;
+            const first = data.shelf_from && data.number_from ? `${data.shelf_from}${data.number_from}` : '';
+            const last = data.shelf_to && data.number_to ? `${data.shelf_to}${data.number_to}` : '';
+            document.getElementById('bulkLocationPreview').textContent = total
+                ? `Sẽ tạo ${formatNumber(total)} vị trí: ${first} ... ${last}.`
+                : 'Nhập dãy kệ và số hợp lệ để xem trước.';
+        }
+
+        function openBulkLocationModal() {
+            document.getElementById('bulkLocationStatus').textContent = '';
+            updateBulkLocationPreview();
+            bulkLocationModal.show();
+        }
+
+        function bulkPrintLocationPayload() {
+            return {
+                shelf_from: value('printShelfFrom').toUpperCase(),
+                shelf_to: value('printShelfTo').toUpperCase(),
+                number_from: Number(value('printNumberFrom') || 0),
+                number_to: Number(value('printNumberTo') || 0),
+            };
+        }
+
+        function updateBulkPrintLocationPreview() {
+            const data = bulkPrintLocationPayload();
+            const fromShelf = data.shelf_from.charCodeAt(0);
+            const toShelf = data.shelf_to.charCodeAt(0);
+            const shelfCount = fromShelf >= 65 && toShelf >= fromShelf ? (toShelf - fromShelf + 1) : 0;
+            const numberCount = data.number_to >= data.number_from ? (data.number_to - data.number_from + 1) : 0;
+            const total = shelfCount * numberCount;
+            const first = data.shelf_from && data.number_from ? `${data.shelf_from}${data.number_from}` : '';
+            const last = data.shelf_to && data.number_to ? `${data.shelf_to}${data.number_to}` : '';
+            document.getElementById('bulkPrintLocationPreview').textContent = total
+                ? `Sẽ mở trang in ${formatNumber(total)} tem QR: ${first} ... ${last}.`
+                : 'Nhập dãy vị trí hợp lệ để xem trước.';
+        }
+
+        function openBulkPrintLocationModal() {
+            const source = bulkLocationPayload();
+            document.getElementById('printShelfFrom').value = source.shelf_from || 'A';
+            document.getElementById('printShelfTo').value = source.shelf_to || 'D';
+            document.getElementById('printNumberFrom').value = source.number_from || 1;
+            document.getElementById('printNumberTo').value = source.number_to || 100;
+            updateBulkPrintLocationPreview();
+            bulkPrintLocationModal.show();
+        }
+
         function openMovePackageModal(packageId) {
             const item = mapPackages.find(packageItem => String(packageItem.id) === String(packageId));
             movingPackageId = packageId;
@@ -1282,6 +1406,57 @@
                   loadWarehouseMap();
                   loadLocationContents();
               }).catch(e => { setLocationStatus(e.message, true); alert(e.message); });
+        });
+
+        ['bulkShelfFrom','bulkShelfTo','bulkNumberFrom','bulkNumberTo','bulkTier','bulkNamePrefix'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateBulkLocationPreview);
+            document.getElementById(id).addEventListener('change', updateBulkLocationPreview);
+        });
+
+        ['printShelfFrom','printShelfTo','printNumberFrom','printNumberTo'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateBulkPrintLocationPreview);
+            document.getElementById(id).addEventListener('change', updateBulkPrintLocationPreview);
+        });
+
+        document.getElementById('printBulkLocationsBtn').addEventListener('click', () => {
+            const data = bulkPrintLocationPayload();
+            const params = new URLSearchParams({
+                shelf_from: data.shelf_from,
+                shelf_to: data.shelf_to,
+                number_from: data.number_from,
+                number_to: data.number_to,
+            });
+            window.open(`/client/kiem-ton-kho/tem-vi-tri-hang-loat?${params.toString()}`, '_blank');
+        });
+
+        document.getElementById('createBulkLocationsBtn').addEventListener('click', () => {
+            const button = document.getElementById('createBulkLocationsBtn');
+            const status = document.getElementById('bulkLocationStatus');
+            button.disabled = true;
+            status.className = 'small mt-2 text-muted';
+            status.textContent = 'Đang tạo vị trí...';
+            fetch('/api/kiem-ton-kho/vi-tri/tao-nhanh', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify(bulkLocationPayload())
+            }).then(r => jsonOrError(r, 'Không tạo nhanh được vị trí'))
+              .then(result => {
+                  const data = result.data || {};
+                  status.className = 'small mt-2 text-success';
+                  status.textContent = `Tạo mới ${formatNumber(data.created || 0)}, cập nhật ${formatNumber(data.updated || 0)}, bỏ qua ${formatNumber(data.skipped || 0)} vị trí đã có.`;
+                  return loadLocations().then(() => {
+                      renderLocations();
+                      loadWarehouseMap();
+                      renderLayoutEditor();
+                      refreshIcons();
+                  });
+              })
+              .catch(error => {
+                  status.className = 'small mt-2 text-danger';
+                  status.textContent = error.message;
+                  alert(error.message);
+              })
+              .finally(() => { button.disabled = false; });
         });
 
         document.getElementById('deleteLocationBtn').addEventListener('click', () => {
