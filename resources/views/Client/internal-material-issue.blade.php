@@ -81,6 +81,58 @@
             color: #17365d;
             font-size: 12px;
         }
+        .paste-column-map {
+            display: none;
+            margin-top: 12px;
+            border: 1px solid #dbe2ea;
+            border-radius: 6px;
+            overflow: auto;
+            background: #fff;
+        }
+        .paste-column-map.is-visible { display: block; }
+        .paste-map-table {
+            min-width: 980px;
+            margin: 0;
+            table-layout: fixed;
+        }
+        .paste-map-table th,
+        .paste-map-table td {
+            min-width: 150px;
+            max-width: 220px;
+            border-color: #e5ebf2 !important;
+            font-size: 12px;
+            vertical-align: top;
+        }
+        .paste-map-table th {
+            background: #f8fafc;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            cursor: grab;
+        }
+        .paste-map-table th:active { cursor: grabbing; }
+        .paste-map-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .paste-map-tools {
+            display: flex;
+            gap: 4px;
+        }
+        .paste-map-tools button {
+            width: 28px;
+            height: 26px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            background: #fff;
+            color: #0f172a;
+        }
+        .paste-map-sample {
+            min-height: 24px;
+            color: #334155;
+            word-break: break-word;
+        }
         .paste-summary { display: flex; flex-wrap: wrap; gap: 8px; }
         .paste-summary span {
             padding: 5px 8px;
@@ -128,6 +180,7 @@
                 <div id="pageHint" class="hint">TSoft kế toán chỉ đọc danh mục, không ghi dữ liệu.</div>
             </div>
             <div class="d-flex gap-2">
+                <button id="cancelEditBtn" type="button" class="wms-btn d-none"><i data-lucide="x"></i>Hủy sửa</button>
                 <button id="reloadBtn" type="button" class="wms-btn"><i data-lucide="refresh-cw"></i>Tải lại</button>
                 <button id="saveBtn" type="button" class="wms-btn wms-btn--primary"><i data-lucide="printer"></i>Xuất và in phiếu</button>
             </div>
@@ -154,8 +207,7 @@
 
             <div class="row g-2 mb-3">
                 <div class="col-md-2"><label class="form-label">Nghiệp vụ</label><select id="issueType" class="form-select"><option value="production">Xuất BTP đi sản xuất</option><option value="customer">Xuất thành phẩm cho khách</option></select></div>
-                <div class="col-md-2"><label class="form-label">Ngày xuất</label><input id="issueDate" type="date" class="form-control" value="{{ now()->format('Y-m-d') }}"></div>
-                <div class="col-md-2"><label class="form-label">Kho xuất</label><input id="warehouseCode" class="form-control" placeholder="KTPHAM"></div>
+                <div class="col-md-2"><label class="form-label">Ngày xuất</label><input id="issueDate" type="text" class="form-control date-vn" inputmode="numeric" placeholder="dd/mm/yyyy" value="{{ now()->format('d/m/Y') }}"></div>
                 <div class="col-md-2"><label class="form-label">Người nhận</label><input id="receiverName" class="form-control"></div>
                 <div class="col-md-2"><label class="form-label">Bộ phận</label><input id="department" class="form-control"></div>
                 <div class="col-md-2"><label class="form-label">Mục đích</label><input id="purpose" class="form-control" placeholder="Sản xuất / bù hao..."></div>
@@ -191,15 +243,15 @@
 
         <section class="panel">
             <div class="row g-2 align-items-end mb-3">
-                <div class="col-md-2"><label class="form-label">Từ ngày</label><input id="fromDate" type="date" class="form-control"></div>
-                <div class="col-md-2"><label class="form-label">Đến ngày</label><input id="toDate" type="date" class="form-control"></div>
+                <div class="col-md-2"><label class="form-label">Từ ngày</label><input id="fromDate" type="text" class="form-control date-vn" inputmode="numeric" placeholder="dd/mm/yyyy"></div>
+                <div class="col-md-2"><label class="form-label">Đến ngày</label><input id="toDate" type="text" class="form-control date-vn" inputmode="numeric" placeholder="dd/mm/yyyy"></div>
                 <div class="col-md-5"><label class="form-label">Tìm phiếu / mã hàng / người nhận</label><input id="keyword" class="form-control"></div>
                 <div class="col-md-3"><button id="clearFilterBtn" type="button" class="btn btn-outline-secondary w-100">Xóa lọc</button></div>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle">
                     <thead class="table-light">
-                        <tr><th>Số phiếu</th><th>Ngày</th><th>Kho</th><th>Người nhận</th><th>Bộ phận</th><th>Lệnh</th><th>Mục đích</th><th class="text-end">Dòng</th><th class="text-end">Tổng SL</th><th></th></tr>
+                        <tr><th>Số phiếu</th><th>Ngày</th><th>Người nhận</th><th>Bộ phận</th><th>Lệnh</th><th>Mục đích</th><th>Trạng thái</th><th class="text-end">Dòng</th><th class="text-end">Tổng SL</th><th></th></tr>
                     </thead>
                     <tbody id="issueRows"></tbody>
                 </table>
@@ -232,6 +284,12 @@
             </div>
             <label class="form-label" for="pasteExcelData">Dữ liệu copy từ Excel</label>
             <textarea id="pasteExcelData" class="form-control paste-box" spellcheck="false" placeholder="Dán các dòng Excel tại đây..."></textarea>
+            <div id="pasteColumnMap" class="paste-column-map">
+                <table class="table table-bordered paste-map-table">
+                    <thead><tr id="pasteMapHeader"></tr></thead>
+                    <tbody id="pasteMapRows"></tbody>
+                </table>
+            </div>
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2 mb-3">
                 <div class="hint">Có thể dán cả hàng tiêu đề. Dòng trống sẽ tự bỏ qua.</div>
                 <button id="analyzePasteBtn" type="button" class="btn btn-primary"><i data-lucide="scan-search"></i> Kiểm tra dữ liệu</button>
@@ -270,6 +328,27 @@
         let internalCatalogSearchTimer = null;
         let internalCatalogItems = [];
         let analyzedPastedLines = [];
+        let editingIssueId = null;
+        let pasteColumnMapping = [];
+
+        const pasteFieldOptions = [
+            ['', 'Bỏ qua'],
+            ['issue_date', 'Ngày xuất'],
+            ['internal_item_code', 'Mã nội bộ'],
+            ['ma_hh', 'Mã kế toán'],
+            ['production_order', 'PS# / Lệnh'],
+            ['ps_number', 'PS# ghi chú'],
+            ['size', 'Size'],
+            ['color', 'Màu'],
+            ['logo_color', 'Logo color'],
+            ['dvt', 'ĐVT'],
+            ['ordered_quantity', 'SL đơn hàng'],
+            ['quantity', 'SL xuất'],
+            ['error_quantity', 'SL lỗi'],
+            ['note', 'Ghi chú'],
+            ['side', 'Vị trí/mặt'],
+            ['location_code', 'Kệ kho'],
+        ];
 
         const pastePresets = {
             UNIPAX: {
@@ -287,7 +366,27 @@
         };
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-        const value = id => document.getElementById(id).value.trim();
+        function isoToDateVn(value) {
+            const raw = String(value || '').slice(0, 10);
+            const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            return match ? `${match[3]}/${match[2]}/${match[1]}` : raw;
+        }
+        function dateVnToIso(value) {
+            const raw = String(value || '').trim();
+            const vn = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (vn) return `${vn[3]}-${vn[2].padStart(2, '0')}-${vn[1].padStart(2, '0')}`;
+            return raw;
+        }
+        function setDateValue(id, value) {
+            const input = document.getElementById(id);
+            if (input) input.value = isoToDateVn(value);
+        }
+        const value = id => {
+            const input = document.getElementById(id);
+            if (!input) return '';
+            const raw = input.value.trim();
+            return input.classList.contains('date-vn') ? dateVnToIso(raw) : raw;
+        };
         const num = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
 
         function jsonOrError(response, fallback) {
@@ -343,6 +442,47 @@
                 color: row.querySelector('.color').value.trim(),
                 note: row.querySelector('.line-note').value.trim(),
             })).filter(line => line.ma_hh || line.quantity);
+        }
+
+        function setEditingIssue(issue) {
+            editingIssueId = issue?.id || null;
+            document.getElementById('cancelEditBtn').classList.toggle('d-none', !editingIssueId);
+            if (editingIssueId) {
+                document.getElementById('saveBtn').innerHTML = '<i data-lucide="save"></i>Cập nhật + in phiếu';
+                document.getElementById('pageHint').textContent = `Đang sửa ${issue.issue_code}. Lưu sẽ hoàn tồn cũ và trừ lại theo dòng mới.`;
+            } else {
+                applyIssueType(value('issueType'));
+            }
+            if (window.lucide) window.lucide.createIcons();
+        }
+
+        function resetIssueForm() {
+            editingIssueId = null;
+            lineRows.innerHTML = '';
+            addLine();
+            document.getElementById('receiverName').value = '';
+            document.getElementById('issueNote').value = '';
+            setEditingIssue(null);
+        }
+
+        function loadIssueForEdit(issueId) {
+            fetch(`/api/xuat-vat-tu-noi-bo/${issueId}`)
+                .then(response => jsonOrError(response, 'Không tải được phiếu cần sửa'))
+                .then(result => {
+                    const issue = result.data;
+                    document.getElementById('issueType').value = issue.issue_type || 'production';
+                    setDateValue('issueDate', issue.issue_date);
+                    document.getElementById('receiverName').value = issue.receiver_name || '';
+                    document.getElementById('department').value = issue.department || '';
+                    document.getElementById('purpose').value = issue.purpose || '';
+                    document.getElementById('issueNote').value = issue.note || '';
+                    lineRows.innerHTML = '';
+                    (issue.lines || []).forEach(line => addLine(line));
+                    if (!(issue.lines || []).length) addLine();
+                    setEditingIssue(issue);
+                    window.scrollTo({top: 0, behavior: 'smooth'});
+                })
+                .catch(error => alert(error.message));
         }
 
         function searchProductionOrders(input) {
@@ -454,7 +594,6 @@
             input.disabled = true;
 
             const params = new URLSearchParams({ production_order: code });
-            if (value('warehouseCode')) params.set('warehouse_code', value('warehouseCode'));
 
             fetch(`/api/xuat-vat-tu-noi-bo/lenh-san-xuat?${params.toString()}`)
                 .then(response => jsonOrError(response, 'Không tải được chi tiết lệnh sản xuất'))
@@ -507,7 +646,9 @@
             document.getElementById('pageHint').textContent = isProduction
                 ? 'Xuất BTP khỏi kho nội bộ để giao sản xuất. Khi hoàn thành, nhập lại bằng Phiếu nhập thành phẩm.'
                 : 'Xuất thành phẩm cho khách hàng và trừ tồn kho nội bộ theo mã, size, màu và mặt.';
-            document.getElementById('saveBtn').textContent = isProduction ? 'Xuất BTP + in phiếu' : 'Xuất TP + in phiếu';
+            if (!editingIssueId) {
+                document.getElementById('saveBtn').textContent = isProduction ? 'Xuất BTP + in phiếu' : 'Xuất TP + in phiếu';
+            }
 
             if (isProduction) {
                 if (!value('department') || value('department') === 'Kinh doanh') document.getElementById('department').value = 'Sản xuất';
@@ -599,26 +740,144 @@
             return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
         }
 
-        function parseExcelPaste() {
-            const customer = value('pasteCustomer');
-            const preset = pastePresets[customer];
-            const rows = document.getElementById('pasteExcelData').value
+        function getPastedRows() {
+            return document.getElementById('pasteExcelData').value
                 .split(/\r?\n/)
                 .map(row => row.split('\t').map(cell => cell.trim()))
                 .filter(row => row.some(Boolean));
+        }
+
+        function pasteMappingKey(customer) {
+            return `ttvPasteMap:${customer}`;
+        }
+
+        function normalizePasteMapping(rows, customer) {
+            const maxColumns = Math.max(...rows.map(row => row.length), 0);
+            if (!maxColumns) return [];
+
+            const saved = (() => {
+                try {
+                    const parsed = JSON.parse(localStorage.getItem(pasteMappingKey(customer)) || '[]');
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (_) {
+                    return [];
+                }
+            })();
+
+            const detectedHeaders = (rows[0] || []).map(headerField);
+            const hasHeader = detectedHeaders.filter(Boolean).length >= 2;
+            let mapping = saved.some(Boolean) ? saved : (hasHeader ? detectedHeaders : (pastePresets[customer]?.columns || []));
+
+            if (customer === 'UNIPAX') {
+                mapping = mapping.map(field => field === 'production_order' ? 'ps_number' : field);
+            }
+
+            return Array.from({ length: maxColumns }, (_, index) => mapping[index] || '');
+        }
+
+        function savePasteColumnMapping() {
+            const customer = value('pasteCustomer');
+            localStorage.setItem(pasteMappingKey(customer), JSON.stringify(pasteColumnMapping));
+        }
+
+        function movePasteMapping(fromIndex, toIndex) {
+            if (toIndex < 0 || toIndex >= pasteColumnMapping.length || fromIndex === toIndex) return;
+            const copy = [...pasteColumnMapping];
+            [copy[fromIndex], copy[toIndex]] = [copy[toIndex], copy[fromIndex]];
+            pasteColumnMapping = copy;
+            savePasteColumnMapping();
+            renderPasteColumnMap();
+        }
+
+        function renderPasteColumnMap() {
+            const customer = value('pasteCustomer');
+            const rows = getPastedRows();
+            const wrapper = document.getElementById('pasteColumnMap');
+            const header = document.getElementById('pasteMapHeader');
+            const body = document.getElementById('pasteMapRows');
+
+            if (!rows.length) {
+                pasteColumnMapping = [];
+                wrapper.classList.remove('is-visible');
+                header.innerHTML = '';
+                body.innerHTML = '';
+                return;
+            }
+
+            pasteColumnMapping = normalizePasteMapping(rows, customer);
+            wrapper.classList.add('is-visible');
+
+            header.innerHTML = pasteColumnMapping.map((field, index) => {
+                const options = pasteFieldOptions.map(([value, label]) =>
+                    `<option value="${esc(value)}" ${value === field ? 'selected' : ''}>${esc(label)}</option>`
+                ).join('');
+                return `
+                    <th draggable="true" data-index="${index}">
+                        <div class="paste-map-cell">
+                            <div class="d-flex justify-content-between align-items-center gap-1">
+                                <strong>C${index + 1}</strong>
+                                <div class="paste-map-tools">
+                                    <button type="button" class="paste-map-left" data-index="${index}" title="Dich mapping sang trai">�</button>
+                                    <button type="button" class="paste-map-right" data-index="${index}" title="Dich mapping sang phai">�</button>
+                                </div>
+                            </div>
+                            <select class="form-select form-select-sm paste-map-select" data-index="${index}">
+                                ${options}
+                            </select>
+                        </div>
+                    </th>
+                `;
+            }).join('');
+
+            const detectedHeaders = (rows[0] || []).map(headerField);
+            const hasHeader = detectedHeaders.filter(Boolean).length >= 2;
+            const samples = (hasHeader ? rows.slice(1, 4) : rows.slice(0, 3));
+            body.innerHTML = samples.map((row, rowIndex) => `
+                <tr>
+                    ${pasteColumnMapping.map((_, colIndex) => `
+                        <td>
+                            <div class="paste-map-sample">${esc(row[colIndex] || '')}</div>
+                        </td>
+                    `).join('')}
+                </tr>
+            `).join('') || `<tr><td colspan="${pasteColumnMapping.length}">Khong co dong mau.</td></tr>`;
+
+            header.querySelectorAll('.paste-map-select').forEach(select => {
+                select.addEventListener('change', event => {
+                    pasteColumnMapping[Number(event.target.dataset.index)] = event.target.value;
+                    savePasteColumnMapping();
+                });
+            });
+            header.querySelectorAll('.paste-map-left').forEach(button => {
+                button.addEventListener('click', event => movePasteMapping(Number(event.currentTarget.dataset.index), Number(event.currentTarget.dataset.index) - 1));
+            });
+            header.querySelectorAll('.paste-map-right').forEach(button => {
+                button.addEventListener('click', event => movePasteMapping(Number(event.currentTarget.dataset.index), Number(event.currentTarget.dataset.index) + 1));
+            });
+            header.querySelectorAll('th[draggable="true"]').forEach(th => {
+                th.addEventListener('dragstart', event => event.dataTransfer.setData('text/plain', event.currentTarget.dataset.index));
+                th.addEventListener('dragover', event => event.preventDefault());
+                th.addEventListener('drop', event => {
+                    event.preventDefault();
+                    movePasteMapping(Number(event.dataTransfer.getData('text/plain')), Number(event.currentTarget.dataset.index));
+                });
+            });
+        }
+
+        function parseExcelPaste() {
+            const customer = value('pasteCustomer');
+            const preset = pastePresets[customer];
+            renderPasteColumnMap();
+            const rows = getPastedRows();
 
             if (!rows.length) throw new Error('Chưa có dữ liệu Excel để kiểm tra.');
 
             const detectedHeaders = rows[0].map(headerField);
             const hasHeader = detectedHeaders.filter(Boolean).length >= 2;
-            let columns = preset.columns;
+            let columns = pasteColumnMapping.length ? pasteColumnMapping : preset.columns;
             if (hasHeader) {
-                columns = detectedHeaders;
-                if (customer === 'UNIPAX') {
-                    columns = columns.map(field => field === 'production_order' ? 'ps_number' : field);
-                }
                 rows.shift();
-            } else if (customer === 'CUSTOM') {
+            } else if (customer === 'CUSTOM' && !columns.some(Boolean)) {
                 throw new Error('Khách khác cần dán kèm hàng tiêu đề.');
             }
 
@@ -680,8 +939,6 @@
             document.getElementById('applyPastedLinesBtn').disabled = !analyzedPastedLines.length;
             if (value('pasteCustomer') === 'UNIPAX') {
                 const receiptCount = Math.ceil(analyzedPastedLines.length / 20);
-                const firstDate = analyzedPastedLines.find(line => line.issue_date)?.issue_date;
-                if (firstDate) document.getElementById('issueDate').value = firstDate;
                 document.getElementById('applyPastedLinesLabel').textContent =
                     `Tạo ${receiptCount} PNTP + ${receiptCount} PXTP UNIPAX`;
             }
@@ -716,8 +973,6 @@
             }
             lineRows.innerHTML = '';
             analyzedPastedLines.forEach(line => addLine(line));
-            const firstDate = analyzedPastedLines.find(line => line.issue_date)?.issue_date;
-            if (firstDate) document.getElementById('issueDate').value = firstDate;
             if (!value('issueNote')) {
                 document.getElementById('issueNote').value = `Paste phiếu ${value('pasteCustomer')}`;
             }
@@ -726,8 +981,6 @@
         }
 
         function saveUnipaxReceipt() {
-            const warehouseCode = value('warehouseCode');
-            if (!warehouseCode) return alert('Nhập Kho xuất/nhập ở phần thông tin phiếu trước.');
             if (!value('issueDate')) return alert('Chọn ngày nhập kho.');
 
             const lines = analyzedPastedLines.map(line => ({
@@ -742,8 +995,8 @@
                 location_code: line.location_code || '',
                 purchase_order: line.purchase_order || '',
                 customer: 'UNIPAX',
-                note: line.note || '',
-                issue_date: line.issue_date || value('issueDate'),
+                note: [line.issue_date ? `Ngay Excel: ${isoToDateVn(line.issue_date)}` : '', line.note || ''].filter(Boolean).join(' - '),
+                issue_date: value('issueDate'),
             }));
             if (lines.some(line => !line.internal_item_code || !Number(line.quantity))) {
                 return alert('Mỗi dòng UNIPAX cần mã nội bộ và số lượng Đạt.');
@@ -751,7 +1004,7 @@
 
             const batches = [];
             const byDate = lines.reduce((groups, line) => {
-                const date = line.issue_date || value('issueDate');
+                const date = value('issueDate');
                 groups[date] = groups[date] || [];
                 groups[date].push(line);
                 return groups;
@@ -776,7 +1029,7 @@
                     headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                     body: JSON.stringify({
                         location_code: '',
-                        ma_ko: warehouseCode,
+                        ma_ko: '',
                         checked_at: batch.date,
                         note: `Nhập kho từ phiếu xuất UNIPAX - phần ${index + 1}/${batches.length}`,
                         lines: batch.lines
@@ -835,13 +1088,13 @@
             if (!lines.length) return alert('Nhập ít nhất một dòng hàng.');
             if (lines.some(line => !line.ma_hh || !Number(line.quantity))) return alert('Mỗi dòng cần mã hàng và số lượng.');
 
-            fetch('/api/xuat-vat-tu-noi-bo', {
-                method: 'POST',
+            fetch(editingIssueId ? `/api/xuat-vat-tu-noi-bo/${editingIssueId}` : '/api/xuat-vat-tu-noi-bo', {
+                method: editingIssueId ? 'PUT' : 'POST',
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({
                     issue_type: value('issueType'),
                     issue_date: value('issueDate'),
-                    warehouse_code: value('warehouseCode'),
+                    warehouse_code: '',
                     receiver_name: value('receiverName'),
                     department: value('department'),
                     production_order: Array.from(new Set(lines.map(line => line.production_order).filter(Boolean))).join(', '),
@@ -852,8 +1105,7 @@
             }).then(response => jsonOrError(response, 'Không tạo được phiếu xuất kho'))
               .then(result => {
                   window.open(result.print_url, '_blank');
-                  lineRows.innerHTML = '';
-                  addLine();
+                  resetIssueForm();
                   loadIssues();
               })
               .catch(error => alert(error.message));
@@ -871,23 +1123,28 @@
                     document.getElementById('issueCount').textContent = num(result.summary?.total_issues || 0);
                     document.getElementById('lineCount').textContent = num(result.summary?.total_lines || 0);
                     document.getElementById('totalQuantity').textContent = num(result.summary?.total_quantity || 0);
-                    issueRows.innerHTML = (result.data || []).map(issue => `
+                    issueRows.innerHTML = (result.data || []).map(issue => {
+                        const status = issue.issue_type === 'customer' || String(issue.issue_code || '').startsWith('PXTP-')
+                            ? '<span class="badge text-bg-success">TP khách</span>'
+                            : '<span class="badge text-bg-primary">BTP sản xuất</span>';
+                        return `
                         <tr>
                             <td>${esc(issue.issue_code)}</td>
                             <td>${esc(issue.issue_date)}</td>
-                            <td>${esc(issue.warehouse_code)}</td>
                             <td>${esc(issue.receiver_name)}</td>
                             <td>${esc(issue.department)}</td>
                             <td>${esc(issue.production_order)}</td>
                             <td>${esc(issue.purpose)}</td>
+                            <td>${status}</td>
                             <td class="text-end">${num(issue.lines_count)}</td>
                             <td class="text-end">${num(issue.lines_sum_quantity)}</td>
                             <td class="text-nowrap text-end">
                                 <a class="btn btn-sm btn-outline-primary" target="_blank" href="/client/xuat-vat-tu-noi-bo/${issue.id}/in">In</a>
+                                <button class="btn btn-sm btn-outline-secondary edit-issue" data-id="${issue.id}">Sửa</button>
                                 <button class="btn btn-sm btn-outline-danger delete-issue" data-id="${issue.id}">Xóa</button>
                             </td>
                         </tr>
-                    `).join('') || '<tr><td colspan="10" class="text-center hint">Chưa có phiếu</td></tr>';
+                    `}).join('') || '<tr><td colspan="10" class="text-center hint">Chưa có phiếu</td></tr>';
                 })
                 .catch(error => alert(error.message));
         }
@@ -929,6 +1186,12 @@
         });
 
         issueRows.addEventListener('click', event => {
+            const editButton = event.target.closest('.edit-issue');
+            if (editButton) {
+                loadIssueForEdit(editButton.dataset.id);
+                return;
+            }
+
             const button = event.target.closest('.delete-issue');
             if (!button || !confirm('Xóa phiếu xuất kho nội bộ này?')) return;
 
@@ -944,6 +1207,7 @@
         document.getElementById('openPasteImportBtn').addEventListener('click', () => {
             document.getElementById('pasteColumnGuide').textContent = pastePresets[value('pasteCustomer')].guide;
             document.getElementById('pasteImportDialog').showModal();
+            renderPasteColumnMap();
             setTimeout(() => document.getElementById('pasteExcelData').focus(), 0);
         });
         document.getElementById('closePasteImportBtn').addEventListener('click', () => document.getElementById('pasteImportDialog').close());
@@ -957,11 +1221,19 @@
             document.getElementById('pasteResultArea').classList.add('d-none');
             document.getElementById('applyPastedLinesBtn').disabled = true;
             document.getElementById('pasteFooterHint').textContent = 'Chưa có dữ liệu kiểm tra.';
+            renderPasteColumnMap();
         });
+        document.getElementById('pasteExcelData').addEventListener('input', renderPasteColumnMap);
         document.getElementById('analyzePasteBtn').addEventListener('click', analyzePastedData);
         document.getElementById('applyPastedLinesBtn').addEventListener('click', applyPastedLines);
         document.getElementById('saveBtn').addEventListener('click', saveIssue);
+        document.getElementById('cancelEditBtn').addEventListener('click', resetIssueForm);
         document.getElementById('issueType').addEventListener('change', event => applyIssueType(event.target.value));
+        document.querySelectorAll('.date-vn').forEach(input => {
+            input.addEventListener('blur', () => {
+                if (input.value.trim()) input.value = isoToDateVn(dateVnToIso(input.value));
+            });
+        });
         document.getElementById('reloadBtn').addEventListener('click', loadIssues);
         document.getElementById('clearFilterBtn').addEventListener('click', () => {
             ['fromDate','toDate','keyword'].forEach(id => document.getElementById(id).value = '');
@@ -981,10 +1253,15 @@
 
         const requestedType = new URLSearchParams(window.location.search).get('type');
         document.getElementById('pasteColumnGuide').textContent = pastePresets.UNIPAX.guide;
-        document.getElementById('issueType').value = requestedType === 'material' ? 'material' : 'production';
+        document.getElementById('issueType').value = requestedType === 'customer' ? 'customer' : 'production';
         applyIssueType(document.getElementById('issueType').value);
         addLine();
         loadIssues();
     </script>
 </body>
 </html>
+
+
+
+
+

@@ -12,6 +12,7 @@
         .btn { border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; padding: 8px 12px; cursor: pointer; }
         .sheet { width: 210mm; min-height: 297mm; margin: 0 auto 24px; background: #fff; padding: 16mm; }
         .top { display: flex; justify-content: space-between; gap: 20px; }
+        .company-logo { display: block; width: 22mm; height: auto; margin-bottom: 4px; }
         .company { font-weight: 700; text-transform: uppercase; }
         .code-box { text-align: right; line-height: 1.6; }
         h1 { margin: 18px 0 4px; text-align: center; font-size: 22px; text-transform: uppercase; }
@@ -59,6 +60,7 @@
     <main class="sheet">
         <div class="top">
             <div>
+                <img class="company-logo" src="https://i.ibb.co/fd36G56R/Untitled-removebg-preview.png" alt="Tagtime">
                 <div class="company">Công ty TNHH Nhãn Thời Gian Việt Tiến</div>
                 <div>{{ $documentNote }}</div>
             </div>

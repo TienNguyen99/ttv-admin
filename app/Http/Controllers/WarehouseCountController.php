@@ -14,7 +14,10 @@ use App\Services\InternalDocumentNumber;
 use App\Services\InternalStockLedger;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class WarehouseCountController extends Controller
 {
@@ -26,6 +29,11 @@ class WarehouseCountController extends Controller
     public function stockIndex()
     {
         return view('client.internal-stock');
+    }
+
+    public function qualityIndex()
+    {
+        return view('client.internal-warehouse-quality');
     }
 
     public function showLocation(WarehouseLocation $warehouseLocation)
@@ -409,6 +417,191 @@ class WarehouseCountController extends Controller
                 'total_quantity' => (float) $data->sum('total_quantity'),
             ],
         ]);
+    }
+
+    public function qualityData(Request $request)
+    {
+        $month = Carbon::parse($request->query('month', now()->format('Y-m')) . '-01')->startOfMonth();
+        $monthStart = $month->format('Y-m-d');
+        $monthEnd = $month->copy()->endOfMonth()->format('Y-m-d');
+
+        $stockRows = app(InternalStockLedger::class)
+            ->query($monthStart, $monthEnd)
+            ->select(
+                'location_code',
+                DB::raw('ma_hh as ma_sp'),
+                'internal_item_code',
+                'size',
+                'color',
+                'side',
+                DB::raw('SUM(opening_quantity) as opening_quantity'),
+                DB::raw('SUM(receipt_quantity) as receipt_quantity'),
+                DB::raw('SUM(issue_quantity) as issue_quantity'),
+                DB::raw('SUM(opening_quantity + receipt_quantity - issue_quantity) as total_quantity')
+            )
+            ->groupBy('location_code', 'ma_hh', 'internal_item_code', 'size', 'color', 'side')
+            ->havingRaw('SUM(opening_quantity + receipt_quantity - issue_quantity) != 0 OR SUM(opening_quantity) != 0 OR SUM(receipt_quantity) != 0 OR SUM(issue_quantity) != 0')
+            ->get();
+
+        $catalogCodes = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->pluck('item_code')
+            ->map(fn ($value) => mb_strtoupper(trim((string) $value)))
+            ->filter()
+            ->flip();
+
+        $rowPayload = function ($row) {
+            return [
+                'location_code' => $row->location_code ?: 'CHUA-XEP',
+                'ma_sp' => $row->ma_sp,
+                'internal_item_code' => $row->internal_item_code,
+                'size' => $row->size,
+                'color' => $row->color,
+                'side' => $row->side,
+                'quantity' => (float) $row->total_quantity,
+                'opening_quantity' => (float) $row->opening_quantity,
+                'receipt_quantity' => (float) $row->receipt_quantity,
+                'issue_quantity' => (float) $row->issue_quantity,
+            ];
+        };
+
+        $negativeStock = $stockRows
+            ->filter(fn ($row) => (float) $row->total_quantity < 0)
+            ->values()
+            ->map($rowPayload);
+
+        $unassignedStock = $stockRows
+            ->filter(fn ($row) => (float) $row->total_quantity != 0.0 && in_array(strtoupper(trim((string) $row->location_code)), ['', 'CHUA-XEP'], true))
+            ->values()
+            ->map($rowPayload);
+
+        $missingCatalog = $stockRows
+            ->filter(function ($row) use ($catalogCodes) {
+                $code = mb_strtoupper(trim((string) $row->internal_item_code));
+                return $code !== '' && !$catalogCodes->has($code);
+            })
+            ->values()
+            ->map($rowPayload);
+
+        $multiLocation = $stockRows
+            ->filter(fn ($row) => (float) $row->total_quantity != 0.0)
+            ->groupBy(function ($row) {
+                return implode('|', [
+                    mb_strtoupper(trim((string) $row->ma_sp)),
+                    mb_strtoupper(trim((string) $row->internal_item_code)),
+                    mb_strtoupper(trim((string) $row->size)),
+                    mb_strtoupper(trim((string) $row->color)),
+                    mb_strtoupper(trim((string) $row->side)),
+                ]);
+            })
+            ->filter(function ($rows) {
+                return $rows->pluck('location_code')->map(fn ($value) => strtoupper(trim((string) $value)) ?: 'CHUA-XEP')->unique()->count() > 1;
+            })
+            ->map(function ($rows) {
+                $first = $rows->first();
+                return [
+                    'ma_sp' => $first->ma_sp,
+                    'internal_item_code' => $first->internal_item_code,
+                    'size' => $first->size,
+                    'color' => $first->color,
+                    'side' => $first->side,
+                    'quantity' => (float) $rows->sum('total_quantity'),
+                    'locations' => $rows->map(fn ($row) => ($row->location_code ?: 'CHUA-XEP') . ' (' . (float) $row->total_quantity . ')')->values(),
+                ];
+            })
+            ->values();
+
+        $receiptNoLocation = InternalMaterialReceipt::query()
+            ->withCount('lines')
+            ->withSum('lines as total_quantity', 'quantity')
+            ->where('source', 'Phieu nhap thanh pham')
+            ->where(function ($query) {
+                $query->whereNull('location_code')
+                    ->orWhere('location_code', '')
+                    ->orWhere('location_code', 'CHUA-XEP');
+            })
+            ->orderByDesc('receipt_date')
+            ->limit(100)
+            ->get()
+            ->map(function ($receipt) {
+                return [
+                    'id' => $receipt->id,
+                    'receipt_code' => $receipt->receipt_code,
+                    'receipt_date' => optional($receipt->receipt_date)->format('Y-m-d'),
+                    'location_code' => $receipt->location_code ?: 'CHUA-XEP',
+                    'lines_count' => (int) $receipt->lines_count,
+                    'quantity' => (float) ($receipt->total_quantity ?? 0),
+                    'print_url' => url('/client/nhap-thanh-pham-noi-bo/' . $receipt->id . '/in'),
+                ];
+            });
+
+        return response()->json([
+            'summary' => [
+                'month' => $month->format('Y-m'),
+                'negative_stock' => $negativeStock->count(),
+                'unassigned_stock' => $unassignedStock->count(),
+                'missing_catalog' => $missingCatalog->count(),
+                'multi_location' => $multiLocation->count(),
+                'receipt_no_location' => $receiptNoLocation->count(),
+            ],
+            'data' => [
+                'negative_stock' => $negativeStock,
+                'unassigned_stock' => $unassignedStock,
+                'missing_catalog' => $missingCatalog,
+                'multi_location' => $multiLocation,
+                'receipt_no_location' => $receiptNoLocation,
+            ],
+        ]);
+    }
+
+    public function exportStock(Request $request)
+    {
+        $month = Carbon::parse($request->query('month', now()->format('Y-m')) . '-01')->startOfMonth();
+        $monthStart = $month->format('Y-m-d');
+        $monthEnd = $month->copy()->endOfMonth()->format('Y-m-d');
+        $filename = 'ton-kho-noi-bo-' . $month->format('Y-m') . '.csv';
+
+        return response()->streamDownload(function () use ($monthStart, $monthEnd) {
+            echo "\xEF\xBB\xBF";
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Vi tri', 'Ma ke toan', 'Ma noi bo', 'Size', 'Mau', 'Side', 'Ton dau', 'Nhap', 'Xuat', 'Ton cuoi']);
+
+            app(InternalStockLedger::class)
+                ->query($monthStart, $monthEnd)
+                ->select(
+                    'location_code',
+                    DB::raw('ma_hh as ma_sp'),
+                    'internal_item_code',
+                    'size',
+                    'color',
+                    'side',
+                    DB::raw('SUM(opening_quantity) as opening_quantity'),
+                    DB::raw('SUM(receipt_quantity) as receipt_quantity'),
+                    DB::raw('SUM(issue_quantity) as issue_quantity'),
+                    DB::raw('SUM(opening_quantity + receipt_quantity - issue_quantity) as total_quantity')
+                )
+                ->groupBy('location_code', 'ma_hh', 'internal_item_code', 'size', 'color', 'side')
+                ->orderBy('location_code')
+                ->orderBy('internal_item_code')
+                ->chunk(500, function ($rows) use ($out) {
+                    foreach ($rows as $row) {
+                        fputcsv($out, [
+                            $row->location_code ?: 'CHUA-XEP',
+                            $row->ma_sp,
+                            $row->internal_item_code,
+                            $row->size,
+                            $row->color,
+                            $row->side,
+                            (float) $row->opening_quantity,
+                            (float) $row->receipt_quantity,
+                            (float) $row->issue_quantity,
+                            (float) $row->total_quantity,
+                        ]);
+                    }
+                });
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     public function destroyOpeningStock(Request $request)
@@ -845,6 +1038,406 @@ class WarehouseCountController extends Controller
         ]);
     }
 
+    public function assistantHealth()
+    {
+        return response()->json([
+            'ok' => true,
+            'service' => 'ttv-internal-warehouse',
+            'mode' => 'read_only',
+            'cache' => Cache::has('assistant_stock_snapshot') ? 'warm' : 'cold',
+            'time' => now()->toDateTimeString(),
+        ]);
+    }
+
+    public function assistantStock(Request $request)
+    {
+        $keyword = strtoupper(trim((string) $request->query('keyword', '')));
+        $keyword = preg_replace('/\s+/', '', $keyword);
+        $locationCode = strtoupper(trim((string) $request->query('location_code', '')));
+        $limit = min(max((int) $request->query('limit', 10), 1), 30);
+
+        $allData = $this->assistantFilterSnapshot($keyword, $locationCode)->values();
+        $data = $allData->take($limit)->values();
+
+        return response()->json($this->assistantStockResponse($data, $keyword, $locationCode, $allData));
+    }
+
+    public function assistantLocation($locationCode)
+    {
+        $locationCode = strtoupper(trim((string) $locationCode));
+        $limit = min(max((int) request()->query('limit', 15), 1), 30);
+        $allData = $this->assistantFilterSnapshot('', $locationCode)->values();
+        $data = $allData->take($limit)->values();
+
+        return response()->json($this->assistantStockResponse($data, '', $locationCode, $allData));
+    }
+
+    public function assistantAsk(Request $request)
+    {
+        $text = strtoupper(trim((string) $request->query('text', $request->query('q', ''))));
+        $normalized = preg_replace('/\s+/', '', $text);
+        $plainText = $this->assistantNormalizeText($text);
+
+        if ($normalized === '') {
+            return response()->json([
+                'ok' => false,
+                'answer' => 'Bạn hỏi mã hàng hoặc vị trí, ví dụ: "Mã 8017465-B nằm đâu?" hoặc "Kệ A1 có gì?"',
+                'data' => [],
+            ], 422);
+        }
+
+        if (
+            str_contains($plainText, 'PHIEU NHAP MOI')
+            || str_contains($plainText, 'VUA MOI NHAP')
+            || str_contains($plainText, 'MOI NHAP KHO')
+            || (str_contains($plainText, 'NHAP KHO') && str_contains($plainText, 'MA GI'))
+            || (str_contains($plainText, 'NHAP KHO') && str_contains($plainText, 'LUC NAO'))
+        ) {
+            return $this->assistantLatestReceipts($request);
+        }
+
+        $locations = $this->assistantStockSnapshot()->pluck('location_code')->filter()->unique()->values();
+        preg_match_all('/\b[A-Z]{1,5}[-_]?\d{1,5}\b/u', $text, $matches);
+        $locationCode = collect($matches[0] ?? [])
+            ->map(fn ($value) => strtoupper(trim($value)))
+            ->first(fn ($value) => $locations->contains($value));
+
+        if ($locationCode) {
+            return $this->assistantLocation($locationCode);
+        }
+
+        preg_match_all('/[A-Z0-9][A-Z0-9._-]{1,}/u', $text, $tokenMatches);
+        $tokens = collect($tokenMatches[0] ?? [])
+            ->map(fn ($value) => strtoupper(trim($value)))
+            ->filter()
+            ->values();
+        $tokenLocation = $tokens->first(fn ($value) => $locations->contains($value));
+        if ($tokenLocation) {
+            return $this->assistantLocation($tokenLocation);
+        }
+
+        $stopWords = ['TON', 'TON', 'MA', 'MA', 'HANG', 'HANG', 'KE', 'KE', 'VI', 'VI', 'TRI', 'TRI', 'NAM', 'NAM', 'DAU', 'DAU', 'CON', 'CON', 'BAO', 'NHIEU', 'NHIEU', 'KIEM', 'KIEM', 'TRA'];
+        $keyword = null;
+        for ($index = 0; $index < $tokens->count() - 1; $index++) {
+            $left = $tokens[$index];
+            $right = $tokens[$index + 1];
+            if (preg_match('/^[A-Z]{1,6}$/', $left) && preg_match('/^\d{1,6}$/', $right)) {
+                $keyword = $left . $right;
+                break;
+            }
+        }
+
+        $keyword = $keyword ?: $tokens
+            ->reject(fn ($value) => in_array($this->assistantNormalizeText($value), $stopWords, true))
+            ->first(fn ($value) => preg_match('/\d/', $value) || strlen($value) >= 4);
+
+        if (!$keyword) {
+            $keyword = preg_replace('/^(TON|TỒN|MA|MÃ|HANG|HÀNG|KE|KỆ|VI|VỊ|TRI|TRÍ)+/u', '', $normalized);
+        }
+        $request->query->set('keyword', $keyword ?: $normalized);
+
+        return $this->assistantStock($request);
+    }
+
+    public function assistantChat(Request $request)
+    {
+        $data = $request->validate([
+            'message' => 'required|string|max:1000',
+        ]);
+
+        $message = trim($data['message']);
+        if ($this->assistantShouldUseInventoryApi($message)) {
+            $request->query->set('text', $message);
+            $request->query->set('limit', $request->query('limit', 3));
+
+            return $this->assistantAsk($request);
+        }
+
+        $model = env('ASSISTANT_AI_MODEL', 'llama3.2:3b');
+        $url = rtrim(env('ASSISTANT_AI_URL', 'http://127.0.0.1:11434'), '/') . '/api/chat';
+
+        try {
+            $response = Http::timeout(70)->post($url, [
+                'model' => $model,
+                'stream' => false,
+                'keep_alive' => '30m',
+                'options' => [
+                    'temperature' => 0.2,
+                    'num_predict' => 120,
+                ],
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => implode("\n", [
+                            'Ban la tro ly kho noi bo TTV.',
+                            'Tra loi ngan gon bang tieng Viet, toi da 4 dong, khong markdown dai dong.',
+                            'Nguoi dung la thu kho, uu tien cac buoc lam ngay trong kho may mac.',
+                            'Khong duoc huong dan sua/xoa/ghi du lieu TSoft.',
+                            'Neu cau hoi can ton kho, vi tri, phieu nhap moi nhat, hay noi nguoi dung hoi ro ma hang hoac ke de he thong tra cuu API noi bo.',
+                        ]),
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => $message,
+                    ],
+                ],
+            ]);
+
+            if (!$response->successful()) {
+                return response()->json([
+                    'ok' => false,
+                    'answer' => 'Ollama dang khong tra loi duoc. Kiem tra ollama serve/model ' . $model . '.',
+                ], 502);
+            }
+
+            $payload = $response->json();
+            $answer = trim((string) data_get($payload, 'message.content', ''));
+
+            return response()->json([
+                'ok' => true,
+                'answer' => $answer !== '' ? $answer : 'Ollama khong co noi dung tra loi.',
+                'source' => 'ollama',
+            ]);
+        } catch (\Throwable $exception) {
+            return response()->json([
+                'ok' => false,
+                'answer' => 'Khong ket noi duoc Ollama local. Hay mo Ollama va thu lai.',
+            ], 502);
+        }
+    }
+
+    public function assistantLatestReceipts(Request $request)
+    {
+        $limit = min(max((int) $request->query('limit', 1), 1), 5);
+
+        $receipts = InternalMaterialReceipt::query()
+            ->with(['lines' => function ($query) {
+                $query->orderBy('id');
+            }])
+            ->where('source', 'Phieu nhap thanh pham')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
+
+        if ($receipts->isEmpty()) {
+            return response()->json([
+                'ok' => true,
+                'answer' => 'Chưa thấy phiếu nhập thành phẩm nội bộ nào.',
+                'data' => [],
+            ]);
+        }
+
+        $answers = $receipts->map(function ($receipt) {
+            $time = $receipt->created_at
+                ? Carbon::parse($receipt->created_at)->format('H:i d/m/Y')
+                : optional($receipt->receipt_date)->format('d/m/Y');
+
+            $lines = $receipt->lines
+                ->filter(fn ($line) => (float) $line->quantity > 0 || $line->internal_item_code || $line->ma_hh || $line->ten_hh)
+                ->take(5)
+                ->map(function ($line) {
+                    $code = $line->internal_item_code ?: $line->ma_hh ?: $line->ten_hh ?: 'khong ma';
+                    $parts = array_filter([
+                        $code,
+                        $line->size ? 'size ' . $line->size : null,
+                        $line->color ? 'mau ' . $line->color : null,
+                        $line->location_code ? 'ke ' . $line->location_code : null,
+                        'SL ' . $this->assistantFormatQuantity((float) $line->quantity),
+                    ]);
+
+                    return implode(' - ', $parts);
+                })
+                ->values();
+
+            $lineCount = $receipt->lines->count();
+            $lineText = $lines->isNotEmpty() ? $lines->implode('; ') : 'chua co dong hang';
+
+            return 'Phiếu ' . $receipt->receipt_code . ' lúc ' . $time . ', ' . $lineCount . ' dòng: ' . $lineText;
+        });
+
+        return response()->json([
+            'ok' => true,
+            'answer' => $answers->implode(' | '),
+            'data' => $receipts->map(function ($receipt) {
+                return [
+                    'receipt_code' => $receipt->receipt_code,
+                    'receipt_date' => optional($receipt->receipt_date)->format('Y-m-d'),
+                    'created_at' => optional($receipt->created_at)->toDateTimeString(),
+                    'location_code' => $receipt->location_code,
+                    'line_count' => $receipt->lines->count(),
+                    'lines' => $receipt->lines->map(function ($line) {
+                        return [
+                            'internal_item_code' => $line->internal_item_code,
+                            'ma_hh' => $line->ma_hh,
+                            'ten_hh' => $line->ten_hh,
+                            'size' => $line->size,
+                            'color' => $line->color,
+                            'side' => $line->side,
+                            'quantity' => (float) $line->quantity,
+                            'location_code' => $line->location_code,
+                            'note' => $line->note,
+                        ];
+                    })->values(),
+                ];
+            })->values(),
+        ]);
+    }
+
+    private function assistantStockBaseQuery()
+    {
+        return InventoryPackage::query()
+            ->join('warehouse_locations as wl', 'inventory_packages.warehouse_location_id', '=', 'wl.id')
+            ->select(
+                'wl.location_code',
+                'inventory_packages.ma_sp',
+                'inventory_packages.internal_item_code',
+                'inventory_packages.size',
+                'inventory_packages.color',
+                'inventory_packages.side',
+                'inventory_packages.ma_ko as warehouse_code',
+                DB::raw('SUM(inventory_packages.quantity) as quantity'),
+                DB::raw('COUNT(inventory_packages.id) as package_count')
+            )
+            ->where('inventory_packages.quantity', '>', 0)
+            ->groupBy(
+                'wl.location_code',
+                'inventory_packages.ma_sp',
+                'inventory_packages.internal_item_code',
+                'inventory_packages.size',
+                'inventory_packages.color',
+                'inventory_packages.side',
+                'inventory_packages.ma_ko'
+            );
+    }
+
+    private function assistantStockSnapshot()
+    {
+        return Cache::remember('assistant_stock_snapshot', now()->addSeconds(15), function () {
+            return $this->assistantStockBaseQuery()
+                ->orderBy('wl.location_code')
+                ->orderBy('inventory_packages.internal_item_code')
+                ->get();
+        });
+    }
+
+    private function assistantFilterSnapshot(string $keyword = '', string $locationCode = '')
+    {
+        $keyword = strtoupper(trim($keyword));
+        $locationCode = strtoupper(trim($locationCode));
+
+        return $this->assistantStockSnapshot()
+            ->filter(function ($row) use ($keyword, $locationCode) {
+                if ($locationCode !== '' && strtoupper((string) $row->location_code) !== $locationCode) {
+                    return false;
+                }
+
+                if ($keyword === '') {
+                    return true;
+                }
+
+                $haystack = strtoupper(str_replace(' ', '', implode(' ', [
+                    $row->ma_sp,
+                    $row->internal_item_code,
+                    $row->size,
+                    $row->color,
+                    $row->side,
+                    $row->location_code,
+                ])));
+
+                return str_contains($haystack, $keyword);
+            })
+            ->sortBy([
+                ['location_code', 'asc'],
+                ['internal_item_code', 'asc'],
+            ])
+            ->values();
+    }
+
+    private function assistantNormalizeText(string $text): string
+    {
+        return trim(preg_replace('/[^A-Z0-9]+/', ' ', strtoupper(Str::ascii($text))));
+    }
+
+    private function assistantShouldUseInventoryApi(string $message): bool
+    {
+        $text = $this->assistantNormalizeText($message);
+
+        if (
+            str_contains($text, 'PHIEU NHAP')
+            || str_contains($text, 'MOI NHAP')
+            || str_contains($text, 'VUA MOI NHAP')
+        ) {
+            return true;
+        }
+
+        if (preg_match('/\b(KE|VI TRI)\s+[A-Z]{0,5}\d{1,5}\b/', $text)) {
+            return true;
+        }
+
+        if (
+            preg_match('/\b(TON|MA|NAM DAU|O DAU|TIM)\s+[A-Z]{1,8}\s*\d{1,8}\b/', $text)
+            || preg_match('/\b[A-Z]{1,8}\d{1,8}[A-Z0-9._-]*\b/', $text)
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function assistantFormatQuantity(float $quantity): string
+    {
+        return rtrim(rtrim(number_format($quantity, 3, ',', '.'), '0'), ',');
+    }
+
+    private function assistantStockResponse($data, string $keyword = '', string $locationCode = '', $allData = null): array
+    {
+        $allData = $allData ?: $data;
+        $total = (float) $allData->sum('quantity');
+        $shownTotal = $data->count();
+        $fullTotal = $allData->count();
+        $moreText = $fullTotal > $shownTotal ? '; còn ' . ($fullTotal - $shownTotal) . ' dòng nữa' : '';
+        $lines = $data->map(function ($row) {
+            $code = $row->internal_item_code ?: $row->ma_sp ?: 'không mã';
+            $parts = array_filter([
+                $code,
+                $row->size ? 'size ' . $row->size : null,
+                $row->color ? 'màu ' . $row->color : null,
+                $row->side ? 'mặt ' . $row->side : null,
+                'kệ ' . $row->location_code,
+                'SL ' . $this->assistantFormatQuantity((float) $row->quantity),
+            ]);
+
+            return implode(' - ', $parts);
+        })->values();
+
+        if ($data->isEmpty()) {
+            $target = $locationCode ?: $keyword;
+            $answer = $target
+                ? 'Khong thay ton noi bo cho ' . $target . '.'
+                : 'Khong thay ton noi bo phu hop.';
+        } elseif ($locationCode) {
+            $answer = 'Ke ' . $locationCode . ' co ' . $fullTotal . ' dong, tong SL ' . $this->assistantFormatQuantity($total) . ': ' . $lines->implode('; ') . $moreText . '.';
+        } else {
+            $locations = $allData->pluck('location_code')->filter()->unique()->values()->implode(', ');
+            $answer = 'Tim thay ' . $fullTotal . ' dong, tong SL ' . $this->assistantFormatQuantity($total) . '. Vi tri: ' . $locations . '. ' . $lines->implode('; ') . $moreText . '.';
+        }
+
+        return [
+            'ok' => true,
+            'answer' => $answer,
+            'summary' => [
+                'keyword' => $keyword,
+                'location_code' => $locationCode,
+                'line_count' => $fullTotal,
+                'shown_count' => $shownTotal,
+                'location_count' => $allData->pluck('location_code')->filter()->unique()->count(),
+                'total_quantity' => $total,
+            ],
+            'data' => $data->values(),
+        ];
+    }
+
     public function storePackage(Request $request)
     {
         $data = $request->validate([
@@ -868,7 +1461,7 @@ class WarehouseCountController extends Controller
         }
 
         $locationCode = strtoupper(trim($data['location_code'] ?? '')) ?: 'CHUA-XEP';
-        $warehouseCode = strtoupper(trim($data['ma_ko'] ?? ''));
+        $warehouseCode = '';
         $location = WarehouseLocation::query()->firstOrCreate(
             ['location_code' => $locationCode],
             [
@@ -895,7 +1488,7 @@ class WarehouseCountController extends Controller
 
         $attributes = [
             'ma_sp' => $accountingCode,
-            'ma_ko' => trim($data['ma_ko'] ?? ''),
+            'ma_ko' => '',
             'internal_item_code' => trim($data['internal_item_code'] ?? ''),
             'size' => trim($data['size'] ?? ''),
             'color' => trim($data['color'] ?? ''),
@@ -1047,7 +1640,7 @@ class WarehouseCountController extends Controller
         }
 
         $locationCode = strtoupper(trim($data['location_code'] ?? '')) ?: 'CHUA-XEP';
-        $warehouseCode = strtoupper(trim($data['ma_ko'] ?? ''));
+        $warehouseCode = '';
         $lineLocationCodes = $lines->pluck('location_code')->filter()->unique()->values();
         $receiptLocationCode = $lineLocationCodes->count() === 1
             ? $lineLocationCodes->first()
@@ -1221,6 +1814,222 @@ class WarehouseCountController extends Controller
         return $response;
     }
 
+    public function showReceipt(InternalMaterialReceipt $receipt)
+    {
+        return response()->json([
+            'data' => $receipt->load('lines'),
+        ]);
+    }
+
+    public function updateReceiptBatch(Request $request, InternalMaterialReceipt $receipt)
+    {
+        $data = $request->validate([
+            'location_code' => 'nullable|string|max:100',
+            'ma_ko' => 'nullable|string|max:50',
+            'checked_at' => 'required|date',
+            'note' => 'nullable|string|max:500',
+            'lines' => 'required|array|min:1|max:500',
+            'lines.*.category' => 'nullable|string|max:255',
+            'lines.*.ma_sp' => 'nullable|string|max:100',
+            'lines.*.internal_item_code' => 'nullable|string|max:100',
+            'lines.*.size' => 'nullable|string|max:100',
+            'lines.*.color' => 'nullable|string|max:100',
+            'lines.*.side' => 'nullable|string|max:100',
+            'lines.*.dvt' => 'nullable|string|max:50',
+            'lines.*.quantity' => 'nullable|numeric|min:0',
+            'lines.*.location_code' => 'nullable|string|max:100',
+            'lines.*.note' => 'nullable|string|max:500',
+            'lines.*.production_order_id' => 'nullable|integer',
+            'lines.*.production_order' => 'nullable|string|max:100',
+            'lines.*.purchase_order' => 'nullable|string|max:1000',
+            'lines.*.customer' => 'nullable|string|max:200',
+        ]);
+
+        $linkedIssue = InternalMaterialIssue::query()
+            ->where(function ($query) use ($receipt) {
+                $query->where('source_receipt_id', $receipt->id)
+                    ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%');
+            })
+            ->first();
+
+        if ($linkedIssue) {
+            return response()->json([
+                'message' => 'Phiếu nhập đã có phiếu xuất liên quan ' . $linkedIssue->issue_code . '. Hãy xóa/hoàn phiếu xuất đó trước khi sửa chi tiết phiếu nhập.',
+            ], 422);
+        }
+
+        $receipt->load('lines');
+        foreach ($receipt->lines as $receiptLine) {
+            $package = $this->resolveReceiptLinePackage($receiptLine);
+
+            if (!$package || (float) $package->quantity + 0.0001 < (float) $receiptLine->quantity) {
+                return response()->json([
+                    'message' => 'Không thể sửa phiếu nhập vì một phần hàng đã được xuất kho hoặc thay đổi. Hãy hoàn/xóa phiếu xuất liên quan trước.',
+                ], 422);
+            }
+        }
+
+        $lines = collect($data['lines'])
+            ->map(function ($line) {
+                return [
+                    'ma_sp' => trim((string) ($line['ma_sp'] ?? '')),
+                    'category' => trim((string) ($line['category'] ?? '')),
+                    'internal_item_code' => trim((string) ($line['internal_item_code'] ?? '')),
+                    'size' => trim((string) ($line['size'] ?? '')),
+                    'color' => trim((string) ($line['color'] ?? '')),
+                    'side' => trim((string) ($line['side'] ?? '')),
+                    'dvt' => trim((string) ($line['dvt'] ?? '')),
+                    'quantity' => (float) ($line['quantity'] ?? 0),
+                    'location_code' => strtoupper(trim((string) ($line['location_code'] ?? ''))),
+                    'note' => trim((string) ($line['note'] ?? '')),
+                    'production_order_id' => $line['production_order_id'] ?? null,
+                    'production_order' => trim((string) ($line['production_order'] ?? '')),
+                    'purchase_order' => trim((string) ($line['purchase_order'] ?? '')),
+                    'customer' => trim((string) ($line['customer'] ?? '')),
+                ];
+            })
+            ->filter(fn ($line) => $line['internal_item_code'] !== '' && $line['quantity'] > 0)
+            ->values();
+
+        if ($lines->isEmpty()) {
+            return response()->json([
+                'message' => 'Nhập ít nhất 1 dòng có Mã nội bộ và Số lượng lớn hơn 0.',
+            ], 422);
+        }
+
+        $warehouseCode = '';
+        $locationCode = strtoupper(trim($data['location_code'] ?? '')) ?: 'CHUA-XEP';
+        $lineLocationCodes = $lines->pluck('location_code')->filter()->unique()->values();
+        $receiptLocationCode = $lineLocationCodes->count() === 1
+            ? $lineLocationCodes->first()
+            : ($lineLocationCodes->isEmpty() ? $locationCode : '');
+
+        DB::connection('internal')->transaction(function () use ($receipt, $data, $lines, $warehouseCode, $locationCode, $receiptLocationCode) {
+            $receipt->load('lines');
+            $oldLocationIds = [];
+
+            foreach ($receipt->lines as $line) {
+            $package = $this->resolveReceiptLinePackage($line, true);
+                $line->delete();
+
+                if (!$package) {
+                    continue;
+                }
+
+                $oldLocationIds[] = $package->warehouse_location_id;
+                $count = $package->inventory_count_id
+                    ? InternalInventoryCount::query()->lockForUpdate()->find($package->inventory_count_id)
+                    : null;
+                $quantity = (float) $package->quantity;
+                $package->delete();
+
+                if ($count) {
+                    $remainingQuantity = (float) $count->counted_quantity - $quantity;
+                    $hasPackages = InventoryPackage::query()->where('inventory_count_id', $count->id)->exists();
+                    if ($remainingQuantity <= 0 && !$hasPackages) {
+                        $count->delete();
+                    } else {
+                        $count->counted_quantity = max(0, $remainingQuantity);
+                        $count->save();
+                    }
+                }
+            }
+
+            $receipt->update([
+                'receipt_date' => $data['checked_at'],
+                'warehouse_code' => $warehouseCode,
+                'location_code' => $receiptLocationCode,
+                'receiver_name' => '',
+                'source' => 'Phieu nhap thanh pham',
+                'status' => 'posted',
+                'note' => $data['note'] ?? null,
+            ]);
+
+            foreach ($lines as $line) {
+                $targetLocationCode = $line['location_code'] ?: $locationCode;
+                $lineLocation = WarehouseLocation::query()->firstOrCreate(
+                    ['location_code' => $targetLocationCode],
+                    [
+                        'warehouse_code' => $warehouseCode,
+                        'shelf_code' => $this->inferShelfCode($targetLocationCode) ?: 'CX',
+                        'tier' => 1,
+                        'bay_code' => preg_replace('/[^0-9]/', '', $targetLocationCode) ?: null,
+                        'grid_x' => 1,
+                        'grid_y' => 1,
+                        'grid_w' => 4,
+                        'grid_h' => 2,
+                        'location_name' => $targetLocationCode,
+                    ]
+                );
+
+                $attributes = [
+                    'ma_sp' => $line['ma_sp'],
+                    'ma_ko' => $warehouseCode,
+                    'internal_item_code' => $line['internal_item_code'],
+                    'size' => $line['size'],
+                    'color' => $line['color'],
+                    'side' => $line['side'],
+                    'checked_at' => $data['checked_at'],
+                ];
+                $count = InternalInventoryCount::query()->firstOrCreate($attributes, [
+                    'counted_quantity' => 0,
+                    'note' => $line['note'] ?: ($data['note'] ?? null),
+                ]);
+                $count->counted_quantity = (float) $count->counted_quantity + (float) $line['quantity'];
+                $count->save();
+
+                $package = InventoryPackage::query()->create(array_merge($attributes, [
+                    'package_code' => $this->nextPackageCode(),
+                    'warehouse_location_id' => $lineLocation->id,
+                    'inventory_count_id' => $count->id,
+                    'quantity' => $line['quantity'],
+                    'note' => $line['note'] ?: null,
+                ]));
+
+                $receipt->lines()->create([
+                    'inventory_package_id' => $package->id,
+                    'production_order_id' => $line['production_order_id'],
+                    'production_order' => $line['production_order'],
+                    'purchase_order' => $line['purchase_order'],
+                    'customer' => $line['customer'],
+                    'ma_hh' => $line['ma_sp'],
+                    'ten_hh' => $line['category'],
+                    'dvt' => $line['dvt'],
+                    'quantity' => $line['quantity'],
+                    'location_code' => $lineLocation->location_code,
+                    'internal_item_code' => $line['internal_item_code'],
+                    'size' => $line['size'],
+                    'color' => $line['color'],
+                    'side' => $line['side'],
+                    'note' => $line['note'] ?: null,
+                ]);
+
+                $lineLocation->status = 'counting';
+                $lineLocation->save();
+            }
+
+            foreach (array_unique(array_filter($oldLocationIds)) as $locationId) {
+                $location = WarehouseLocation::query()->find($locationId);
+                if ($location && !InventoryPackage::query()->where('warehouse_location_id', $location->id)->exists()) {
+                    $location->status = 'pending';
+                    $location->save();
+                }
+            }
+        });
+
+        $receipt = $receipt->fresh()->load('lines');
+        app(InternalAudit::class)->model('receipt.updated', $receipt, [
+            'line_count' => $receipt->lines->count(),
+            'total_quantity' => (float) $receipt->lines->sum('quantity'),
+        ], $request);
+
+        return response()->json([
+            'message' => 'Đã cập nhật phiếu nhập thành phẩm nội bộ.',
+            'data' => $receipt,
+            'receipt_print_url' => url('/client/nhap-thanh-pham-noi-bo/' . $receipt->id . '/in'),
+        ]);
+    }
+
     public function destroyReceipt(InternalMaterialReceipt $receipt)
     {
         $auditPayload = [
@@ -1231,9 +2040,7 @@ class WarehouseCountController extends Controller
 
         $receipt->load('lines');
         foreach ($receipt->lines as $line) {
-            $package = $line->inventory_package_id
-                ? InventoryPackage::query()->find($line->inventory_package_id)
-                : null;
+            $package = $this->resolveReceiptLinePackage($line);
 
             if (!$package || (float) $package->quantity + 0.0001 < (float) $line->quantity) {
                 return response()->json([
@@ -1246,9 +2053,7 @@ class WarehouseCountController extends Controller
             $locationIds = [];
 
             foreach ($receipt->lines as $line) {
-                $package = $line->inventory_package_id
-                    ? InventoryPackage::query()->lockForUpdate()->find($line->inventory_package_id)
-                    : null;
+                $package = $this->resolveReceiptLinePackage($line, true);
 
                 $line->delete();
 
@@ -1602,6 +2407,47 @@ class WarehouseCountController extends Controller
         preg_match('/[A-Z]/', strtoupper((string) $locationCode), $matches);
 
         return $matches[0] ?? null;
+    }
+
+    private function resolveReceiptLinePackage($line, bool $lock = false): ?InventoryPackage
+    {
+        if ($line->inventory_package_id) {
+            $query = InventoryPackage::query();
+            if ($lock) {
+                $query->lockForUpdate();
+            }
+            $package = $query->find($line->inventory_package_id);
+            if ($package) {
+                return $package;
+            }
+        }
+
+        $query = InventoryPackage::query()
+            ->where('quantity', '>=', max(0, (float) $line->quantity - 0.0001))
+            ->where('ma_sp', trim((string) $line->ma_hh))
+            ->where('internal_item_code', trim((string) $line->internal_item_code))
+            ->where('size', trim((string) $line->size))
+            ->where('color', trim((string) $line->color))
+            ->where('side', trim((string) $line->side));
+
+        $locationCode = strtoupper(trim((string) $line->location_code));
+        if ($locationCode !== '') {
+            $query->whereHas('location', function ($locationQuery) use ($locationCode) {
+                $locationQuery->whereRaw('UPPER(TRIM(location_code)) = ?', [$locationCode]);
+            });
+        }
+
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        $package = $query->orderByDesc('id')->first();
+        if ($package && (int) $line->inventory_package_id !== (int) $package->id) {
+            $line->inventory_package_id = $package->id;
+            $line->save();
+        }
+
+        return $package;
     }
 
     private function stockRowKey($row): string

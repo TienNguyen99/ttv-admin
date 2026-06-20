@@ -19,6 +19,7 @@
         </div>
         <div class="wms-topbar__actions">
             <button id="voiceStockBtn" type="button" class="wms-btn" title="Tìm bằng giọng nói"><i data-lucide="mic"></i><span class="visually-hidden">Tìm bằng giọng nói</span></button>
+            <a id="exportStockBtn" class="wms-btn" href="#"><i data-lucide="download"></i> Xuất CSV</a>
             <a class="wms-btn" href="{{ url('/client/kiem-ton-kho') }}"><i data-lucide="scan-line"></i> Quét kho</a>
         </div>
     </header>
@@ -43,7 +44,6 @@
         </section>
 
         <section class="wms-filterbar">
-            <div><label for="warehouseSelect">Kho</label><select id="warehouseSelect" class="form-select"><option value="">Tất cả kho</option></select></div>
             <div><label for="stockMonth">Tháng tồn</label><input id="stockMonth" type="month" class="form-control" value="{{ now()->format('Y-m') }}"></div>
             <div><label for="keyword">Tìm mã hàng, mã nội bộ, size, màu hoặc vị trí</label><input id="keyword" class="form-control" value="{{ request('keyword') }}" placeholder="Nhập từ khóa hoặc quét mã"></div>
             <div><button id="clearFilterBtn" type="button" class="wms-btn"><i data-lucide="filter-x"></i> Xóa lọc</button></div>
@@ -56,8 +56,8 @@
             </div>
             <div class="wms-table-wrap">
                 <table class="wms-table">
-                    <thead><tr><th>Kho</th><th>Vị trí</th><th>Mã kế toán</th><th>Mã nội bộ</th><th>Size</th><th>Màu</th><th>Side</th><th class="text-end">Tồn đầu</th><th class="text-end">Nhập</th><th class="text-end">Xuất</th><th class="text-end">Tồn cuối</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
-                    <tbody id="stockRows"><tr><td colspan="13" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
+                    <thead><tr><th>Vị trí</th><th>Mã kế toán</th><th>Mã nội bộ</th><th>Size</th><th>Màu</th><th>Side</th><th class="text-end">Tồn đầu</th><th class="text-end">Nhập</th><th class="text-end">Xuất</th><th class="text-end">Tồn cuối</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+                    <tbody id="stockRows"><tr><td colspan="12" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
                 </table>
             </div>
         </section>
@@ -118,7 +118,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const warehouseSelect = document.getElementById('warehouseSelect');
         const stockMonthEl = document.getElementById('stockMonth');
         const keywordEl = document.getElementById('keyword');
         const topKeywordEl = document.getElementById('topKeyword');
@@ -138,21 +137,10 @@
             if (response.ok) return response.json();
             return response.json().then(result => { throw new Error(result.message || fallback); });
         }
-
-        function loadWarehouses() {
-            return fetch('/api/ton-kho-noi-bo/kho')
-                .then(response => jsonOrError(response, 'Không tải được danh sách kho'))
-                .then(result => {
-                    const current = warehouseSelect.value;
-                    warehouseSelect.innerHTML = '<option value="">Tất cả kho</option>' + (result.data || []).map(code => `<option value="${esc(code)}">${esc(code)}</option>`).join('');
-                    warehouseSelect.value = current;
-                });
-        }
-
         function loadStock() {
-            rowsEl.innerHTML = '<tr><td colspan="13" class="wms-loading">Đang tải dữ liệu...</td></tr>';
+            document.getElementById('exportStockBtn').href = `/api/ton-kho-noi-bo/export?month=${encodeURIComponent(stockMonthEl.value || '')}`;
+            rowsEl.innerHTML = '<tr><td colspan="12" class="wms-loading">Đang tải dữ liệu...</td></tr>';
             const params = new URLSearchParams();
-            if (warehouseSelect.value) params.set('warehouse_code', warehouseSelect.value);
             if (stockMonthEl.value) params.set('month', stockMonthEl.value);
             if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
 
@@ -174,7 +162,6 @@
                                 ? '<span class="wms-badge wms-badge--danger">Âm tồn</span>'
                                 : '<span class="wms-badge">Có tồn</span>';
                         return `<tr>
-                            <td>${esc(row.warehouse_code || '-')}</td>
                             <td>${esc(row.location_code || 'CHUA-XEP')}</td>
                             <td class="wms-code">${row.ma_sp ? esc(row.ma_sp) : '<span class="wms-badge wms-badge--warning">Chưa gán</span>'}</td>
                             <td class="wms-code">${esc(row.internal_item_code || '-')}</td>
@@ -214,11 +201,11 @@
                                     : `<a class="btn btn-sm btn-outline-secondary" href="${Number(row.receipt_quantity || 0) ? '/client/kiem-ton-kho?view=history' : '/client/xuat-vat-tu-noi-bo'}" title="${esc(row.delete_reason || '')}">Xem phiếu</a>`}
                             </td>
                         </tr>`;
-                    }).join('') || '<tr><td colspan="13" class="wms-empty">Không có tồn phù hợp.</td></tr>';
+                    }).join('') || '<tr><td colspan="12" class="wms-empty">Không có tồn phù hợp.</td></tr>';
                     if (window.lucide) window.lucide.createIcons();
                 })
                 .catch(error => {
-                    rowsEl.innerHTML = `<tr><td colspan="13" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
+                    rowsEl.innerHTML = `<tr><td colspan="12" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
                 });
         }
 
@@ -360,14 +347,11 @@
             clearTimeout(searchTimer);
             searchTimer = setTimeout(loadStock, 250);
         }
-
-        warehouseSelect.addEventListener('change', loadStock);
         stockMonthEl.addEventListener('change', loadStock);
         keywordEl.addEventListener('input', () => queueSearch(keywordEl));
         topKeywordEl.addEventListener('input', () => queueSearch(topKeywordEl));
-        document.getElementById('reloadBtn').addEventListener('click', () => loadWarehouses().then(loadStock));
+        document.getElementById('reloadBtn').addEventListener('click', loadStock);
         document.getElementById('clearFilterBtn').addEventListener('click', () => {
-            warehouseSelect.value = '';
             keywordEl.value = '';
             topKeywordEl.value = '';
             loadStock();
@@ -387,8 +371,8 @@
         });
 
         topKeywordEl.value = keywordEl.value;
-        loadWarehouses().then(loadStock).catch(error => {
-            rowsEl.innerHTML = `<tr><td colspan="13" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
+        Promise.resolve(loadStock()).catch(error => {
+            rowsEl.innerHTML = `<tr><td colspan="12" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
         });
     </script>
 </body>

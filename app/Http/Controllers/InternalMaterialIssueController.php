@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\InternalInventoryCount;
 use App\Models\InternalMaterialIssue;
 use App\Models\InternalMaterialIssueAllocation;
+use App\Models\InternalMaterialReceiptLine;
 use App\Models\InternalMaterialReceipt;
 use App\Models\InternalProductionOrder;
 use App\Models\InventoryPackage;
@@ -245,7 +246,7 @@ class InternalMaterialIssueController extends Controller
             'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
         ]);
 
-        $issueType = $data['issue_type'] ?? 'material';
+        $issueType = $data['issue_type'] ?? 'production';
 
         $issue = DB::connection('internal')->transaction(function () use ($data, $issueType) {
             $issue = InternalMaterialIssue::query()->create([
@@ -631,6 +632,93 @@ class InternalMaterialIssueController extends Controller
         ]);
     }
 
+    public function update(Request $request, InternalMaterialIssue $issue)
+    {
+        $data = $request->validate([
+            'issue_type' => 'nullable|in:material,production,customer',
+            'issue_date' => 'required|date',
+            'warehouse_code' => 'nullable|string|max:50',
+            'receiver_name' => 'nullable|string|max:150',
+            'department' => 'nullable|string|max:150',
+            'production_order' => 'nullable|string|max:1000',
+            'purpose' => 'nullable|string|max:255',
+            'note' => 'nullable|string|max:1000',
+            'lines' => 'required|array|min:1',
+            'lines.*.ma_hh' => 'required|string|max:100',
+            'lines.*.ten_hh' => 'nullable|string|max:255',
+            'lines.*.dvt' => 'nullable|string|max:50',
+            'lines.*.quantity' => 'required|numeric|min:0.001',
+            'lines.*.location_code' => 'nullable|string|max:100',
+            'lines.*.internal_item_code' => 'nullable|string|max:100',
+            'lines.*.size' => 'nullable|string|max:100',
+            'lines.*.color' => 'nullable|string|max:100',
+            'lines.*.side' => 'nullable|string|max:100',
+            'lines.*.note' => 'nullable|string|max:500',
+            'lines.*.production_order_id' => 'nullable|integer',
+            'lines.*.production_order' => 'nullable|string|max:100',
+            'lines.*.purchase_order' => 'nullable|string|max:1000',
+            'lines.*.customer' => 'nullable|string|max:200',
+            'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
+        ]);
+
+        $issueType = $data['issue_type'] ?? $issue->issue_type ?? 'production';
+
+        $updatedIssue = DB::connection('internal')->transaction(function () use ($issue, $data, $issueType) {
+            $issue->load('lines.allocations');
+            foreach ($issue->lines as $line) {
+                $this->restoreIssueLineStock($issue, $line);
+                $line->delete();
+            }
+
+            $issue->update([
+                'issue_type' => $issueType,
+                'issue_date' => $data['issue_date'],
+                'warehouse_code' => strtoupper(trim($data['warehouse_code'] ?? '')),
+                'receiver_name' => trim($data['receiver_name'] ?? ''),
+                'department' => trim($data['department'] ?? '') ?: ($issueType === 'production' ? 'Sản xuất' : ($issueType === 'customer' ? 'Kinh doanh' : '')),
+                'production_order' => trim($data['production_order'] ?? ''),
+                'purpose' => trim($data['purpose'] ?? '') ?: ($issueType === 'production' ? 'Xuất BTP đi sản xuất' : ($issueType === 'customer' ? 'Xuất thành phẩm cho khách hàng' : 'Xuất kho nội bộ')),
+                'status' => 'posted',
+                'note' => trim($data['note'] ?? ''),
+            ]);
+
+            foreach ($data['lines'] as $line) {
+                $issueLine = $issue->lines()->create([
+                    'production_order_id' => $line['production_order_id'] ?? null,
+                    'production_order' => trim($line['production_order'] ?? ''),
+                    'purchase_order' => trim($line['purchase_order'] ?? ''),
+                    'customer' => trim($line['customer'] ?? ''),
+                    'ma_hh' => strtoupper(trim($line['ma_hh'])),
+                    'ten_hh' => trim($line['ten_hh'] ?? ''),
+                    'dvt' => trim($line['dvt'] ?? ''),
+                    'ordered_quantity' => $line['ordered_quantity'] ?? null,
+                    'quantity' => $line['quantity'],
+                    'location_code' => strtoupper(trim($line['location_code'] ?? '')),
+                    'internal_item_code' => trim($line['internal_item_code'] ?? ''),
+                    'size' => trim($line['size'] ?? ''),
+                    'color' => trim($line['color'] ?? ''),
+                    'side' => trim($line['side'] ?? ''),
+                    'note' => trim($line['note'] ?? ''),
+                ]);
+
+                $this->decreaseInternalStock($line, strtoupper(trim($data['warehouse_code'] ?? '')), $issueLine->id);
+            }
+
+            return $issue->fresh()->load('lines');
+        });
+
+        app(InternalAudit::class)->model('issue.updated', $updatedIssue, [
+            'line_count' => $updatedIssue->lines->count(),
+            'total_quantity' => (float) $updatedIssue->lines->sum('quantity'),
+        ], $request);
+
+        return response()->json([
+            'message' => 'Đã cập nhật phiếu xuất kho nội bộ.',
+            'data' => $updatedIssue,
+            'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $updatedIssue->id . '/in'),
+        ]);
+    }
+
     public function destroy(InternalMaterialIssue $issue)
     {
         $auditPayload = [
@@ -642,23 +730,7 @@ class InternalMaterialIssueController extends Controller
             $issue->load('lines.allocations');
 
             foreach ($issue->lines as $line) {
-                if ($line->allocations->isNotEmpty()) {
-                    foreach ($line->allocations as $allocation) {
-                        $this->restoreAllocation($allocation);
-                    }
-
-                    continue;
-                }
-
-                $this->increaseInternalStock([
-                    'ma_hh' => $line->ma_hh,
-                    'quantity' => $line->quantity,
-                    'location_code' => $line->location_code,
-                    'internal_item_code' => $line->internal_item_code,
-                    'size' => $line->size,
-                    'color' => $line->color,
-                    'note' => 'Hoan phieu xuat ' . $issue->issue_code,
-                ], $issue->warehouse_code, $issue->issue_date);
+                $this->restoreIssueLineStock($issue, $line);
             }
 
             $issue->delete();
@@ -819,23 +891,14 @@ class InternalMaterialIssueController extends Controller
                     ->exists();
 
                 if ((float) $count->counted_quantity <= 0 && !$hasOtherPackages && (float) $package->quantity <= 0) {
-                    $count->delete();
-                } else {
-                    $count->save();
+                    $count->counted_quantity = 0;
                 }
+                $count->save();
             }
 
             if ((float) $package->quantity <= 0) {
-                $location = $package->warehouse_location_id
-                    ? WarehouseLocation::query()->find($package->warehouse_location_id)
-                    : null;
-
-                $package->delete();
-
-                if ($location && !InventoryPackage::query()->where('warehouse_location_id', $location->id)->exists()) {
-                    $location->status = 'pending';
-                    $location->save();
-                }
+                $package->quantity = 0;
+                $package->save();
             } else {
                 $package->save();
             }
@@ -865,7 +928,7 @@ class InternalMaterialIssueController extends Controller
             'internal_item_code' => trim($line['internal_item_code'] ?? ''),
             'size' => trim($line['size'] ?? ''),
             'color' => trim($line['color'] ?? ''),
-            'side' => '',
+            'side' => trim($line['side'] ?? ''),
             'checked_at' => $checkedAt,
         ];
 
@@ -891,6 +954,28 @@ class InternalMaterialIssueController extends Controller
     private function nextPackageCode()
     {
         return app(InternalDocumentNumber::class)->next('PK', 5);
+    }
+
+    private function restoreIssueLineStock(InternalMaterialIssue $issue, $line): void
+    {
+        if ($line->allocations->isNotEmpty()) {
+            foreach ($line->allocations as $allocation) {
+                $this->restoreAllocation($allocation);
+            }
+
+            return;
+        }
+
+        $this->increaseInternalStock([
+            'ma_hh' => $line->ma_hh,
+            'quantity' => $line->quantity,
+            'location_code' => $line->location_code,
+            'internal_item_code' => $line->internal_item_code,
+            'size' => $line->size,
+            'color' => $line->color,
+            'side' => $line->side,
+            'note' => 'Hoan phieu xuat ' . $issue->issue_code,
+        ], $issue->warehouse_code, $issue->issue_date);
     }
 
     private function restoreAllocation(InternalMaterialIssueAllocation $allocation): void
@@ -978,8 +1063,29 @@ class InternalMaterialIssueController extends Controller
         $allocation->inventory_count_id = $count->id;
         $allocation->warehouse_location_id = $location->id;
         $allocation->save();
+        $this->relinkReceiptLinesForRestoredPackage($allocation, $package);
 
         $location->status = 'counting';
         $location->save();
+    }
+
+    private function relinkReceiptLinesForRestoredPackage(InternalMaterialIssueAllocation $allocation, InventoryPackage $package): void
+    {
+        if ($allocation->inventory_package_id) {
+            InternalMaterialReceiptLine::query()
+                ->where('inventory_package_id', $allocation->inventory_package_id)
+                ->update(['inventory_package_id' => $package->id]);
+        }
+
+        InternalMaterialReceiptLine::query()
+            ->whereNull('inventory_package_id')
+            ->where('ma_hh', $allocation->ma_hh)
+            ->where('internal_item_code', $allocation->internal_item_code ?: '')
+            ->where('size', $allocation->size ?: '')
+            ->where('color', $allocation->color ?: '')
+            ->where('side', $allocation->side ?: '')
+            ->where('location_code', $allocation->location_code ?: '')
+            ->whereRaw('ABS(COALESCE(quantity, 0) - ?) < 0.0001', [(float) $allocation->quantity])
+            ->update(['inventory_package_id' => $package->id]);
     }
 }

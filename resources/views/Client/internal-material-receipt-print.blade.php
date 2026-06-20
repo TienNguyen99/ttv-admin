@@ -40,10 +40,10 @@
             font-family: Arial, sans-serif;
             font-size: 8px;
         }
-        .header { position: relative; height: 18mm; }
-        .brand { position: absolute; top: 0; left: 2mm; width: 70mm; }
-        .wordmark { font-size: 11px; font-weight: 900; font-style: italic; }
-        .company { margin-top: 2px; font-size: 11px; font-weight: 700; }
+        .header { position: relative; height: 20mm; }
+        .brand { position: absolute; top: -1mm; left: 1mm; width: 62mm; }
+        .company-logo { display: block; width: 16mm; height: auto; margin-bottom: 1px; }
+        .company { margin-top: 1px; font-size: 10px; font-weight: 700; }
         h1 { margin: 0; text-align: center; font-size: 18px; font-weight: 800; text-transform: uppercase; }
         .department { position: absolute; right: 15mm; top: 9mm; font-size: 11px; font-weight: 700; }
         .receipt-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9px; }
@@ -96,7 +96,7 @@
                 <section class="receipt-copy">
                     <header class="header">
                         <div class="brand">
-                            <div class="wordmark">TAGTIME<sup>®</sup></div>
+                            <img class="company-logo" src="https://i.ibb.co/fd36G56R/Untitled-removebg-preview.png" alt="Tagtime">
                             <div class="company">Công ty Nhãn Thời Gian Việt Tiến</div>
                         </div>
                         <h1>Phiếu nhập kho</h1>
@@ -113,8 +113,7 @@
                             <col style="width:7%">
                             <col style="width:9%">
                             <col style="width:5%">
-                            <col style="width:12%">
-                            <col style="width:4%">
+                            <col style="width:16%">
                         </colgroup>
                         <thead>
                             <tr>
@@ -139,8 +138,8 @@
                                     <td class="center">{{ $line->size }}</td>
                                     <td class="right">{{ $formatQuantity($line->quantity) }}</td>
                                     <td class="center">{{ $line->dvt }}</td>
+                                    <td>{{ $line->production_order }}</td>
                                     <td>{{ $line->note }}</td>
-                                    <td>{{ $receipt->note }}</td>
                                 </tr>
                             @empty
                                 <tr>
