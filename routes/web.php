@@ -177,6 +177,7 @@ Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
 Route::get('/client/ton-kho-noi-bo', [WarehouseCountController::class, 'stockIndex']);
 Route::get('/client/canh-bao-kho', [WarehouseCountController::class, 'qualityIndex']);
 Route::get('/api/canh-bao-kho', [WarehouseCountController::class, 'qualityData']);
+Route::get('/api/kho-noi-bo/nhap-xuat-ngay', [WarehouseCountController::class, 'dailyFlow']);
 Route::get('/api/ton-kho-noi-bo/export', [WarehouseCountController::class, 'exportStock']);
 Route::get('/api/ton-kho-noi-bo/kho', [WarehouseCountController::class, 'stockWarehouses']);
 Route::get('/api/ton-kho-noi-bo', [WarehouseCountController::class, 'stockData']);

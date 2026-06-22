@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Theo dõi hàng đang sản xuất</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{{ asset('css/warehouse-wms.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
     <style>
         .flow-board { display:grid; grid-template-columns:1fr 52px 1fr 52px 1fr; align-items:stretch; margin-bottom:18px; }
         .flow-stage { min-height:148px; padding:18px; border:1px solid var(--wms-line); background:#fff; }

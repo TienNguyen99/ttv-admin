@@ -6,7 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Quản lý đơn hàng A/B</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{{ asset('css/warehouse-wms.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
     <style>
         .order-tabs { display:flex; gap:4px; margin-bottom:18px; border-bottom:1px solid var(--wms-line); }
         .order-tab { min-width:120px; padding:10px 16px; border:0; border-bottom:3px solid transparent; background:transparent; color:#64748b; font-weight:800; }

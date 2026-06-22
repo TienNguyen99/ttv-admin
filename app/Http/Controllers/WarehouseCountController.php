@@ -554,6 +554,57 @@ class WarehouseCountController extends Controller
         ]);
     }
 
+    public function dailyFlow(Request $request)
+    {
+        $days = min(max((int) $request->query('days', 7), 1), 31);
+        $end = Carbon::parse($request->query('to', now()->format('Y-m-d')))->startOfDay();
+        $start = $end->copy()->subDays($days - 1);
+
+        $receipts = DB::connection('internal')->table('internal_material_receipts as r')
+            ->join('internal_material_receipt_lines as l', 'l.receipt_id', '=', 'r.id')
+            ->where('r.source', 'Phieu nhap thanh pham')
+            ->whereBetween('r.receipt_date', [$start->format('Y-m-d'), $end->format('Y-m-d')])
+            ->select('r.receipt_date as date', DB::raw('SUM(l.quantity) as quantity'), DB::raw('COUNT(DISTINCT r.id) as document_count'))
+            ->groupBy('r.receipt_date')
+            ->get()
+            ->keyBy(fn ($row) => Carbon::parse($row->date)->format('Y-m-d'));
+
+        $issues = DB::connection('internal')->table('internal_material_issues as i')
+            ->join('internal_material_issue_lines as l', 'l.issue_id', '=', 'i.id')
+            ->whereBetween('i.issue_date', [$start->format('Y-m-d'), $end->format('Y-m-d')])
+            ->select('i.issue_date as date', DB::raw('SUM(l.quantity) as quantity'), DB::raw('COUNT(DISTINCT i.id) as document_count'))
+            ->groupBy('i.issue_date')
+            ->get()
+            ->keyBy(fn ($row) => Carbon::parse($row->date)->format('Y-m-d'));
+
+        $rows = collect();
+        for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
+            $key = $date->format('Y-m-d');
+            $receipt = $receipts->get($key);
+            $issue = $issues->get($key);
+            $rows->push([
+                'date' => $key,
+                'label' => $date->format('d/m'),
+                'receipt_quantity' => (float) ($receipt->quantity ?? 0),
+                'issue_quantity' => (float) ($issue->quantity ?? 0),
+                'receipt_count' => (int) ($receipt->document_count ?? 0),
+                'issue_count' => (int) ($issue->document_count ?? 0),
+            ]);
+        }
+
+        return response()->json([
+            'data' => $rows,
+            'summary' => [
+                'from_date' => $start->format('Y-m-d'),
+                'to_date' => $end->format('Y-m-d'),
+                'receipt_quantity' => (float) $rows->sum('receipt_quantity'),
+                'issue_quantity' => (float) $rows->sum('issue_quantity'),
+                'receipt_count' => (int) $rows->sum('receipt_count'),
+                'issue_count' => (int) $rows->sum('issue_count'),
+            ],
+        ]);
+    }
+
     public function exportStock(Request $request)
     {
         $month = Carbon::parse($request->query('month', now()->format('Y-m')) . '-01')->startOfMonth();

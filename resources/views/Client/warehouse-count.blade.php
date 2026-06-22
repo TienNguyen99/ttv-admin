@@ -139,7 +139,7 @@
         @media (max-width: 700px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .view-tabs { overflow-x: auto; } .view-tab { white-space: nowrap; } .voice-assistant { grid-template-columns: auto minmax(0, 1fr) auto; } .voice-result { grid-column: 1 / -1; } }
         @media (max-width: 991.98px) { .page-shell { padding: 62px 12px 16px; } }
     </style>
-    <link href="{{ asset('css/warehouse-wms.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
     <style>
         .page-shell { max-width: 1600px; padding: 24px 28px 40px; }
         .page-title { color: var(--wms-ink); font-size: 28px; font-weight: 800; }

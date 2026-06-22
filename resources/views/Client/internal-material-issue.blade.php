@@ -7,7 +7,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Xuất kho nội bộ</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{{ asset('css/warehouse-wms.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
     <style>
         body { background: #f6f7f9; color: #111827; }
         .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }

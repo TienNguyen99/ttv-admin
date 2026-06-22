@@ -6,7 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Lệnh sản xuất Google Sheet</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{{ asset('css/warehouse-wms.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
     <style>
         .production-table { min-width: 1800px; }
         .production-table .wrap { min-width: 180px; max-width: 300px; white-space: normal; }
