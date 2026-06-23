@@ -182,6 +182,7 @@
             <div class="d-flex gap-2">
                 <button id="cancelEditBtn" type="button" class="wms-btn d-none"><i data-lucide="x"></i>Hủy sửa</button>
                 <button id="reloadBtn" type="button" class="wms-btn"><i data-lucide="refresh-cw"></i>Tải lại</button>
+                <button id="createBtpAndIssueBtn" type="button" class="wms-btn"><i data-lucide="git-branch-plus"></i>Tạo lệnh BTP + xuất</button>
                 <button id="saveBtn" type="button" class="wms-btn wms-btn--primary"><i data-lucide="printer"></i>Xuất và in phiếu</button>
             </div>
         </div>
@@ -200,7 +201,8 @@
                     <div class="hint">Tạo phiếu sẽ trừ tồn nội bộ theo mã, vị trí, mã nội bộ, size, màu và mặt nếu có nhập.</div>
                 </div>
                 <div class="d-flex gap-2">
-                    <button id="openPasteImportBtn" type="button" class="btn btn-outline-primary btn-sm"><i data-lucide="clipboard-paste"></i> Paste Excel</button>
+                    <button id="openPasteImportBtn" type="button" class="btn btn-outline-primary btn-sm"><i data-lucide="clipboard-paste"></i> Paste 10-20 dòng</button>
+                    <button id="addTwentyLinesBtn" type="button" class="btn btn-outline-secondary btn-sm"><i data-lucide="rows-3"></i> +20 dòng</button>
                     <button id="addLineBtn" type="button" class="btn btn-outline-primary btn-sm">Thêm dòng</button>
                 </div>
             </div>
@@ -221,17 +223,17 @@
                 <table class="table table-bordered line-table mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th style="width:130px">Lệnh SX</th>
-                            <th style="width:220px">Mã hàng</th>
+                            <th style="width:150px">Mã nội bộ *</th>
                             <th>Tên hàng</th>
+                            <th style="width:105px">Size</th>
+                            <th style="width:130px">Màu</th>
+                            <th style="width:120px">SL thực xuất *</th>
+                            <th style="width:120px">Vị trí</th>
+                            <th style="width:130px">Lệnh BTP/SX</th>
+                            <th style="width:180px">Mã đối chiếu</th>
                             <th style="width:80px">ĐVT</th>
                             <th style="width:105px">SL theo lệnh</th>
                             <th style="width:105px">Tồn khả dụng</th>
-                            <th style="width:120px">SL thực xuất *</th>
-                            <th style="width:120px">Vị trí</th>
-                            <th style="width:140px">Mã nội bộ</th>
-                            <th style="width:90px">Size</th>
-                            <th style="width:120px">Màu</th>
                             <th style="width:160px">Ghi chú</th>
                             <th style="width:50px"></th>
                         </tr>
@@ -262,15 +264,15 @@
     <dialog id="pasteImportDialog" class="paste-dialog">
         <div class="paste-dialog__header">
             <div>
-                <h2 class="section-title">Nhập phiếu khách hàng từ Excel</h2>
-                <div class="hint">Chọn khách, copy các dòng trong Excel rồi dán vào ô bên dưới.</div>
+                <h2 id="pasteDialogTitle" class="section-title">Nhập dữ liệu từ Excel</h2>
+                <div id="pasteDialogHint" class="hint">Copy các dòng trong Excel rồi dán vào ô bên dưới.</div>
             </div>
             <button id="closePasteImportBtn" type="button" class="btn btn-outline-secondary btn-sm" aria-label="Đóng"><i data-lucide="x"></i></button>
         </div>
         <div class="paste-dialog__body">
             <div class="row g-2 mb-3">
                 <div class="col-md-3">
-                    <label class="form-label" for="pasteCustomer">Khách hàng</label>
+                    <label id="pasteCustomerLabel" class="form-label" for="pasteCustomer">Mẫu dữ liệu</label>
                     <select id="pasteCustomer" class="form-select">
                         <option value="UNIPAX">UNIPAX</option>
                         <option value="ELITE">ELITE</option>
@@ -314,7 +316,7 @@
             <div id="pasteFooterHint" class="hint">Chưa có dữ liệu kiểm tra.</div>
             <div class="d-flex gap-2">
                 <button id="cancelPasteImportBtn" type="button" class="btn btn-outline-secondary">Hủy</button>
-                <button id="applyPastedLinesBtn" type="button" class="btn btn-primary" disabled><i data-lucide="list-plus"></i> <span id="applyPastedLinesLabel">Tạo PNTP + PXTP UNIPAX</span></button>
+                <button id="applyPastedLinesBtn" type="button" class="btn btn-primary" disabled><i data-lucide="list-plus"></i> <span id="applyPastedLinesLabel">Đưa vào phiếu xuất BTP</span></button>
             </div>
         </div>
     </dialog>
@@ -356,11 +358,11 @@
                 columns: [null,'issue_date','internal_item_code','ps_number','size','color','logo_color','dvt','ordered_quantity','quantity','error_quantity','note','side']
             },
             ELITE: {
-                guide: 'Ngày xuất | ITEM# (mã nội bộ) | PS# / Lệnh | Size | Màu | Logo color | ĐVT | SL đơn hàng | SL xuất | Ghi chú | Vị trí/mặt',
+                guide: 'Dán 10-20 dòng: Ngày xuất | ITEM# (mã nội bộ) | PS# nếu có | Size | Màu | Logo color | ĐVT | SL đơn hàng | SL xuất | Ghi chú | Vị trí/mặt',
                 columns: ['issue_date','internal_item_code','production_order','size','color','logo_color','dvt','ordered_quantity','quantity','note','side']
             },
             CUSTOM: {
-                guide: 'Dán kèm hàng tiêu đề. Nhận các cột: mã đối chiếu nếu có, ITEM/Mã nội bộ, PS#/Lệnh SX, Size, Màu, ĐVT, Số lượng/Đạt, Vị trí, Ghi chú.',
+                guide: 'Dán kèm hàng tiêu đề. Tối thiểu cần Mã nội bộ và Số lượng. Các cột khác như Size, Màu, Vị trí, Ghi chú có thể có hoặc để trống.',
                 columns: []
             }
         };
@@ -389,9 +391,36 @@
         };
         const num = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
 
+        function isProductionIssuePaste() {
+            return value('issueType') === 'production';
+        }
+
+        function isUnipaxCustomerPaste() {
+            return value('issueType') === 'customer' && value('pasteCustomer') === 'UNIPAX';
+        }
+
+        function updatePasteDialogMode() {
+            const production = isProductionIssuePaste();
+            document.getElementById('pasteDialogTitle').textContent = production
+                ? 'Nhập BTP từ Excel'
+                : 'Nhập phiếu khách hàng từ Excel';
+            document.getElementById('pasteDialogHint').textContent = production
+                ? 'Dán 10-20 dòng BTP. Dữ liệu sẽ đưa vào grid xuất BTP để bạn kiểm tra rồi bấm Tạo lệnh BTP + xuất.'
+                : 'Chọn khách, copy các dòng trong Excel rồi dán vào ô bên dưới.';
+            document.getElementById('pasteCustomerLabel').textContent = production ? 'Mẫu cột' : 'Khách hàng';
+            document.getElementById('applyPastedLinesLabel').textContent = isUnipaxCustomerPaste()
+                ? 'Tạo PNTP + PXTP UNIPAX'
+                : 'Đưa vào phiếu xuất BTP';
+        }
+
         function jsonOrError(response, fallback) {
             if (response.ok) return response.json();
-            return response.json().then(result => { throw new Error(result.message || fallback); });
+            return response.json().then(result => {
+                const errors = result.errors
+                    ? Object.values(result.errors).flat().filter(Boolean).join('\n')
+                    : '';
+                throw new Error(errors || result.message || fallback);
+            });
         }
 
         function addLine(data = {}) {
@@ -402,27 +431,32 @@
             tr.dataset.purchaseOrder = data.purchase_order || '';
             tr.dataset.customer = data.customer || '';
             tr.innerHTML = `
-                <td><input class="form-control line-production-order" list="productionOrderOptions" autocomplete="off" value="${esc(data.production_order || '')}" placeholder="Gõ lệnh SX"></td>
+                <td><input class="form-control internal-code" list="internalCatalogOptions" autocomplete="off" value="${esc(data.internal_item_code || '')}" placeholder="Mã nội bộ"></td>
+                <td><input class="form-control ten-hh" value="${esc(data.ten_hh || '')}"></td>
+                <td><input class="form-control size" value="${esc(data.size || '')}"></td>
+                <td><input class="form-control color" value="${esc(data.color || '')}"></td>
+                <td><input class="form-control quantity text-end" type="number" step="0.001" min="0" value="${esc(data.quantity || '')}" placeholder="0"></td>
+                <td><input class="form-control location-code" value="${esc(data.location_code || '')}" placeholder="A01"></td>
+                <td><input class="form-control line-production-order" list="productionOrderOptions" autocomplete="off" value="${esc(data.production_order || '')}" placeholder="Tự sinh BTP"></td>
                 <td class="product-search">
-                    <input class="form-control ma-hh" autocomplete="off" value="${esc(data.ma_hh || '')}" placeholder="Gõ mã/tên">
+                    <input class="form-control ma-hh" autocomplete="off" value="${esc(data.ma_hh || '')}" placeholder="Có thể trống">
                     <div class="product-results d-none"></div>
                 </td>
-                <td><input class="form-control ten-hh" value="${esc(data.ten_hh || '')}"></td>
                 <td><input class="form-control dvt" value="${esc(data.dvt || '')}"></td>
                 <td><input class="form-control ordered-quantity text-end reference-value" value="${esc(data.ordered_quantity || '')}" readonly></td>
                 <td>
                     <input class="form-control available-quantity text-end reference-value" value="${esc(data.available_quantity || '')}" readonly>
                     ${data.production_order && !Number(data.available_quantity || 0) ? '<div class="stock-warning">Chưa khớp tồn</div>' : ''}
                 </td>
-                <td><input class="form-control quantity text-end" type="number" step="0.001" min="0" value="${esc(data.quantity || '')}"></td>
-                <td><input class="form-control location-code" value="${esc(data.location_code || '')}" placeholder="A01"></td>
-                <td><input class="form-control internal-code" list="internalCatalogOptions" autocomplete="off" value="${esc(data.internal_item_code || '')}" placeholder="Mã DANH MỤC"></td>
-                <td><input class="form-control size" value="${esc(data.size || '')}"></td>
-                <td><input class="form-control color" value="${esc(data.color || '')}"></td>
                 <td><input class="form-control line-note" value="${esc(data.note || '')}"></td>
                 <td><button type="button" class="btn btn-sm btn-outline-danger remove-line">X</button></td>
             `;
             lineRows.appendChild(tr);
+        }
+
+        function addBlankLines(count) {
+            for (let index = 0; index < count; index++) addLine();
+            lineRows.querySelector('tr:last-child .internal-code')?.focus();
         }
 
         function collectLines() {
@@ -441,7 +475,7 @@
                 size: row.querySelector('.size').value.trim(),
                 color: row.querySelector('.color').value.trim(),
                 note: row.querySelector('.line-note').value.trim(),
-            })).filter(line => line.ma_hh || line.quantity);
+            })).filter(line => line.ma_hh || line.internal_item_code || line.quantity);
         }
 
         function setEditingIssue(issue) {
@@ -512,6 +546,48 @@
             }, 220);
         }
 
+        function searchProductionOrders(input) {
+            const keyword = input.value.trim();
+            clearTimeout(productionOrderSearchTimer);
+            if (keyword.length < 2) return;
+
+            productionOrderSearchTimer = setTimeout(() => {
+                Promise.all([
+                    fetch(`/api/lenh-san-xuat-sheet?keyword=${encodeURIComponent(keyword)}&limit=30`)
+                        .then(response => jsonOrError(response, 'Khong tai duoc lenh san xuat'))
+                        .catch(() => ({data: []})),
+                    fetch(`/api/lenh-btp?keyword=${encodeURIComponent(keyword)}&limit=30`)
+                        .then(response => jsonOrError(response, 'Khong tai duoc lenh BTP'))
+                        .catch(() => ({data: []}))
+                ]).then(([productionResult, btpResult]) => {
+                    const btpOrders = (btpResult.data || []).map(order => {
+                        const line = Array.isArray(order.lines) && order.lines.length ? order.lines[0] : {};
+                        return {
+                            production_order: order.btp_order_code,
+                            customer: order.status === 'draft' ? 'BTP chua xuat' : 'BTP dang SX',
+                            purchase_order: order.issue_code || '',
+                            item_code: line.internal_item_code || line.ma_hh || '',
+                            size: line.size || '',
+                            color: line.color || ''
+                        };
+                    });
+                    const uniqueOrders = Array.from(new Map(
+                        (productionResult.data || []).concat(btpOrders).map(order => [order.production_order, order])
+                    ).values());
+                    document.getElementById('productionOrderOptions').innerHTML = uniqueOrders.map(order => {
+                        const label = [
+                            order.customer,
+                            order.purchase_order,
+                            order.item_code,
+                            order.size ? `Size ${order.size}` : '',
+                            order.color ? `Mau ${order.color}` : ''
+                        ].filter(Boolean).join(' - ');
+                        return `<option value="${esc(order.production_order)}" label="${esc(label)}"></option>`;
+                    }).join('');
+                }).catch(() => {});
+            }, 220);
+        }
+
         function searchInternalCatalog(input) {
             const keyword = input.value.trim();
             clearTimeout(internalCatalogSearchTimer);
@@ -559,6 +635,7 @@
             if (!row.querySelector('.location-code').value.trim() && item.shelf) {
                 row.querySelector('.location-code').value = item.shelf;
             }
+            row.querySelector('.quantity')?.focus();
         }
 
         function fillIssueLine(row, data) {
@@ -641,6 +718,8 @@
         function applyIssueType(type) {
             const isProduction = type === 'production';
             const isCustomer = type === 'customer';
+            document.getElementById('createBtpAndIssueBtn').classList.toggle('d-none', !isProduction || Boolean(editingIssueId));
+            updatePasteDialogMode();
             document.getElementById('issueTypeMetric').textContent = isProduction ? 'BTP sản xuất' : 'TP khách hàng';
             document.getElementById('pageTitle').textContent = isProduction ? 'Xuất bán thành phẩm đi sản xuất' : 'Xuất thành phẩm cho khách';
             document.getElementById('pageHint').textContent = isProduction
@@ -937,7 +1016,8 @@
                 ? 'Các dòng cảnh báo vẫn được đưa vào phiếu để bạn sửa trực tiếp.'
                 : 'Dữ liệu đã sẵn sàng đưa vào phiếu.';
             document.getElementById('applyPastedLinesBtn').disabled = !analyzedPastedLines.length;
-            if (value('pasteCustomer') === 'UNIPAX') {
+            updatePasteDialogMode();
+            if (isUnipaxCustomerPaste()) {
                 const receiptCount = Math.ceil(analyzedPastedLines.length / 20);
                 document.getElementById('applyPastedLinesLabel').textContent =
                     `Tạo ${receiptCount} PNTP + ${receiptCount} PXTP UNIPAX`;
@@ -967,17 +1047,19 @@
 
         function applyPastedLines() {
             if (!analyzedPastedLines.length) return;
-            if (value('pasteCustomer') === 'UNIPAX') {
+            if (isUnipaxCustomerPaste()) {
                 saveUnipaxReceipt();
                 return;
             }
             lineRows.innerHTML = '';
             analyzedPastedLines.forEach(line => addLine(line));
             if (!value('issueNote')) {
-                document.getElementById('issueNote').value = `Paste phiếu ${value('pasteCustomer')}`;
+                document.getElementById('issueNote').value = isProductionIssuePaste()
+                    ? `Paste BTP từ Excel`
+                    : `Paste phiếu ${value('pasteCustomer')}`;
             }
             document.getElementById('pasteImportDialog').close();
-            lineRows.querySelector('input')?.focus();
+            lineRows.querySelector('.internal-code')?.focus();
         }
 
         function saveUnipaxReceipt() {
@@ -1086,7 +1168,7 @@
         function saveIssue() {
             const lines = collectLines();
             if (!lines.length) return alert('Nhập ít nhất một dòng hàng.');
-            if (lines.some(line => !line.ma_hh || !Number(line.quantity))) return alert('Mỗi dòng cần mã hàng và số lượng.');
+            if (lines.some(line => (!line.ma_hh && !line.internal_item_code) || !Number(line.quantity))) return alert('Mỗi dòng cần mã nội bộ hoặc mã đối chiếu, và số lượng.');
 
             fetch(editingIssueId ? `/api/xuat-vat-tu-noi-bo/${editingIssueId}` : '/api/xuat-vat-tu-noi-bo', {
                 method: editingIssueId ? 'PUT' : 'POST',
@@ -1109,6 +1191,115 @@
                   loadIssues();
               })
               .catch(error => alert(error.message));
+        }
+
+        function applyBtpOrderCodesToRows(orders) {
+            const activeRows = Array.from(lineRows.querySelectorAll('tr')).filter(row =>
+                row.querySelector('.ma-hh').value.trim()
+                || row.querySelector('.internal-code').value.trim()
+                || row.querySelector('.quantity').value.trim()
+            );
+
+            activeRows.forEach((row, index) => {
+                const code = orders[index]?.btp_order_code || orders[index];
+                row.dataset.productionOrderId = '';
+                row.dataset.purchaseOrder = '';
+                row.dataset.customer = '';
+                const input = row.querySelector('.line-production-order');
+                if (input && code) {
+                    input.value = code;
+                }
+            });
+        }
+
+        function legacyCreateBtpOrderAndIssue() {
+            if (editingIssueId) return alert('Đang sửa phiếu cũ, không tạo lệnh BTP tự động ở chế độ này.');
+            if (value('issueType') !== 'production') return alert('Chỉ tạo lệnh BTP tự động cho nghiệp vụ Xuất BTP đi sản xuất.');
+            const lines = collectLines();
+            if (!lines.length) return alert('Nhập ít nhất một dòng BTP.');
+            if (lines.some(line => (!line.ma_hh && !line.internal_item_code) || !Number(line.quantity))) return alert('Mỗi dòng cần mã nội bộ hoặc mã đối chiếu, và số lượng.');
+
+            const existingOrders = Array.from(new Set(lines.map(line => line.production_order).filter(Boolean)));
+            if (existingOrders.length && !confirm(`Các dòng đã có lệnh: ${existingOrders.join(', ')}. Tạo lệnh BTP mới và ghi đè lệnh trên các dòng?`)) {
+                return;
+            }
+
+            const button = document.getElementById('createBtpAndIssueBtn');
+            button.disabled = true;
+            button.innerHTML = '<i data-lucide="loader-circle"></i>Đang tạo lệnh...';
+            if (window.lucide) lucide.createIcons();
+
+            fetch('/api/lenh-btp/hang-loat', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({
+                    order_date: value('issueDate'),
+                    receiver_name: value('receiverName'),
+                    department: value('department') || 'Sản xuất',
+                    purpose: value('purpose') || 'Xuất BTP đi sản xuất',
+                    note: value('issueNote'),
+                    lines
+                })
+            }).then(response => jsonOrError(response, 'Không tạo được lệnh BTP'))
+              .then(result => {
+                  const code = result.data?.btp_order_code;
+                  if (!code) throw new Error('Không nhận được mã lệnh BTP.');
+                  applyBtpOrderCodeToRows(code);
+                  document.getElementById('issueNote').value = [value('issueNote'), `Lệnh BTP ${code}`].filter(Boolean).join(' · ');
+                  saveIssue();
+              })
+              .catch(error => alert(error.message))
+              .finally(() => {
+                  button.disabled = false;
+                  button.innerHTML = '<i data-lucide="git-branch-plus"></i>Tạo lệnh BTP + xuất';
+                  if (window.lucide) lucide.createIcons();
+              });
+        }
+
+        function createBtpOrderAndIssue() {
+            if (editingIssueId) return alert('Dang sua phieu cu, khong tao lenh BTP tu dong o che do nay.');
+            if (value('issueType') !== 'production') return alert('Chi tao lenh BTP tu dong cho nghiep vu Xuat BTP di san xuat.');
+            const lines = collectLines();
+            if (!lines.length) return alert('Nhap it nhat mot dong BTP.');
+            if (lines.some(line => (!line.ma_hh && !line.internal_item_code) || !Number(line.quantity))) return alert('Moi dong can ma noi bo hoac ma doi chieu, va so luong.');
+
+            const existingOrders = Array.from(new Set(lines.map(line => line.production_order).filter(Boolean)));
+            if (existingOrders.length && !confirm(`Cac dong da co lenh: ${existingOrders.join(', ')}. Tao lenh BTP moi va ghi de lenh tren cac dong?`)) {
+                return;
+            }
+
+            const button = document.getElementById('createBtpAndIssueBtn');
+            button.disabled = true;
+            button.innerHTML = '<i data-lucide="loader-circle"></i>Dang tao lenh...';
+            if (window.lucide) lucide.createIcons();
+
+            fetch('/api/lenh-btp/hang-loat', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({
+                    order_date: value('issueDate'),
+                    receiver_name: value('receiverName'),
+                    department: value('department') || 'San xuat',
+                    purpose: value('purpose') || 'Xuat BTP di san xuat',
+                    note: value('issueNote'),
+                    lines
+                })
+            }).then(response => jsonOrError(response, 'Khong tao duoc lenh BTP'))
+              .then(result => {
+                  const orders = Array.isArray(result.data) ? result.data : [];
+                  if (!orders.length) throw new Error('Khong nhan duoc danh sach lenh BTP.');
+                  if (orders.length !== lines.length) throw new Error(`So lenh BTP (${orders.length}) khong khop so dong (${lines.length}).`);
+                  applyBtpOrderCodesToRows(orders);
+                  const codes = orders.map(order => order.btp_order_code).filter(Boolean);
+                  document.getElementById('issueNote').value = [value('issueNote'), `Lenh BTP ${codes.join(', ')}`].filter(Boolean).join(' - ');
+                  saveIssue();
+              })
+              .catch(error => alert(error.message))
+              .finally(() => {
+                  button.disabled = false;
+                  button.innerHTML = '<i data-lucide="git-branch-plus"></i>Tao lenh BTP + xuat';
+                  if (window.lucide) lucide.createIcons();
+              });
         }
 
         function loadIssues() {
@@ -1165,6 +1356,22 @@
                 event.preventDefault();
                 loadProductionOrder(event.target);
             }
+            if (event.target.classList.contains('internal-code') && event.key === 'Enter') {
+                event.preventDefault();
+                applyInternalCatalog(event.target);
+                event.target.closest('tr').querySelector('.quantity')?.focus();
+            }
+            if (event.target.classList.contains('quantity') && event.key === 'Enter') {
+                event.preventDefault();
+                const row = event.target.closest('tr');
+                const nextRow = row.nextElementSibling;
+                if (nextRow) {
+                    nextRow.querySelector('.internal-code')?.focus();
+                } else {
+                    addLine();
+                    lineRows.querySelector('tr:last-child .internal-code')?.focus();
+                }
+            }
         });
 
         lineRows.addEventListener('click', event => {
@@ -1204,7 +1411,9 @@
         });
 
         document.getElementById('addLineBtn').addEventListener('click', () => addLine());
+        document.getElementById('addTwentyLinesBtn').addEventListener('click', () => addBlankLines(20));
         document.getElementById('openPasteImportBtn').addEventListener('click', () => {
+            updatePasteDialogMode();
             document.getElementById('pasteColumnGuide').textContent = pastePresets[value('pasteCustomer')].guide;
             document.getElementById('pasteImportDialog').showModal();
             renderPasteColumnMap();
@@ -1213,10 +1422,8 @@
         document.getElementById('closePasteImportBtn').addEventListener('click', () => document.getElementById('pasteImportDialog').close());
         document.getElementById('cancelPasteImportBtn').addEventListener('click', () => document.getElementById('pasteImportDialog').close());
         document.getElementById('pasteCustomer').addEventListener('change', event => {
+            updatePasteDialogMode();
             document.getElementById('pasteColumnGuide').textContent = pastePresets[event.target.value].guide;
-            document.getElementById('applyPastedLinesLabel').textContent = event.target.value === 'UNIPAX'
-                ? 'Tạo PNTP + PXTP UNIPAX'
-                : 'Đưa vào phiếu xuất';
             analyzedPastedLines = [];
             document.getElementById('pasteResultArea').classList.add('d-none');
             document.getElementById('applyPastedLinesBtn').disabled = true;
@@ -1227,6 +1434,7 @@
         document.getElementById('analyzePasteBtn').addEventListener('click', analyzePastedData);
         document.getElementById('applyPastedLinesBtn').addEventListener('click', applyPastedLines);
         document.getElementById('saveBtn').addEventListener('click', saveIssue);
+        document.getElementById('createBtpAndIssueBtn').addEventListener('click', createBtpOrderAndIssue);
         document.getElementById('cancelEditBtn').addEventListener('click', resetIssueForm);
         document.getElementById('issueType').addEventListener('change', event => applyIssueType(event.target.value));
         document.querySelectorAll('.date-vn').forEach(input => {
@@ -1255,6 +1463,7 @@
         document.getElementById('pasteColumnGuide').textContent = pastePresets.UNIPAX.guide;
         document.getElementById('issueType').value = requestedType === 'customer' ? 'customer' : 'production';
         applyIssueType(document.getElementById('issueType').value);
+        updatePasteDialogMode();
         addLine();
         loadIssues();
     </script>

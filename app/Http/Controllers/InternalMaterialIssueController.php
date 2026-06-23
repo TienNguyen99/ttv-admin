@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternalInventoryCount;
+use App\Models\InternalBtpProductionOrder;
 use App\Models\InternalMaterialIssue;
 use App\Models\InternalMaterialIssueAllocation;
 use App\Models\InternalMaterialReceiptLine;
@@ -94,6 +95,50 @@ class InternalMaterialIssueController extends Controller
             $groups[$key]['issue_codes'][$line->issue_code] = true;
         }
 
+        $btpOrders = InternalBtpProductionOrder::query()
+            ->with('lines')
+            ->whereIn('status', ['draft', 'issued'])
+            ->orderBy('order_date')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($btpOrders as $order) {
+            foreach ($order->lines as $line) {
+                $orderCode = trim((string) $order->btp_order_code);
+                if ($orderCode === '') {
+                    continue;
+                }
+
+                $key = $this->productionTrackingKey($orderCode, $line->size, $line->color);
+                if (isset($groups[$key])) {
+                    $groups[$key]['btp_status'] = $order->status;
+                    $groups[$key]['planned_quantity'] = max((float) ($groups[$key]['planned_quantity'] ?? 0), (float) $line->quantity);
+                    continue;
+                }
+
+                $groups[$key] = [
+                    'production_order' => $orderCode,
+                    'purchase_order' => '',
+                    'customer' => '',
+                    'warehouse_code' => '',
+                    'receiver_name' => trim((string) $order->receiver_name),
+                    'department' => trim((string) $order->department),
+                    'ma_hh' => trim((string) $line->ma_hh),
+                    'internal_item_code' => trim((string) $line->internal_item_code),
+                    'size' => trim((string) $line->size),
+                    'color' => trim((string) $line->color),
+                    'dvt' => trim((string) $line->dvt),
+                    'planned_quantity' => (float) $line->quantity,
+                    'issued_quantity' => 0.0,
+                    'returned_quantity' => 0.0,
+                    'first_issue_date' => (string) $order->order_date,
+                    'last_issue_date' => (string) $order->order_date,
+                    'issue_codes' => [],
+                    'btp_status' => $order->status,
+                ];
+            }
+        }
+
         $orderNames = collect($groups)->pluck('production_order')->unique()->values();
         if ($orderNames->isNotEmpty()) {
             $receiptLines = DB::connection('internal')->table('internal_material_receipt_lines as l')
@@ -106,7 +151,7 @@ class InternalMaterialIssueController extends Controller
                     'l.color',
                     DB::raw('SUM(l.quantity) as quantity')
                 )
-                ->groupBy(DB::raw("COALESCE(NULLIF(l.production_order, ''), l.note)"), 'l.size', 'l.color')
+                ->groupBy('l.production_order', 'l.note', 'l.size', 'l.color')
                 ->get();
 
             foreach ($receiptLines as $line) {
@@ -120,7 +165,11 @@ class InternalMaterialIssueController extends Controller
         $today = now()->startOfDay();
         $rows = collect($groups)->map(function ($row) use ($today) {
             $row['issue_codes'] = array_keys($row['issue_codes']);
-            $row['outstanding_quantity'] = max(0, $row['issued_quantity'] - $row['returned_quantity']);
+            $row['btp_status'] = $row['btp_status'] ?? 'issued';
+            $row['planned_quantity'] = (float) ($row['planned_quantity'] ?? $row['issued_quantity']);
+            $row['outstanding_quantity'] = $row['issued_quantity'] > 0
+                ? max(0, $row['issued_quantity'] - $row['returned_quantity'])
+                : max(0, $row['planned_quantity'] - $row['returned_quantity']);
             $row['progress_percent'] = $row['issued_quantity'] > 0
                 ? min(100, round(($row['returned_quantity'] / $row['issued_quantity']) * 100, 1))
                 : 0;
@@ -141,6 +190,7 @@ class InternalMaterialIssueController extends Controller
 
             $searchable = mb_strtoupper(implode(' ', [
                 $row['production_order'],
+                $row['btp_status'],
                 $row['purchase_order'],
                 $row['customer'],
                 $row['ma_hh'],
@@ -224,16 +274,16 @@ class InternalMaterialIssueController extends Controller
             'purpose' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
             'lines' => 'required|array|min:1',
-            'lines.*.ma_hh' => 'required|string|max:100',
-            'lines.*.ten_hh' => 'nullable|string|max:255',
+            'lines.*.ma_hh' => 'nullable|string|max:100',
+            'lines.*.ten_hh' => 'nullable|string|max:1000',
             'lines.*.dvt' => 'nullable|string|max:50',
             'lines.*.quantity' => 'required|numeric|min:0.001',
             'lines.*.location_code' => 'nullable|string|max:100',
             'lines.*.internal_item_code' => 'nullable|string|max:100',
-            'lines.*.size' => 'nullable|string|max:100',
-            'lines.*.color' => 'nullable|string|max:100',
-            'lines.*.side' => 'nullable|string|max:100',
-            'lines.*.note' => 'nullable|string|max:500',
+            'lines.*.size' => 'nullable|string|max:255',
+            'lines.*.color' => 'nullable|string|max:1000',
+            'lines.*.side' => 'nullable|string|max:255',
+            'lines.*.note' => 'nullable|string|max:1000',
             'lines.*.production_order_id' => 'nullable|integer',
             'lines.*.production_order' => 'nullable|string|max:100',
             'lines.*.ps_number' => 'nullable|string|max:100',
@@ -245,6 +295,14 @@ class InternalMaterialIssueController extends Controller
             'lines.*.customer' => 'nullable|string|max:200',
             'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
         ]);
+
+        foreach ($data['lines'] as $index => $line) {
+            if (trim((string) ($line['ma_hh'] ?? '')) === '' && trim((string) ($line['internal_item_code'] ?? '')) === '') {
+                throw ValidationException::withMessages([
+                    "lines.{$index}.internal_item_code" => 'Moi dong can ma noi bo hoac ma hang.',
+                ]);
+            }
+        }
 
         $issueType = $data['issue_type'] ?? 'production';
 
@@ -268,17 +326,17 @@ class InternalMaterialIssueController extends Controller
                     'production_order' => trim($line['production_order'] ?? ''),
                     'purchase_order' => trim($line['purchase_order'] ?? ''),
                     'customer' => trim($line['customer'] ?? ''),
-                    'ma_hh' => strtoupper(trim($line['ma_hh'])),
-                    'ten_hh' => trim($line['ten_hh'] ?? ''),
+                    'ma_hh' => strtoupper(trim($line['ma_hh'] ?? ($line['internal_item_code'] ?? ''))),
+                    'ten_hh' => mb_substr(trim($line['ten_hh'] ?? ''), 0, 255),
                     'dvt' => trim($line['dvt'] ?? ''),
                     'ordered_quantity' => $line['ordered_quantity'] ?? null,
                     'quantity' => $line['quantity'],
                     'location_code' => strtoupper(trim($line['location_code'] ?? '')),
                     'internal_item_code' => trim($line['internal_item_code'] ?? ''),
-                    'size' => trim($line['size'] ?? ''),
-                    'color' => trim($line['color'] ?? ''),
-                    'side' => trim($line['side'] ?? ''),
-                    'note' => trim($line['note'] ?? ''),
+                    'size' => mb_substr(trim($line['size'] ?? ''), 0, 100),
+                    'color' => mb_substr(trim($line['color'] ?? ''), 0, 100),
+                    'side' => mb_substr(trim($line['side'] ?? ''), 0, 100),
+                    'note' => mb_substr(trim($line['note'] ?? ''), 0, 500),
                 ]);
 
                 $this->decreaseInternalStock(
@@ -290,6 +348,21 @@ class InternalMaterialIssueController extends Controller
 
             return $issue->load('lines');
         });
+
+        if ($issueType === 'production') {
+            $btpOrders = $issue->lines
+                ->pluck('production_order')
+                ->merge([$issue->production_order])
+                ->filter()
+                ->map(fn ($value) => trim((string) $value))
+                ->filter(fn ($value) => preg_match('/^BTP\d{4}-\d{4}$/', $value))
+                ->unique()
+                ->values();
+
+            foreach ($btpOrders as $btpOrderCode) {
+                InternalBtpProductionOrderController::markIssued($btpOrderCode, $issue);
+            }
+        }
 
         app(InternalAudit::class)->model('issue.created', $issue, [
             'line_count' => $issue->lines->count(),
@@ -406,6 +479,10 @@ class InternalMaterialIssueController extends Controller
             return response()->json(['data' => []]);
         }
 
+        if (preg_match('/^BTP\d{4}-\d{4}$/i', $productionOrder)) {
+            return $this->btpProductionOrderLines($productionOrder, $request);
+        }
+
         $orders = InternalProductionOrder::query()
             ->where('is_active', true)
             ->where('production_order', $productionOrder)
@@ -459,6 +536,89 @@ class InternalMaterialIssueController extends Controller
                 'variant_count' => $data->count(),
                 'ordered_quantity' => (float) $data->sum('ordered_quantity'),
                 'available_quantity' => (float) $data->sum('available_quantity'),
+            ],
+        ]);
+    }
+
+    private function btpProductionOrderLines(string $productionOrder, Request $request)
+    {
+        $order = InternalBtpProductionOrder::query()
+            ->with('lines')
+            ->whereRaw('UPPER(TRIM(btp_order_code)) = ?', [mb_strtoupper(trim($productionOrder))])
+            ->first();
+
+        if (!$order) {
+            return response()->json([
+                'data' => [],
+                'summary' => [
+                    'production_order' => $productionOrder,
+                    'variant_count' => 0,
+                    'ordered_quantity' => 0,
+                    'available_quantity' => 0,
+                ],
+            ]);
+        }
+
+        $warehouseCode = strtoupper(trim((string) $request->query('warehouse_code', '')));
+
+        $data = $order->lines->map(function ($line) use ($order, $warehouseCode) {
+            $stockQuery = InventoryPackage::query()
+                ->with('location:id,location_code')
+                ->where('quantity', '>', 0);
+
+            $internalCode = trim((string) $line->internal_item_code);
+            $materialCode = strtoupper(trim((string) $line->ma_hh));
+
+            if ($internalCode !== '') {
+                $stockQuery->whereRaw('UPPER(TRIM(internal_item_code)) = ?', [mb_strtoupper($internalCode)]);
+            } elseif ($materialCode !== '') {
+                $stockQuery->whereRaw('UPPER(TRIM(ma_sp)) = ?', [$materialCode]);
+            }
+
+            if ($warehouseCode !== '') {
+                $stockQuery->where('ma_ko', $warehouseCode);
+            }
+            if (trim((string) $line->size) !== '') {
+                $stockQuery->where('size', trim((string) $line->size));
+            }
+            if (trim((string) $line->color) !== '') {
+                $stockQuery->where('color', trim((string) $line->color));
+            }
+
+            $packages = ($internalCode !== '' || $materialCode !== '')
+                ? $stockQuery->orderBy('checked_at')->orderBy('id')->get()
+                : collect();
+            $accountingCodes = $packages->pluck('ma_sp')->filter()->unique()->values();
+            $locations = $packages->pluck('location.location_code')->filter()->unique()->values();
+
+            return [
+                'production_order_id' => null,
+                'production_order' => $order->btp_order_code,
+                'purchase_order' => '',
+                'customer' => '',
+                'internal_item_code' => mb_substr($internalCode, 0, 100),
+                'ten_hh' => mb_substr((string) $line->ten_hh, 0, 255),
+                'dvt' => mb_substr((string) $line->dvt, 0, 50),
+                'ordered_quantity' => (float) ($line->ordered_quantity ?: $line->quantity),
+                'size' => mb_substr((string) $line->size, 0, 100),
+                'color' => mb_substr((string) $line->color, 0, 100),
+                'ma_hh' => $accountingCodes->count() === 1 ? $accountingCodes->first() : $materialCode,
+                'location_code' => $locations->count() === 1 ? $locations->first() : trim((string) $line->location_code),
+                'available_quantity' => (float) $packages->sum('quantity'),
+                'stock_match_count' => $packages->count(),
+                'note' => trim((string) $line->note),
+                'source' => 'btp',
+            ];
+        });
+
+        return response()->json([
+            'data' => $data,
+            'summary' => [
+                'production_order' => $order->btp_order_code,
+                'variant_count' => $data->count(),
+                'ordered_quantity' => (float) $data->sum('ordered_quantity'),
+                'available_quantity' => (float) $data->sum('available_quantity'),
+                'status' => $order->status,
             ],
         ]);
     }
@@ -644,22 +804,30 @@ class InternalMaterialIssueController extends Controller
             'purpose' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
             'lines' => 'required|array|min:1',
-            'lines.*.ma_hh' => 'required|string|max:100',
-            'lines.*.ten_hh' => 'nullable|string|max:255',
+            'lines.*.ma_hh' => 'nullable|string|max:100',
+            'lines.*.ten_hh' => 'nullable|string|max:1000',
             'lines.*.dvt' => 'nullable|string|max:50',
             'lines.*.quantity' => 'required|numeric|min:0.001',
             'lines.*.location_code' => 'nullable|string|max:100',
             'lines.*.internal_item_code' => 'nullable|string|max:100',
-            'lines.*.size' => 'nullable|string|max:100',
-            'lines.*.color' => 'nullable|string|max:100',
-            'lines.*.side' => 'nullable|string|max:100',
-            'lines.*.note' => 'nullable|string|max:500',
+            'lines.*.size' => 'nullable|string|max:255',
+            'lines.*.color' => 'nullable|string|max:1000',
+            'lines.*.side' => 'nullable|string|max:255',
+            'lines.*.note' => 'nullable|string|max:1000',
             'lines.*.production_order_id' => 'nullable|integer',
             'lines.*.production_order' => 'nullable|string|max:100',
             'lines.*.purchase_order' => 'nullable|string|max:1000',
             'lines.*.customer' => 'nullable|string|max:200',
             'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
         ]);
+
+        foreach ($data['lines'] as $index => $line) {
+            if (trim((string) ($line['ma_hh'] ?? '')) === '' && trim((string) ($line['internal_item_code'] ?? '')) === '') {
+                throw ValidationException::withMessages([
+                    "lines.{$index}.internal_item_code" => 'Moi dong can ma noi bo hoac ma hang.',
+                ]);
+            }
+        }
 
         $issueType = $data['issue_type'] ?? $issue->issue_type ?? 'production';
 
@@ -688,17 +856,17 @@ class InternalMaterialIssueController extends Controller
                     'production_order' => trim($line['production_order'] ?? ''),
                     'purchase_order' => trim($line['purchase_order'] ?? ''),
                     'customer' => trim($line['customer'] ?? ''),
-                    'ma_hh' => strtoupper(trim($line['ma_hh'])),
-                    'ten_hh' => trim($line['ten_hh'] ?? ''),
+                    'ma_hh' => strtoupper(trim($line['ma_hh'] ?? ($line['internal_item_code'] ?? ''))),
+                    'ten_hh' => mb_substr(trim($line['ten_hh'] ?? ''), 0, 255),
                     'dvt' => trim($line['dvt'] ?? ''),
                     'ordered_quantity' => $line['ordered_quantity'] ?? null,
                     'quantity' => $line['quantity'],
                     'location_code' => strtoupper(trim($line['location_code'] ?? '')),
                     'internal_item_code' => trim($line['internal_item_code'] ?? ''),
-                    'size' => trim($line['size'] ?? ''),
-                    'color' => trim($line['color'] ?? ''),
-                    'side' => trim($line['side'] ?? ''),
-                    'note' => trim($line['note'] ?? ''),
+                    'size' => mb_substr(trim($line['size'] ?? ''), 0, 100),
+                    'color' => mb_substr(trim($line['color'] ?? ''), 0, 100),
+                    'side' => mb_substr(trim($line['side'] ?? ''), 0, 100),
+                    'note' => mb_substr(trim($line['note'] ?? ''), 0, 500),
                 ]);
 
                 $this->decreaseInternalStock($line, strtoupper(trim($data['warehouse_code'] ?? '')), $issueLine->id);
@@ -802,7 +970,7 @@ class InternalMaterialIssueController extends Controller
     {
         $requestedQuantity = (float) $line['quantity'];
         $remaining = $requestedQuantity;
-        $maHh = strtoupper(trim($line['ma_hh']));
+        $maHh = strtoupper(trim($line['ma_hh'] ?? ''));
         $locationCode = strtoupper(trim($line['location_code'] ?? ''));
         $internalCode = trim($line['internal_item_code'] ?? '');
         $size = trim($line['size'] ?? '');
@@ -810,11 +978,14 @@ class InternalMaterialIssueController extends Controller
         $side = trim($line['side'] ?? '');
 
         $query = InventoryPackage::query()
-            ->where('ma_sp', $maHh)
             ->where('quantity', '>', 0)
             ->orderBy('checked_at')
             ->orderBy('id')
             ->lockForUpdate();
+
+        if ($maHh !== '' && ($internalCode === '' || $maHh !== mb_strtoupper($internalCode))) {
+            $query->where('ma_sp', $maHh);
+        }
 
         if ($warehouseCode !== '') {
             $query->where('ma_ko', $warehouseCode);
@@ -846,8 +1017,9 @@ class InternalMaterialIssueController extends Controller
         $available = (float) $packages->sum('quantity');
 
         if ($available + 0.0001 < $requestedQuantity) {
+            $itemLabel = $internalCode !== '' ? $internalCode : $maHh;
             throw ValidationException::withMessages([
-                'lines' => "Ton noi bo khong du cho ma {$maHh}. Can {$requestedQuantity}, hien co {$available}.",
+                'lines' => "Ton noi bo khong du cho ma {$itemLabel}. Can {$requestedQuantity}, hien co {$available}.",
             ]);
         }
 

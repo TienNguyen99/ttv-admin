@@ -36,6 +36,108 @@ class WarehouseCountController extends Controller
         return view('client.internal-warehouse-quality');
     }
 
+    public function finishedGoodsTvIndex()
+    {
+        return view('client.finished-goods-tv');
+    }
+
+    public function finishedGoodsTvData(Request $request)
+    {
+        $date = $request->query('date', now()->timezone('Asia/Ho_Chi_Minh')->format('Y-m-d'));
+        $limit = min(max((int) $request->query('limit', 200), 1), 500);
+
+        $rows = DB::connection('internal')->table('internal_material_receipt_lines as l')
+            ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+            ->whereDate('r.receipt_date', $date)
+            ->where(function ($query) {
+                $query->where('r.source', 'Phieu nhap thanh pham')
+                    ->orWhere('r.receipt_code', 'like', 'PNTP-%');
+            })
+            ->select(
+                'r.id as receipt_id',
+                'r.receipt_code',
+                'r.receipt_date',
+                'r.location_code as receipt_location',
+                'r.created_at as receipt_created_at',
+                'l.created_at as line_created_at',
+                'l.customer',
+                'l.production_order',
+                'l.ma_hh',
+                'l.internal_item_code',
+                'l.ten_hh',
+                'l.dvt',
+                'l.quantity',
+                'l.size',
+                'l.color',
+                'l.side',
+                'l.location_code'
+            )
+            ->orderByDesc(DB::raw('COALESCE(l.created_at, r.created_at)'))
+            ->orderByDesc('l.id')
+            ->limit($limit)
+            ->get()
+            ->map(function ($row) {
+                $timeSource = $row->line_created_at ?: $row->receipt_created_at;
+                $time = $timeSource
+                    ? Carbon::parse($timeSource)->timezone('Asia/Ho_Chi_Minh')
+                    : Carbon::parse($row->receipt_date)->timezone('Asia/Ho_Chi_Minh');
+                $customer = trim((string) $row->customer) ?: 'Chưa xác định khách';
+                $code = trim((string) ($row->internal_item_code ?: $row->ma_hh)) ?: 'Chưa có mã';
+                $unit = trim((string) $row->dvt) ?: 'pcs';
+                $quantity = (float) $row->quantity;
+
+                return [
+                    'receipt_id' => $row->receipt_id,
+                    'receipt_code' => $row->receipt_code,
+                    'receipt_date' => $row->receipt_date,
+                    'time' => $time->format('H:i'),
+                    'hour' => (int) $time->format('H'),
+                    'minute' => (int) $time->format('i'),
+                    'customer' => $customer,
+                    'production_order' => trim((string) $row->production_order),
+                    'ma_hh' => trim((string) $row->ma_hh),
+                    'internal_item_code' => trim((string) $row->internal_item_code),
+                    'display_code' => $code,
+                    'ten_hh' => trim((string) $row->ten_hh),
+                    'quantity' => $quantity,
+                    'dvt' => $unit,
+                    'size' => trim((string) $row->size),
+                    'color' => trim((string) $row->color),
+                    'side' => trim((string) $row->side),
+                    'location_code' => trim((string) ($row->location_code ?: $row->receipt_location)),
+                    'sentence' => sprintf(
+                        'Vào lúc %d giờ %02d phút đã nhập thành phẩm Mã %s số lượng %s %s',
+                        (int) $time->format('H'),
+                        (int) $time->format('i'),
+                        $code,
+                        number_format($quantity, 3, ',', '.'),
+                        $unit
+                    ),
+                ];
+            });
+
+        $groups = $rows->groupBy('customer')->map(function ($items, $customer) {
+            return [
+                'customer' => $customer,
+                'line_count' => $items->count(),
+                'total_quantity' => (float) $items->sum('quantity'),
+                'items' => $items->values(),
+            ];
+        })->sortByDesc('total_quantity')->values();
+
+        return response()->json([
+            'data' => $groups,
+            'flat' => $rows->values(),
+            'summary' => [
+                'date' => $date,
+                'customer_count' => $groups->count(),
+                'line_count' => $rows->count(),
+                'total_quantity' => (float) $rows->sum('quantity'),
+                'last_updated_at' => now()->timezone('Asia/Ho_Chi_Minh')->format('Y-m-d H:i:s'),
+            ],
+        ]);
+    }
+
     public function showLocation(WarehouseLocation $warehouseLocation)
     {
         return view('client.warehouse-location-detail', [

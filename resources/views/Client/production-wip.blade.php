@@ -28,6 +28,9 @@
         .aging-badge--normal { background:#dcfce7; color:#166534; }
         .aging-badge--warning { background:#fef3c7; color:#92400e; }
         .aging-badge--overdue { background:#fee2e2; color:#b91c1c; }
+        .wip-status { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border-radius:5px; font-size:11px; font-weight:800; white-space:nowrap; }
+        .wip-status--draft { background:#e0f2fe; color:#075985; }
+        .wip-status--issued { background:#dcfce7; color:#166534; }
         .tracking-empty { padding:50px 20px; color:var(--wms-muted); text-align:center; }
         @media (max-width:900px) {
             .flow-board { grid-template-columns:1fr; }
@@ -117,6 +120,7 @@
                     <thead>
                         <tr>
                             <th>Lệnh SX / Phiếu xuất</th>
+                            <th>Trạng thái</th>
                             <th>Mã hàng</th>
                             <th>Size / Màu</th>
                             <th class="text-end">Đã xuất</th>
@@ -126,7 +130,7 @@
                             <th>Tuổi phiếu</th>
                         </tr>
                     </thead>
-                    <tbody id="trackingRows"><tr><td colspan="8" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
+                    <tbody id="trackingRows"><tr><td colspan="9" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
                 </table>
             </div>
         </section>
@@ -140,6 +144,13 @@
         function trackingStatus(row) {
             const labels = {normal: '0 - 3 ngày', warning: '4 - 7 ngày', overdue: 'Quá 7 ngày'};
             return `<span class="aging-badge aging-badge--${row.aging_status}"><i data-lucide="clock-3"></i>${labels[row.aging_status]} · ${row.age_days} ngày</span>`;
+        }
+
+        function btpFlowStatus(row) {
+            if (row.btp_status === 'draft') {
+                return '<span class="wip-status wip-status--draft">Chưa xuất</span>';
+            }
+            return '<span class="wip-status wip-status--issued">Đang SX</span>';
         }
 
         function loadProductionTracking() {
@@ -172,6 +183,7 @@
                                 <div class="wip-sub">${trackingEsc((row.issue_codes || []).join(', '))}</div>
                                 <div class="wip-sub">${trackingEsc([row.customer, row.purchase_order].filter(Boolean).join(' · '))}</div>
                             </td>
+                            <td>${btpFlowStatus(row)}</td>
                             <td>
                                 <div class="wip-main">${trackingEsc(row.internal_item_code || row.ma_hh || '-')}</div>
                                 <div class="wip-sub">${trackingEsc(row.ma_hh || '')}</div>
@@ -188,12 +200,12 @@
                             </td>
                             <td>${trackingStatus(row)}</td>
                         </tr>
-                    `).join('') || '<tr><td colspan="8" class="tracking-empty">Không có hàng đang treo theo bộ lọc hiện tại.</td></tr>';
+                    `).join('') || '<tr><td colspan="9" class="tracking-empty">Không có hàng đang treo theo bộ lọc hiện tại.</td></tr>';
 
                     if (window.lucide) lucide.createIcons();
                 })
                 .catch(error => {
-                    document.getElementById('trackingRows').innerHTML = `<tr><td colspan="8" class="tracking-empty text-danger">${trackingEsc(error.message)}</td></tr>`;
+                    document.getElementById('trackingRows').innerHTML = `<tr><td colspan="9" class="tracking-empty text-danger">${trackingEsc(error.message)}</td></tr>`;
                 });
         }
 

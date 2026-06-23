@@ -528,6 +528,7 @@
     <a class="summary-sidebar__link {{ request()->is('client/kho-noi-bo') ? 'is-active' : '' }}" href="{{ url('/client/kho-noi-bo') }}"><i data-lucide="layout-dashboard"></i>Tổng quan kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/don-hang-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/don-hang-noi-bo') }}"><i data-lucide="clipboard-list"></i>Đơn hàng A/B</a>
     <a class="summary-sidebar__link {{ request()->is('client/lenh-san-xuat-sheet*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-san-xuat-sheet') }}"><i data-lucide="factory"></i>Lệnh sản xuất</a>
+    <a class="summary-sidebar__link {{ request()->is('client/lenh-btp*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-btp') }}"><i data-lucide="git-branch-plus"></i>Lệnh BTP</a>
     <a class="summary-sidebar__link {{ request()->is('client/danh-muc-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/danh-muc-noi-bo') }}"><i data-lucide="book-open"></i>Danh mục nội bộ</a>
     <a class="summary-sidebar__link {{ request()->is('client/theo-doi-san-xuat*') ? 'is-active' : '' }}" href="{{ url('/client/theo-doi-san-xuat') }}"><i data-lucide="workflow"></i>Đang sản xuất</a>
     <a class="summary-sidebar__link {{ request()->is('client/ton-kho-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/ton-kho-noi-bo') }}"><i data-lucide="archive"></i>Tồn kho</a>
