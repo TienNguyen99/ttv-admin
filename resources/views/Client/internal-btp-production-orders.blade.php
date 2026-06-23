@@ -35,6 +35,8 @@
         <input id="topKeyword" aria-label="Tìm lệnh BTP" placeholder="Tìm lệnh BTP, phiếu xuất, mã hàng, size hoặc màu...">
     </form>
     <div class="wms-topbar__actions">
+        <button id="printSelectedLabelsBtn" class="wms-btn" type="button" disabled><i data-lucide="qr-code"></i>In QR lệnh</button>
+        <button id="issueSelectedBtn" class="wms-btn" type="button" disabled><i data-lucide="send"></i>Xuất các lệnh đã chọn</button>
         <a class="wms-btn wms-btn--primary" href="{{ url('/client/xuat-vat-tu-noi-bo?type=production') }}"><i data-lucide="package-minus"></i>Tạo lệnh + xuất BTP</a>
     </div>
 </header>
@@ -65,14 +67,19 @@
                     <option value="issued">Đã xuất SX</option>
                     <option value="completed">Hoàn tất</option>
                 </select>
+                <select id="customerFilter" class="form-select form-select-sm" style="width:180px">
+                    <option value="">Tất cả khách</option>
+                </select>
             </div>
         </div>
         <div class="wms-table-wrap">
             <table class="wms-table">
                 <thead>
                 <tr>
+                    <th style="width:44px"><input id="selectAllDraftOrders" type="checkbox" aria-label="Chọn tất cả lệnh mới tạo"></th>
                     <th>Lệnh BTP</th>
                     <th>Ngày</th>
+                    <th>Khách hàng</th>
                     <th>Hàng BTP</th>
                     <th class="text-end">SL</th>
                     <th>Vị trí</th>
@@ -83,7 +90,7 @@
                     <th class="text-end">Thao tác</th>
                 </tr>
                 </thead>
-                <tbody id="btpRows"><tr><td colspan="10" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
+                <tbody id="btpRows"><tr><td colspan="12" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
             </table>
         </div>
     </section>
@@ -106,6 +113,9 @@
                 </label>
                 <label>Người nhận
                     <input id="editReceiver" class="form-control" type="text">
+                </label>
+                <label>Khách hàng
+                    <input id="editCustomer" class="form-control" type="text" placeholder="UNIPAX, ELITE...">
                 </label>
                 <label>Bộ phận
                     <input id="editDepartment" class="form-control" type="text">
@@ -200,12 +210,102 @@
         `;
     }
 
+    function selectedOrderIds() {
+        return Array.from(document.querySelectorAll('.btp-select:checked'))
+            .map(input => Number(input.value))
+            .filter(Boolean);
+    }
+
+    function updateIssueSelectedState() {
+        const ids = selectedOrderIds();
+        const button = document.getElementById('issueSelectedBtn');
+        const printButton = document.getElementById('printSelectedLabelsBtn');
+        if (!button) return;
+
+        button.disabled = ids.length === 0;
+        button.innerHTML = `<i data-lucide="send"></i>${ids.length ? `Xuất ${ids.length} lệnh BTP` : 'Xuất các lệnh đã chọn'}`;
+        if (printButton) {
+            printButton.disabled = ids.length === 0;
+            printButton.innerHTML = `<i data-lucide="qr-code"></i>${ids.length ? `In QR ${ids.length} lệnh` : 'In QR lệnh'}`;
+        }
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function printSelectedLabels() {
+        const ids = selectedOrderIds();
+        if (!ids.length) return;
+        window.open(`/client/lenh-btp/tem-qr?ids=${encodeURIComponent(ids.join(','))}`, '_blank');
+    }
+
+    function renderCustomerFilter(customers) {
+        const select = document.getElementById('customerFilter');
+        const current = select.value;
+        const uniqueCustomers = Array.from(new Set((customers || []).map(customer => String(customer || '').trim()).filter(Boolean))).sort();
+
+        select.innerHTML = '<option value="">Tất cả khách</option>' + uniqueCustomers
+            .map(customer => `<option value="${esc(customer)}">${esc(customer)}</option>`)
+            .join('');
+        select.value = uniqueCustomers.includes(current) ? current : '';
+    }
+
+    function todayLocalDate() {
+        const date = new Date();
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function createIssueFromSelectedOrders() {
+        const ids = selectedOrderIds();
+        if (!ids.length) return;
+
+        if (!confirm(`Tạo 1 phiếu xuất BTP gồm ${ids.length} lệnh đã chọn?`)) {
+            return;
+        }
+
+        const button = document.getElementById('issueSelectedBtn');
+        button.disabled = true;
+        const labelPrintWindow = window.open('about:blank', '_blank');
+
+        fetch('/api/lenh-btp/tao-phieu-xuat', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+            body: JSON.stringify({
+                order_ids: ids,
+                issue_date: todayLocalDate(),
+                receiver_name: 'San xuat',
+                department: 'San xuat',
+                purpose: 'Xuat BTP di san xuat'
+            })
+        }).then(response => jsonOrError(response, 'Khong tao duoc phieu xuat BTP.'))
+              .then(result => {
+                  if (result.print_url) {
+                      window.open(result.print_url, '_blank');
+                  }
+                  const labelUrl = `/client/lenh-btp/tem-qr?ids=${encodeURIComponent(ids.join(','))}`;
+                  if (labelPrintWindow) {
+                      labelPrintWindow.location.href = labelUrl;
+                  } else {
+                      window.open(labelUrl, '_blank');
+                  }
+                  loadBtpOrders();
+              })
+              .catch(error => {
+                  labelPrintWindow?.close();
+                  alert(error.message);
+              })
+          .finally(updateIssueSelectedState);
+    }
+
     function loadBtpOrders() {
         const params = new URLSearchParams();
         const keyword = document.getElementById('topKeyword').value.trim();
         const status = document.getElementById('statusFilter').value;
+        const customer = document.getElementById('customerFilter').value;
         if (keyword) params.set('keyword', keyword);
         if (status) params.set('status', status);
+        if (customer) params.set('customer', customer);
 
         fetch('/api/lenh-btp?' + params.toString())
             .then(response => jsonOrError(response, 'Không tải được lệnh BTP.'))
@@ -215,14 +315,17 @@
                 document.getElementById('lineCount').textContent = fmt(summary.line_count);
                 document.getElementById('totalQuantity').textContent = fmt(summary.total_quantity);
                 document.getElementById('issuedCount').textContent = fmt(summary.issued_count);
+                renderCustomerFilter(result.customers || []);
 
                 document.getElementById('btpRows').innerHTML = (result.data || []).map(row => {
                     const line = firstLine(row);
                     const locked = row.status !== 'draft' || row.issue_id;
                     return `
                     <tr>
+                        <td><input class="btp-select" type="checkbox" value="${row.id}" ${locked ? 'disabled' : ''} aria-label="Chọn lệnh ${esc(row.btp_order_code)}"></td>
                         <td class="wms-code">${esc(row.btp_order_code)}</td>
                         <td>${formatDate(row.order_date)}</td>
+                        <td><strong>${esc(row.customer || '-')}</strong></td>
                         <td>${renderLineInfo(line)}</td>
                         <td class="wms-number">${fmt(line.quantity)}</td>
                         <td>${esc(line.location_code || '-')}</td>
@@ -235,12 +338,15 @@
                             <button class="btn btn-sm btn-outline-danger delete-btp-order" data-id="${row.id}" data-code="${esc(row.btp_order_code)}" ${locked ? 'disabled title="Lệnh đã xuất, không xóa trực tiếp"' : ''}>Xóa</button>
                         </td>
                     </tr>
-                `}).join('') || '<tr><td colspan="10" class="wms-empty">Chưa có lệnh BTP.</td></tr>';
+                `}).join('') || '<tr><td colspan="12" class="wms-empty">Chưa có lệnh BTP.</td></tr>';
 
+                document.getElementById('selectAllDraftOrders').checked = false;
+                updateIssueSelectedState();
                 if (window.lucide) lucide.createIcons();
             })
             .catch(error => {
-                document.getElementById('btpRows').innerHTML = `<tr><td colspan="10" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
+                document.getElementById('btpRows').innerHTML = `<tr><td colspan="12" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
+                updateIssueSelectedState();
             });
     }
 
@@ -258,6 +364,7 @@
                 document.getElementById('editOrderCode').textContent = order.btp_order_code || '';
                 setValue('editOrderDate', String(order.order_date || '').slice(0, 10));
                 setValue('editReceiver', order.receiver_name);
+                setValue('editCustomer', order.customer);
                 setValue('editDepartment', order.department);
                 setValue('editPurpose', order.purpose);
                 setValue('editOrderNote', order.note);
@@ -283,6 +390,7 @@
         const payload = {
             order_date: document.getElementById('editOrderDate').value,
             receiver_name: document.getElementById('editReceiver').value,
+            customer: document.getElementById('editCustomer').value,
             department: document.getElementById('editDepartment').value,
             purpose: document.getElementById('editPurpose').value,
             note: document.getElementById('editOrderNote').value,
@@ -328,10 +436,24 @@
         timer = setTimeout(loadBtpOrders, 250);
     });
     document.getElementById('statusFilter').addEventListener('change', loadBtpOrders);
+    document.getElementById('customerFilter').addEventListener('change', loadBtpOrders);
     document.getElementById('reloadBtn').addEventListener('click', loadBtpOrders);
+    document.getElementById('printSelectedLabelsBtn').addEventListener('click', printSelectedLabels);
+    document.getElementById('issueSelectedBtn').addEventListener('click', createIssueFromSelectedOrders);
+    document.getElementById('selectAllDraftOrders').addEventListener('change', event => {
+        document.querySelectorAll('.btp-select:not(:disabled)').forEach(input => {
+            input.checked = event.target.checked;
+        });
+        updateIssueSelectedState();
+    });
     document.getElementById('closeEditDialog').addEventListener('click', () => document.getElementById('btpEditDialog').close());
     document.getElementById('cancelEditBtn').addEventListener('click', () => document.getElementById('btpEditDialog').close());
     document.getElementById('btpEditForm').addEventListener('submit', saveEditOrder);
+    document.getElementById('btpRows').addEventListener('change', event => {
+        if (event.target.classList.contains('btp-select')) {
+            updateIssueSelectedState();
+        }
+    });
     document.getElementById('btpRows').addEventListener('click', event => {
         const editButton = event.target.closest('.edit-btp-order');
         if (editButton) openEditOrder(editButton.dataset.id);

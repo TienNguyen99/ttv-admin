@@ -7,12 +7,51 @@ use App\Services\InternalAudit;
 use App\Services\InternalDocumentNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class InternalBtpProductionOrderController extends Controller
 {
     public function index()
     {
         return view('client.internal-btp-production-orders');
+    }
+
+    public function printLabels(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => 'nullable|string|max:2000',
+            'codes' => 'nullable|string|max:5000',
+        ]);
+
+        $ids = collect(explode(',', (string) ($data['ids'] ?? '')))
+            ->map(fn ($id) => (int) trim($id))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $codes = collect(explode(',', (string) ($data['codes'] ?? '')))
+            ->map(fn ($code) => strtoupper(trim($code)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty() && $codes->isEmpty()) {
+            return view('client.labels.btp-orders', [
+                'orders' => collect(),
+            ]);
+        }
+
+        $orders = InternalBtpProductionOrder::query()
+            ->with('lines')
+            ->when($ids->isNotEmpty(), fn ($query) => $query->whereIn('id', $ids))
+            ->when($ids->isEmpty() && $codes->isNotEmpty(), fn ($query) => $query->whereIn('btp_order_code', $codes))
+            ->orderBy('order_date')
+            ->orderBy('id')
+            ->get();
+
+        return view('client.labels.btp-orders', [
+            'orders' => $orders,
+        ]);
     }
 
     public function data(Request $request)
@@ -29,6 +68,7 @@ class InternalBtpProductionOrderController extends Controller
             $query->where(function ($q) use ($keyword) {
                 $q->where('btp_order_code', 'like', '%' . $keyword . '%')
                     ->orWhere('issue_code', 'like', '%' . $keyword . '%')
+                    ->orWhere('customer', 'like', '%' . $keyword . '%')
                     ->orWhere('receiver_name', 'like', '%' . $keyword . '%')
                     ->orWhere('department', 'like', '%' . $keyword . '%')
                     ->orWhereHas('lines', function ($lineQuery) use ($keyword) {
@@ -47,6 +87,10 @@ class InternalBtpProductionOrderController extends Controller
             $query->where('status', $request->query('status'));
         }
 
+        if ($request->filled('customer')) {
+            $query->where('customer', 'like', '%' . trim((string) $request->query('customer')) . '%');
+        }
+
         if ($request->filled('from_date')) {
             $query->whereDate('order_date', '>=', $request->query('from_date'));
         }
@@ -60,6 +104,14 @@ class InternalBtpProductionOrderController extends Controller
 
         return response()->json([
             'data' => $rows,
+            'customers' => InternalBtpProductionOrder::query()
+                ->whereNotNull('customer')
+                ->where('customer', '<>', '')
+                ->distinct()
+                ->orderBy('customer')
+                ->limit(200)
+                ->pluck('customer')
+                ->values(),
             'summary' => [
                 'order_count' => (clone $summaryQuery)->count(),
                 'line_count' => (float) $rows->sum('lines_count'),
@@ -104,7 +156,12 @@ class InternalBtpProductionOrderController extends Controller
             $created = collect();
 
             foreach ($data['lines'] as $line) {
-                $order = $this->createHeader($data);
+                $lineHeader = $data;
+                if (trim((string) ($line['customer'] ?? '')) !== '') {
+                    $lineHeader['customer'] = trim((string) $line['customer']);
+                }
+
+                $order = $this->createHeader($lineHeader);
                 $order->lines()->create($this->normalizeLine($line));
                 $created->push($order->load('lines'));
             }
@@ -149,6 +206,7 @@ class InternalBtpProductionOrderController extends Controller
             $btpOrder->update([
                 'order_date' => $data['order_date'] ?? now()->format('Y-m-d'),
                 'receiver_name' => trim($data['receiver_name'] ?? ''),
+                'customer' => trim($data['customer'] ?? ''),
                 'department' => trim($data['department'] ?? '') ?: 'Sản xuất',
                 'purpose' => trim($data['purpose'] ?? '') ?: 'Xuất BTP đi sản xuất',
                 'note' => trim($data['note'] ?? ''),
@@ -191,6 +249,84 @@ class InternalBtpProductionOrderController extends Controller
         ]);
     }
 
+    public function createIssueFromOrders(Request $request)
+    {
+        $data = $request->validate([
+            'order_ids' => 'required|array|min:1|max:50',
+            'order_ids.*' => 'integer',
+            'issue_date' => 'nullable|date',
+            'receiver_name' => 'nullable|string|max:150',
+            'department' => 'nullable|string|max:150',
+            'purpose' => 'nullable|string|max:255',
+            'note' => 'nullable|string|max:1000',
+        ]);
+
+        $orderIds = array_values(array_unique($data['order_ids']));
+        $orders = InternalBtpProductionOrder::query()
+            ->with('lines')
+            ->whereIn('id', $orderIds)
+            ->orderBy('order_date')
+            ->orderBy('id')
+            ->get();
+
+        if ($orders->count() !== count($orderIds)) {
+            throw ValidationException::withMessages([
+                'order_ids' => 'Co lenh BTP khong ton tai.',
+            ]);
+        }
+
+        $lockedOrder = $orders->first(fn ($order) => $order->status !== 'draft' || $order->issue_id);
+        if ($lockedOrder) {
+            throw ValidationException::withMessages([
+                'order_ids' => 'Lenh ' . $lockedOrder->btp_order_code . ' da xuat hoac khong con trang thai moi tao.',
+            ]);
+        }
+
+        $lines = $orders->flatMap(function (InternalBtpProductionOrder $order) {
+            return $order->lines->map(function ($line) use ($order) {
+                return [
+                    'production_order_id' => null,
+                    'production_order' => $order->btp_order_code,
+                    'purchase_order' => '',
+                    'customer' => trim((string) $order->customer),
+                    'ma_hh' => strtoupper(trim((string) ($line->ma_hh ?: $line->internal_item_code))),
+                    'ten_hh' => mb_substr(trim((string) $line->ten_hh), 0, 255),
+                    'dvt' => trim((string) $line->dvt),
+                    'ordered_quantity' => $line->ordered_quantity,
+                    'quantity' => (float) $line->quantity,
+                    'location_code' => strtoupper(trim((string) $line->location_code)),
+                    'internal_item_code' => trim((string) $line->internal_item_code),
+                    'size' => mb_substr(trim((string) $line->size), 0, 100),
+                    'color' => mb_substr(trim((string) $line->color), 0, 100),
+                    'side' => mb_substr(trim((string) $line->side), 0, 100),
+                    'note' => mb_substr(trim((string) $line->note), 0, 500),
+                ];
+            });
+        })->values();
+
+        if ($lines->isEmpty()) {
+            throw ValidationException::withMessages([
+                'order_ids' => 'Cac lenh BTP da chon chua co dong hang.',
+            ]);
+        }
+
+        $issuePayload = [
+            'issue_type' => 'production',
+            'issue_date' => $data['issue_date'] ?? now()->format('Y-m-d'),
+            'warehouse_code' => '',
+            'receiver_name' => trim($data['receiver_name'] ?? '') ?: 'San xuat',
+            'department' => trim($data['department'] ?? '') ?: 'San xuat',
+            'production_order' => '',
+            'purpose' => trim($data['purpose'] ?? '') ?: 'Xuat BTP di san xuat',
+            'note' => trim($data['note'] ?? '') ?: ('Xuat tu ' . $orders->count() . ' lenh BTP'),
+            'lines' => $lines->all(),
+        ];
+
+        $issueRequest = $request->duplicate(null, $issuePayload);
+
+        return app(InternalMaterialIssueController::class)->store($issueRequest);
+    }
+
     public static function markIssued(string $btpOrderCode, $issue): void
     {
         if (trim($btpOrderCode) === '') {
@@ -230,12 +366,14 @@ class InternalBtpProductionOrderController extends Controller
     {
         return $request->validate([
             'order_date' => 'nullable|date',
+            'customer' => 'nullable|string|max:200',
             'receiver_name' => 'nullable|string|max:150',
             'department' => 'nullable|string|max:150',
             'purpose' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
             'lines' => 'required|array|min:1|max:200',
             'lines.*.ma_hh' => 'nullable|string|max:100',
+            'lines.*.customer' => 'nullable|string|max:200',
             'lines.*.ten_hh' => 'nullable|string|max:1000',
             'lines.*.dvt' => 'nullable|string|max:50',
             'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
@@ -262,11 +400,23 @@ class InternalBtpProductionOrderController extends Controller
 
     private function createHeader(array $data): InternalBtpProductionOrder
     {
+        $customer = trim((string) ($data['customer'] ?? ''));
+        if ($customer === '' && !empty($data['lines'])) {
+            $customer = collect($data['lines'])
+                ->pluck('customer')
+                ->map(fn ($value) => trim((string) $value))
+                ->filter()
+                ->unique()
+                ->values()
+                ->implode(', ');
+        }
+
         return InternalBtpProductionOrder::query()->create([
             'btp_order_code' => app(InternalDocumentNumber::class)->nextYearly('BTP', 4),
             'order_date' => $data['order_date'] ?? now()->format('Y-m-d'),
             'status' => 'draft',
             'receiver_name' => trim($data['receiver_name'] ?? ''),
+            'customer' => mb_substr($customer, 0, 200),
             'department' => trim($data['department'] ?? '') ?: 'Sản xuất',
             'purpose' => trim($data['purpose'] ?? '') ?: 'Xuất BTP đi sản xuất',
             'note' => trim($data['note'] ?? ''),

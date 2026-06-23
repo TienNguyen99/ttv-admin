@@ -210,6 +210,7 @@
             <div class="row g-2 mb-3">
                 <div class="col-md-2"><label class="form-label">Nghiệp vụ</label><select id="issueType" class="form-select"><option value="production">Xuất BTP đi sản xuất</option><option value="customer">Xuất thành phẩm cho khách</option></select></div>
                 <div class="col-md-2"><label class="form-label">Ngày xuất</label><input id="issueDate" type="text" class="form-control date-vn" inputmode="numeric" placeholder="dd/mm/yyyy" value="{{ now()->format('d/m/Y') }}"></div>
+                <div class="col-md-2"><label class="form-label">Khách hàng</label><input id="customerName" class="form-control" placeholder="UNIPAX / ELITE"></div>
                 <div class="col-md-2"><label class="form-label">Người nhận</label><input id="receiverName" class="form-control"></div>
                 <div class="col-md-2"><label class="form-label">Bộ phận</label><input id="department" class="form-control"></div>
                 <div class="col-md-2"><label class="form-label">Mục đích</label><input id="purpose" class="form-control" placeholder="Sản xuất / bù hao..."></div>
@@ -467,7 +468,7 @@
                 production_order_id: row.dataset.productionOrderId || null,
                 production_order: row.querySelector('.line-production-order').value.trim(),
                 purchase_order: row.dataset.purchaseOrder || '',
-                customer: row.dataset.customer || '',
+                customer: row.dataset.customer || value('customerName'),
                 ordered_quantity: row.querySelector('.ordered-quantity').value || null,
                 quantity: row.querySelector('.quantity').value,
                 location_code: row.querySelector('.location-code').value.trim(),
@@ -495,6 +496,7 @@
             lineRows.innerHTML = '';
             addLine();
             document.getElementById('receiverName').value = '';
+            document.getElementById('customerName').value = '';
             document.getElementById('issueNote').value = '';
             setEditingIssue(null);
         }
@@ -506,6 +508,7 @@
                     const issue = result.data;
                     document.getElementById('issueType').value = issue.issue_type || 'production';
                     setDateValue('issueDate', issue.issue_date);
+                    document.getElementById('customerName').value = (issue.lines || []).map(line => line.customer).filter(Boolean)[0] || '';
                     document.getElementById('receiverName').value = issue.receiver_name || '';
                     document.getElementById('department').value = issue.department || '';
                     document.getElementById('purpose').value = issue.purpose || '';
@@ -1223,6 +1226,7 @@
             if (existingOrders.length && !confirm(`Các dòng đã có lệnh: ${existingOrders.join(', ')}. Tạo lệnh BTP mới và ghi đè lệnh trên các dòng?`)) {
                 return;
             }
+            const customers = Array.from(new Set(lines.map(line => String(line.customer || '').trim()).filter(Boolean)));
 
             const button = document.getElementById('createBtpAndIssueBtn');
             button.disabled = true;
@@ -1234,6 +1238,7 @@
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({
                     order_date: value('issueDate'),
+                    customer: customers.join(', '),
                     receiver_name: value('receiverName'),
                     department: value('department') || 'Sản xuất',
                     purpose: value('purpose') || 'Xuất BTP đi sản xuất',
@@ -1267,17 +1272,21 @@
             if (existingOrders.length && !confirm(`Cac dong da co lenh: ${existingOrders.join(', ')}. Tao lenh BTP moi va ghi de lenh tren cac dong?`)) {
                 return;
             }
+            const customers = Array.from(new Set(lines.map(line => String(line.customer || '').trim()).filter(Boolean)));
 
             const button = document.getElementById('createBtpAndIssueBtn');
             button.disabled = true;
-            button.innerHTML = '<i data-lucide="loader-circle"></i>Dang tao lenh...';
+            button.innerHTML = '<i data-lucide="loader-circle"></i>Dang tao lenh va phieu...';
             if (window.lucide) lucide.createIcons();
+            let createdBtpOrderIds = [];
+            const labelPrintWindow = window.open('about:blank', '_blank');
 
             fetch('/api/lenh-btp/hang-loat', {
                 method: 'POST',
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({
                     order_date: value('issueDate'),
+                    customer: customers.join(', '),
                     receiver_name: value('receiverName'),
                     department: value('department') || 'San xuat',
                     purpose: value('purpose') || 'Xuat BTP di san xuat',
@@ -1289,12 +1298,42 @@
                   const orders = Array.isArray(result.data) ? result.data : [];
                   if (!orders.length) throw new Error('Khong nhan duoc danh sach lenh BTP.');
                   if (orders.length !== lines.length) throw new Error(`So lenh BTP (${orders.length}) khong khop so dong (${lines.length}).`);
+                  createdBtpOrderIds = orders.map(order => order.id).filter(Boolean);
                   applyBtpOrderCodesToRows(orders);
                   const codes = orders.map(order => order.btp_order_code).filter(Boolean);
                   document.getElementById('issueNote').value = [value('issueNote'), `Lenh BTP ${codes.join(', ')}`].filter(Boolean).join(' - ');
-                  saveIssue();
+                  return fetch('/api/lenh-btp/tao-phieu-xuat', {
+                      method: 'POST',
+                      headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                      body: JSON.stringify({
+                          order_ids: orders.map(order => order.id).filter(Boolean),
+                          issue_date: value('issueDate'),
+                          receiver_name: value('receiverName'),
+                          department: value('department') || 'San xuat',
+                          purpose: value('purpose') || 'Xuat BTP di san xuat',
+                          note: value('issueNote')
+                      })
+                  }).then(response => jsonOrError(response, 'Khong tao duoc phieu xuat BTP.'));
               })
-              .catch(error => alert(error.message))
+              .then(result => {
+                  if (result?.print_url) window.open(result.print_url, '_blank');
+                  if (createdBtpOrderIds.length) {
+                      const labelUrl = `/client/lenh-btp/tem-qr?ids=${encodeURIComponent(createdBtpOrderIds.join(','))}`;
+                      if (labelPrintWindow) {
+                          labelPrintWindow.location.href = labelUrl;
+                      } else {
+                          window.open(labelUrl, '_blank');
+                      }
+                  } else {
+                      labelPrintWindow?.close();
+                  }
+                  resetIssueForm();
+                  loadIssues();
+              })
+              .catch(error => {
+                  labelPrintWindow?.close();
+                  alert(error.message);
+              })
               .finally(() => {
                   button.disabled = false;
                   button.innerHTML = '<i data-lucide="git-branch-plus"></i>Tao lenh BTP + xuat';
@@ -1318,6 +1357,9 @@
                         const status = issue.issue_type === 'customer' || String(issue.issue_code || '').startsWith('PXTP-')
                             ? '<span class="badge text-bg-success">TP khách</span>'
                             : '<span class="badge text-bg-primary">BTP sản xuất</span>';
+                        const labelPrintButton = issue.btp_label_print_url
+                            ? `<a class="btn btn-sm btn-outline-secondary" target="_blank" href="${esc(issue.btp_label_print_url)}">In QR ${num(issue.btp_label_count || 0)}</a>`
+                            : '';
                         return `
                         <tr>
                             <td>${esc(issue.issue_code)}</td>
@@ -1331,6 +1373,7 @@
                             <td class="text-end">${num(issue.lines_sum_quantity)}</td>
                             <td class="text-nowrap text-end">
                                 <a class="btn btn-sm btn-outline-primary" target="_blank" href="/client/xuat-vat-tu-noi-bo/${issue.id}/in">In</a>
+                                ${labelPrintButton}
                                 <button class="btn btn-sm btn-outline-secondary edit-issue" data-id="${issue.id}">Sửa</button>
                                 <button class="btn btn-sm btn-outline-danger delete-issue" data-id="${issue.id}">Xóa</button>
                             </td>

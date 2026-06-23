@@ -172,9 +172,11 @@ Route::get('/client/lenh-san-xuat-sheet', [InternalProductionOrderController::cl
 Route::get('/api/lenh-san-xuat-sheet', [InternalProductionOrderController::class, 'data']);
 Route::post('/api/lenh-san-xuat-sheet/dong-bo', [InternalProductionOrderController::class, 'sync']);
 Route::get('/client/lenh-btp', [InternalBtpProductionOrderController::class, 'index']);
+Route::get('/client/lenh-btp/tem-qr', [InternalBtpProductionOrderController::class, 'printLabels']);
 Route::get('/api/lenh-btp', [InternalBtpProductionOrderController::class, 'data']);
 Route::post('/api/lenh-btp', [InternalBtpProductionOrderController::class, 'store']);
 Route::post('/api/lenh-btp/hang-loat', [InternalBtpProductionOrderController::class, 'storeBatch']);
+Route::post('/api/lenh-btp/tao-phieu-xuat', [InternalBtpProductionOrderController::class, 'createIssueFromOrders']);
 Route::get('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'show']);
 Route::put('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'update']);
 Route::delete('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'destroy']);
@@ -204,6 +206,7 @@ Route::get('/api/kiem-ton-kho/kien', [WarehouseCountController::class, 'packages
 Route::post('/api/kiem-ton-kho/kien', [WarehouseCountController::class, 'storePackage']);
 Route::get('/api/kiem-ton-kho/phieu-nhap-tp', [WarehouseCountController::class, 'receipts']);
 Route::post('/api/kiem-ton-kho/phieu-nhap-tp', [WarehouseCountController::class, 'storeReceiptBatch']);
+Route::post('/api/kiem-ton-kho/phieu-nhap-tp/kiem-tra-trung', [WarehouseCountController::class, 'checkReceiptDuplicates']);
 Route::get('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}', [WarehouseCountController::class, 'showReceipt']);
 Route::put('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}', [WarehouseCountController::class, 'updateReceiptBatch']);
 Route::patch('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}/vi-tri', [WarehouseCountController::class, 'updateReceiptLocation']);

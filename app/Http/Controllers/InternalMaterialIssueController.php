@@ -221,6 +221,7 @@ class InternalMaterialIssueController extends Controller
     public function list(Request $request)
     {
         $query = InternalMaterialIssue::query()
+            ->with('lines:id,issue_id,production_order')
             ->withCount('lines')
             ->withSum('lines', 'quantity')
             ->orderByDesc('issue_date')
@@ -250,7 +251,21 @@ class InternalMaterialIssueController extends Controller
             });
         }
 
-        $data = $query->limit(200)->get();
+        $data = $query->limit(200)->get()->map(function (InternalMaterialIssue $issue) {
+            $btpCodes = $issue->lines
+                ->pluck('production_order')
+                ->map(fn ($code) => trim((string) $code))
+                ->filter(fn ($code) => strpos($code, 'BTP') === 0)
+                ->unique()
+                ->values();
+
+            $issue->setAttribute('btp_label_count', $btpCodes->count());
+            $issue->setAttribute('btp_label_print_url', $btpCodes->isNotEmpty()
+                ? url('/client/lenh-btp/tem-qr?codes=' . urlencode($btpCodes->implode(',')))
+                : null);
+
+            return $issue;
+        });
 
         return response()->json([
             'data' => $data,
@@ -1016,13 +1031,6 @@ class InternalMaterialIssueController extends Controller
         $packages = $query->get();
         $available = (float) $packages->sum('quantity');
 
-        if ($available + 0.0001 < $requestedQuantity) {
-            $itemLabel = $internalCode !== '' ? $internalCode : $maHh;
-            throw ValidationException::withMessages([
-                'lines' => "Ton noi bo khong du cho ma {$itemLabel}. Can {$requestedQuantity}, hien co {$available}.",
-            ]);
-        }
-
         foreach ($packages as $package) {
             if ($remaining <= 0) {
                 break;
@@ -1075,6 +1083,85 @@ class InternalMaterialIssueController extends Controller
                 $package->save();
             }
         }
+
+        if ($remaining > 0.0001) {
+            $this->createNegativeStockAllocation($line, $warehouseCode, $issueLineId, $remaining, $available, $requestedQuantity);
+        }
+    }
+
+    private function createNegativeStockAllocation(array $line, string $warehouseCode, int $issueLineId, float $quantity, float $available, float $requestedQuantity): void
+    {
+        $locationCode = strtoupper(trim($line['location_code'] ?? '')) ?: 'CHUA-XEP';
+        $location = WarehouseLocation::query()->firstOrCreate(
+            ['location_code' => $locationCode],
+            [
+                'warehouse_code' => strtoupper(trim($warehouseCode)),
+                'shelf_code' => 'CX',
+                'tier' => 1,
+                'grid_x' => 1,
+                'grid_y' => 1,
+                'grid_w' => 4,
+                'grid_h' => 2,
+                'location_name' => $locationCode === 'CHUA-XEP' ? 'Chua xep vi tri' : 'Vi tri xuat am',
+            ]
+        );
+
+        $maHh = strtoupper(trim($line['ma_hh'] ?? ($line['internal_item_code'] ?? '')));
+        $checkedAt = now()->format('Y-m-d');
+        $note = trim((string) ($line['note'] ?? ''));
+        $negativeNote = trim(implode(' - ', array_filter([
+            'Xuat am ton noi bo',
+            "Can {$requestedQuantity}, co {$available}, am {$quantity}",
+            $note,
+        ])));
+
+        $count = InternalInventoryCount::query()->create([
+            'ma_sp' => $maHh,
+            'ma_ko' => strtoupper(trim($warehouseCode)),
+            'internal_item_code' => trim($line['internal_item_code'] ?? ''),
+            'size' => trim($line['size'] ?? ''),
+            'color' => trim($line['color'] ?? ''),
+            'side' => trim($line['side'] ?? ''),
+            'counted_quantity' => -abs($quantity),
+            'checked_at' => $checkedAt,
+            'note' => $negativeNote,
+        ]);
+
+        $package = InventoryPackage::query()->create([
+            'package_code' => $this->nextPackageCode(),
+            'warehouse_location_id' => $location->id,
+            'inventory_count_id' => $count->id,
+            'ma_sp' => $maHh,
+            'ma_ko' => strtoupper(trim($warehouseCode)),
+            'internal_item_code' => trim($line['internal_item_code'] ?? ''),
+            'size' => trim($line['size'] ?? ''),
+            'color' => trim($line['color'] ?? ''),
+            'side' => trim($line['side'] ?? ''),
+            'quantity' => -abs($quantity),
+            'checked_at' => $checkedAt,
+            'note' => $negativeNote,
+        ]);
+
+        InternalMaterialIssueAllocation::query()->create([
+            'issue_line_id' => $issueLineId,
+            'inventory_package_id' => $package->id,
+            'warehouse_location_id' => $location->id,
+            'inventory_count_id' => $count->id,
+            'source_package_code' => $package->package_code,
+            'location_code' => $location->location_code,
+            'ma_hh' => $package->ma_sp,
+            'warehouse_code' => $package->ma_ko,
+            'internal_item_code' => $package->internal_item_code,
+            'size' => $package->size,
+            'color' => $package->color,
+            'side' => $package->side,
+            'checked_at' => $package->checked_at,
+            'quantity' => -abs($quantity),
+            'note' => $negativeNote,
+        ]);
+
+        $location->status = 'counting';
+        $location->save();
     }
 
     private function increaseInternalStock(array $line, string $warehouseCode, $checkedAt): void
@@ -1152,6 +1239,10 @@ class InternalMaterialIssueController extends Controller
 
     private function restoreAllocation(InternalMaterialIssueAllocation $allocation): void
     {
+        $restoreQuantity = (float) $allocation->quantity < 0
+            ? abs((float) $allocation->quantity)
+            : (float) $allocation->quantity;
+
         $location = WarehouseLocation::query()->find($allocation->warehouse_location_id);
 
         if (!$location && $allocation->location_code) {
@@ -1201,7 +1292,7 @@ class InternalMaterialIssueController extends Controller
                 'note' => $allocation->note,
             ]
         );
-        $count->counted_quantity = (float) $count->counted_quantity + (float) $allocation->quantity;
+        $count->counted_quantity = (float) $count->counted_quantity + $restoreQuantity;
         $count->save();
 
         $package = InventoryPackage::query()
@@ -1210,7 +1301,7 @@ class InternalMaterialIssueController extends Controller
             ->first();
 
         if ($package) {
-            $package->quantity = (float) $package->quantity + (float) $allocation->quantity;
+            $package->quantity = (float) $package->quantity + $restoreQuantity;
             $package->warehouse_location_id = $location->id;
             $package->inventory_count_id = $count->id;
             $package->save();
@@ -1225,7 +1316,7 @@ class InternalMaterialIssueController extends Controller
                 'size' => $allocation->size ?: '',
                 'color' => $allocation->color ?: '',
                 'side' => $allocation->side ?: '',
-                'quantity' => $allocation->quantity,
+                'quantity' => $restoreQuantity,
                 'checked_at' => $allocation->checked_at,
                 'note' => $allocation->note,
             ]);

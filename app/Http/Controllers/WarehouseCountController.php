@@ -6,6 +6,7 @@ use App\Models\InternalInventoryCount;
 use App\Models\InternalItemCatalog;
 use App\Models\InternalMaterialIssue;
 use App\Models\InternalMaterialReceipt;
+use App\Models\InternalMaterialReceiptLine;
 use App\Models\InternalOpeningStock;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
@@ -125,9 +126,78 @@ class WarehouseCountController extends Controller
             ];
         })->sortByDesc('total_quantity')->values();
 
+        $btpRows = DB::connection('internal')->table('internal_btp_production_order_lines as l')
+            ->join('internal_btp_production_orders as o', 'o.id', '=', 'l.btp_order_id')
+            ->whereIn('o.status', ['draft', 'issued'])
+            ->select(
+                'o.id as order_id',
+                'o.btp_order_code',
+                'o.order_date',
+                'o.status',
+                'o.issue_code',
+                'o.customer',
+                'o.receiver_name',
+                'o.department',
+                'o.created_at as order_created_at',
+                'o.issued_at',
+                'l.ma_hh',
+                'l.internal_item_code',
+                'l.ten_hh',
+                'l.dvt',
+                'l.quantity',
+                'l.size',
+                'l.color',
+                'l.side',
+                'l.location_code'
+            )
+            ->orderByRaw("CASE WHEN o.status = 'issued' THEN 0 ELSE 1 END")
+            ->orderByDesc(DB::raw('COALESCE(o.issued_at, o.created_at)'))
+            ->orderByDesc('o.id')
+            ->limit(12)
+            ->get()
+            ->map(function ($row) {
+                $timeSource = $row->issued_at ?: $row->order_created_at;
+                $time = $timeSource
+                    ? Carbon::parse($timeSource)->timezone('Asia/Ho_Chi_Minh')
+                    : Carbon::parse($row->order_date)->timezone('Asia/Ho_Chi_Minh');
+
+                return [
+                    'order_id' => $row->order_id,
+                    'btp_order_code' => $row->btp_order_code,
+                    'order_date' => $row->order_date,
+                    'time' => $time->format('H:i'),
+                    'status' => $row->status,
+                    'status_label' => $row->status === 'issued' ? 'Đang sản xuất' : 'Chờ xuất',
+                    'issue_code' => trim((string) $row->issue_code),
+                    'customer' => trim((string) $row->customer),
+                    'receiver_name' => trim((string) $row->receiver_name),
+                    'department' => trim((string) $row->department),
+                    'ma_hh' => trim((string) $row->ma_hh),
+                    'internal_item_code' => trim((string) $row->internal_item_code),
+                    'display_code' => trim((string) ($row->internal_item_code ?: $row->ma_hh)) ?: 'Chưa có mã',
+                    'ten_hh' => trim((string) $row->ten_hh),
+                    'quantity' => (float) $row->quantity,
+                    'dvt' => trim((string) $row->dvt) ?: 'pcs',
+                    'size' => trim((string) $row->size),
+                    'color' => trim((string) $row->color),
+                    'side' => trim((string) $row->side),
+                    'location_code' => trim((string) $row->location_code),
+                ];
+            });
+
         return response()->json([
             'data' => $groups,
             'flat' => $rows->values(),
+            'btp' => [
+                'data' => $btpRows->values(),
+                'summary' => [
+                    'order_count' => $btpRows->pluck('btp_order_code')->unique()->count(),
+                    'line_count' => $btpRows->count(),
+                    'total_quantity' => (float) $btpRows->sum('quantity'),
+                    'issued_count' => $btpRows->where('status', 'issued')->pluck('btp_order_code')->unique()->count(),
+                    'draft_count' => $btpRows->where('status', 'draft')->pluck('btp_order_code')->unique()->count(),
+                ],
+            ],
             'summary' => [
                 'date' => $date,
                 'customer_count' => $groups->count(),
@@ -1965,6 +2035,69 @@ class WarehouseCountController extends Controller
         ], $request);
 
         return $response;
+    }
+
+    public function checkReceiptDuplicates(Request $request)
+    {
+        $data = $request->validate([
+            'checked_at' => 'required|date',
+            'exclude_receipt_id' => 'nullable|integer',
+            'lines' => 'required|array|min:1|max:500',
+            'lines.*.internal_item_code' => 'nullable|string|max:100',
+            'lines.*.quantity' => 'nullable|numeric|min:0',
+        ]);
+
+        $duplicates = collect($data['lines'])
+            ->map(function ($line, $index) {
+                return [
+                    'index' => $index,
+                    'internal_item_code' => trim((string) ($line['internal_item_code'] ?? '')),
+                    'quantity' => (float) ($line['quantity'] ?? 0),
+                ];
+            })
+            ->filter(fn ($line) => $line['internal_item_code'] !== '' && $line['quantity'] > 0)
+            ->map(function ($line) use ($data) {
+                $query = InternalMaterialReceiptLine::query()
+                    ->join('internal_material_receipts as r', 'r.id', '=', 'internal_material_receipt_lines.receipt_id')
+                    ->whereDate('r.receipt_date', $data['checked_at'])
+                    ->where('r.source', 'Phieu nhap thanh pham')
+                    ->whereRaw('UPPER(TRIM(internal_material_receipt_lines.internal_item_code)) = ?', [mb_strtoupper($line['internal_item_code'])])
+                    ->whereRaw('ABS(internal_material_receipt_lines.quantity - ?) < 0.0001', [$line['quantity']]);
+
+                if (!empty($data['exclude_receipt_id'])) {
+                    $query->where('r.id', '!=', (int) $data['exclude_receipt_id']);
+                }
+
+                $matches = $query
+                    ->select([
+                        'r.id as receipt_id',
+                        'r.receipt_code',
+                        'r.receipt_date',
+                        'internal_material_receipt_lines.internal_item_code',
+                        'internal_material_receipt_lines.quantity',
+                    ])
+                    ->orderByDesc('r.id')
+                    ->limit(5)
+                    ->get();
+
+                if ($matches->isEmpty()) {
+                    return null;
+                }
+
+                return [
+                    'line_index' => $line['index'],
+                    'internal_item_code' => $line['internal_item_code'],
+                    'quantity' => $line['quantity'],
+                    'matches' => $matches,
+                ];
+            })
+            ->filter()
+            ->values();
+
+        return response()->json([
+            'duplicates' => $duplicates,
+            'duplicate_count' => $duplicates->count(),
+        ]);
     }
 
     public function showReceipt(InternalMaterialReceipt $receipt)

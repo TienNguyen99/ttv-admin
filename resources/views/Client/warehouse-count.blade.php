@@ -62,6 +62,11 @@
         .voice-result strong { color: #0f172a; }
         .voice-location { display: inline-flex; gap: 5px; margin: 2px 4px 2px 0; padding: 3px 7px; border: 1px solid #bfdbfe; border-radius: 5px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; }
         @keyframes voice-pulse { 50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12); } }
+        .warehouse-toast-stack { position: fixed; right: 18px; bottom: 18px; z-index: 2000; display: grid; gap: 8px; width: min(420px, calc(100vw - 32px)); pointer-events: none; }
+        .warehouse-toast { pointer-events: auto; padding: 12px 14px; border: 1px solid #fed7aa; border-left: 4px solid #f97316; border-radius: 8px; background: #fff7ed; box-shadow: 0 14px 34px rgba(15, 23, 42, .16); color: #7c2d12; animation: toast-in .18s ease-out both; }
+        .warehouse-toast strong { display: block; margin-bottom: 3px; color: #9a3412; }
+        .warehouse-toast div { font-size: 13px; line-height: 1.35; }
+        @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .warehouse-map { padding: 14px; overflow-x: auto; }
         .warehouse-blueprint { position: relative; min-width: 980px; padding: 12px 14px 14px; border: 2px solid #cbd5e1; border-radius: 8px; background: #fff; }
         .blueprint-title { margin: 0 0 10px; text-align: center; color: #334155; font-size: 22px; font-weight: 900; letter-spacing: 0.06em; }
@@ -154,6 +159,7 @@
 </head>
 <body>
     @include('layouts.partials.sidebar')
+    <div id="warehouseToastStack" class="warehouse-toast-stack" aria-live="polite"></div>
 
     <header class="wms-topbar">
         <h1 class="wms-topbar__title">WMS May Mặc</h1>
@@ -524,6 +530,86 @@
             const raw = input.value.trim();
             return input.classList.contains('date-vn') ? dateVnToIso(raw) : raw;
         };
+
+        function showWarehouseToast(title, message, timeout = 6500) {
+            const stack = document.getElementById('warehouseToastStack');
+            if (!stack) return;
+            const toast = document.createElement('div');
+            toast.className = 'warehouse-toast';
+            toast.innerHTML = `<strong>${escapeHtml(title)}</strong><div>${escapeHtml(message)}</div>`;
+            stack.appendChild(toast);
+            setTimeout(() => toast.remove(), timeout);
+            toast.addEventListener('click', () => toast.remove());
+        }
+
+        function localReceiptDuplicates(lines) {
+            const seen = new Map();
+            const duplicates = [];
+            lines.forEach((line, index) => {
+                const code = String(line.internal_item_code || '').trim().toUpperCase();
+                const quantity = Number(line.quantity || 0);
+                if (!code || quantity <= 0) return;
+                const key = `${code}|${quantity.toFixed(3)}`;
+                if (seen.has(key)) {
+                    duplicates.push({
+                        line_index: index,
+                        internal_item_code: code,
+                        quantity,
+                        first_line: seen.get(key),
+                    });
+                    return;
+                }
+                seen.set(key, index);
+            });
+            return duplicates;
+        }
+
+        function warnReceiptDuplicates(lines) {
+            const localDuplicates = localReceiptDuplicates(lines);
+            if (localDuplicates.length) {
+                const first = localDuplicates[0];
+                showWarehouseToast(
+                    'Cảnh báo trùng trong phiếu',
+                    `Dòng ${first.line_index + 1} giống dòng ${first.first_line + 1}: ${first.internal_item_code}, SL ${Number(first.quantity).toLocaleString('vi-VN')}.`
+                );
+            }
+
+            return fetch('/api/kiem-ton-kho/phieu-nhap-tp/kiem-tra-trung', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({
+                    checked_at: value('receiptDate'),
+                    exclude_receipt_id: editingReceiptFormId,
+                    lines
+                })
+            }).then(r => jsonOrError(r, 'Không kiểm tra được phiếu nhập trùng'))
+              .then(result => {
+                  const duplicates = result.duplicates || [];
+                  if (!duplicates.length) return result;
+                  const first = duplicates[0];
+                  const matchCodes = (first.matches || []).map(item => item.receipt_code).filter(Boolean).join(', ');
+                  showWarehouseToast(
+                      `Có ${duplicates.length} dòng nghi trùng`,
+                      `Dòng ${Number(first.line_index) + 1}: ${first.internal_item_code}, SL ${Number(first.quantity).toLocaleString('vi-VN')} đã có trong ${matchCodes || 'phiếu cũ'}.`
+                  );
+                  return result;
+              })
+              .catch(error => {
+                  showWarehouseToast('Không kiểm tra được trùng', error.message);
+                  return { duplicates: [] };
+              });
+        }
+
+        function scheduleReceiptDuplicateCheck() {
+            clearTimeout(receiptDuplicateTimer);
+            receiptDuplicateTimer = setTimeout(() => {
+                if (document.getElementById('entryPanel')?.classList.contains('d-none')) return;
+                if (!value('receiptDate')) return;
+                const lines = collectReceiptLines().filter(line => line.internal_item_code && Number(line.quantity || 0) > 0);
+                if (!lines.length) return;
+                warnReceiptDuplicates(lines);
+            }, 650);
+        }
         const locationModal = new bootstrap.Modal(document.getElementById('locationModal'));
         const movePackageModal = new bootstrap.Modal(document.getElementById('movePackageModal'));
         const bulkLocationModal = new bootstrap.Modal(document.getElementById('bulkLocationModal'));
@@ -537,6 +623,7 @@
         let draggingLayout = null;
         let editingLocationId = null;
         let selectedAccountingProduct = '';
+        let receiptDuplicateTimer = null;
         let productSearchTimer;
         let internalCatalogSearchTimer = null;
         let internalCatalogItems = [];
@@ -1548,12 +1635,13 @@
               }).catch(e => { setLocationStatus(e.message, true); alert(e.message); });
         });
 
-        document.getElementById('saveReceiptBatchBtn').addEventListener('click', () => {
+        document.getElementById('saveReceiptBatchBtn').addEventListener('click', async () => {
             const lines = collectReceiptLines();
             const validLines = lines.filter(line => line.internal_item_code && Number(line.quantity || 0) > 0);
             if (!validLines.length) return alert('Nhập ít nhất 1 dòng có Mã nội bộ và Số lượng lớn hơn 0. Mã kế toán có thể thêm sau.');
             if (!value('receiptDate')) return alert('Chọn ngày nhập kho.');
             const printWindow = window.open('', '_blank');
+            await warnReceiptDuplicates(validLines);
 
             fetch(editingReceiptFormId ? `/api/kiem-ton-kho/phieu-nhap-tp/${editingReceiptFormId}` : '/api/kiem-ton-kho/phieu-nhap-tp', {
                 method: editingReceiptFormId ? 'PUT' : 'POST', headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
@@ -1823,6 +1911,9 @@
         document.getElementById('receiptEntryRows').addEventListener('change', event => {
             if (event.target.classList.contains('receipt-order')) applyProductionOrder(event.target);
             if (event.target.classList.contains('receipt-internal-code')) applyInternalCatalog(event.target);
+            if (event.target.classList.contains('receipt-internal-code') || event.target.classList.contains('receipt-quantity')) {
+                scheduleReceiptDuplicateCheck();
+            }
         });
         document.getElementById('voiceLookupBtn').addEventListener('click', startVoiceLookup);
         document.getElementById('voiceSearchBtn').addEventListener('click', () => lookupWarehouseByVoice());
@@ -1851,6 +1942,7 @@
         document.querySelectorAll('.date-vn').forEach(input => {
             input.addEventListener('blur', () => {
                 if (input.value.trim()) input.value = isoToDateVn(dateVnToIso(input.value));
+                if (input.id === 'receiptDate') scheduleReceiptDuplicateCheck();
             });
         });
         document.getElementById('cancelReceiptEditBtn').addEventListener('click', cancelReceiptEdit);

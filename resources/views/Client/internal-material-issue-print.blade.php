@@ -54,6 +54,20 @@
     @endphp
     <div class="toolbar">
         <button class="btn" onclick="window.print()">In phiếu</button>
+        @if($isProductionIssue)
+            @php
+                $btpCodes = $issue->lines
+                    ->pluck('production_order')
+                    ->map(fn ($code) => trim((string) $code))
+                    ->filter(fn ($code) => strpos($code, 'BTP') === 0)
+                    ->unique()
+                    ->values()
+                    ->implode(',');
+            @endphp
+            @if($btpCodes !== '')
+                <button class="btn" onclick="window.open('/client/lenh-btp/tem-qr?codes={{ urlencode($btpCodes) }}', '_blank')">In QR lệnh BTP</button>
+            @endif
+        @endif
         <button class="btn" onclick="window.close()">Đóng</button>
     </div>
 
