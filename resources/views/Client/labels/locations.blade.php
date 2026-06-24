@@ -50,7 +50,7 @@
 @forelse($locations as $location)
     <section class="label">
         <div class="qr">
-            <img src="https://quickchart.io/qr?size=180&text={{ urlencode(request()->root() . '/client/kiem-ton-kho/vi-tri/' . $location->id) }}" alt="QR {{ $location->location_code }}">
+            <img src="{{ url('/qr-code') }}?size=180&text={{ urlencode(request()->root() . '/client/kiem-ton-kho/vi-tri/' . $location->id) }}" alt="QR {{ $location->location_code }}">
         </div>
         <div>
             <div class="code">{{ $location->location_code }}</div>

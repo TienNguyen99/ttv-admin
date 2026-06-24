@@ -47,7 +47,7 @@
     @endphp
     <section class="label">
         <div class="qr">
-            <img src="https://quickchart.io/qr?size=180&text={{ urlencode($qrUrl) }}" alt="QR {{ $order->btp_order_code }}">
+            <img src="{{ url('/qr-code') }}?size=180&text={{ urlencode($qrUrl) }}" alt="QR {{ $order->btp_order_code }}">
             <div class="qr-code">{{ $order->btp_order_code }}</div>
         </div>
         <div class="info">

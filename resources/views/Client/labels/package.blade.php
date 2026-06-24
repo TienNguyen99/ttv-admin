@@ -6,7 +6,7 @@
 .qr img { width:22mm; height:22mm; } .code { font-size:12px; font-weight:700; } .line { margin-bottom:1mm; }
 @media screen { body { padding:10px; } }
 </style></head><body onload="window.print()"><div class="label">
-<div class="qr"><img src="https://quickchart.io/qr?size=180&text={{ urlencode($package->package_code) }}" alt="QR"><div class="code">{{ $package->package_code }}</div></div>
+<div class="qr"><img src="{{ url('/qr-code') }}?size=180&text={{ urlencode($package->package_code) }}" alt="QR"><div class="code">{{ $package->package_code }}</div></div>
 <div>
 <div class="line"><strong>Vị trí:</strong> {{ $package->location->location_code }}</div>
 <div class="line"><strong>Mã TP:</strong> {{ $package->ma_sp }}</div>

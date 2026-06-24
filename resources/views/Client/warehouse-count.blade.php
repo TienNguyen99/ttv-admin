@@ -1123,6 +1123,63 @@
             window.scrollTo({top: 0, behavior: 'smooth'});
         }
 
+        function receiptQuantityInput(value) {
+            const number = Number(value || 0);
+            if (!Number.isFinite(number) || number <= 0) return '';
+            return String(Math.round(number * 1000) / 1000);
+        }
+
+        function fillReceiptFromIssue(issue) {
+            if (!issue || !Array.isArray(issue.lines)) return;
+            setReceiptEditMode(null);
+            clearReceiptLines();
+            setWarehouseFlow('receipt');
+            switchWorkspace('entry');
+
+            const issueCode = issue.issue_code || '';
+            document.getElementById('receiptHeaderNote').value = `Nhập thành phẩm từ phiếu xuất BTP ${issueCode}`;
+
+            const rows = Array.from(document.querySelectorAll('#receiptEntryRows tr'));
+            issue.lines.forEach((line, index) => {
+                let row = rows[index];
+                if (!row) row = appendReceiptRow();
+
+                row.querySelector('.receipt-note').value = line.ten_hh || 'TP / KCS';
+                row.querySelector('.receipt-internal-code').value = line.internal_item_code || '';
+                row.querySelector('.receipt-ma-sp').value = line.ma_hh || '';
+                row.querySelector('.receipt-color').value = line.color || '';
+                row.querySelector('.receipt-size').value = line.size || '';
+                row.querySelector('.receipt-quantity').value = receiptQuantityInput(line.quantity);
+                row.querySelector('.receipt-dvt').value = line.dvt || 'Cái';
+
+                const orderInput = row.querySelector('.receipt-order');
+                orderInput.value = line.production_order || issue.production_order || '';
+                orderInput.dataset.productionOrderId = line.production_order_id || '';
+                orderInput.dataset.purchaseOrder = line.purchase_order || '';
+                orderInput.dataset.customer = line.customer || '';
+
+                const notes = [
+                    line.note || '',
+                    issueCode ? `Từ ${issueCode}` : '',
+                    line.location_code ? `Vị trí xuất ${line.location_code}` : '',
+                    line.side ? `Mặt ${line.side}` : '',
+                ].filter(Boolean);
+                row.querySelector('.receipt-line-note').value = notes.join(' - ');
+            });
+
+            document.querySelector('#receiptEntryRows .receipt-quantity')?.focus();
+            scheduleReceiptDuplicateCheck();
+            showWarehouseToast('Đã nạp phiếu xuất BTP', 'Kiểm lại số lượng, vị trí nhập rồi bấm Lưu + in.');
+        }
+
+        function loadReceiptFromIssue(issueId) {
+            if (!issueId) return;
+            fetch(`/api/xuat-vat-tu-noi-bo/${encodeURIComponent(issueId)}`)
+                .then(response => jsonOrError(response, 'Không tải được phiếu xuất BTP'))
+                .then(result => fillReceiptFromIssue(result.data))
+                .catch(error => alert(error.message));
+        }
+
         function cancelReceiptEdit() {
             editingReceiptFormId = null;
             clearReceiptLines();
@@ -1959,6 +2016,7 @@
         });
         const pageParams = new URLSearchParams(window.location.search);
         const requestedView = pageParams.get('view');
+        const requestedIssue = pageParams.get('from_issue');
         switchWorkspace(['entry', 'receipts', 'history', 'overview', 'map', 'editor'].includes(requestedView) ? requestedView : 'entry');
         const requestedLocation = pageParams.get('location_code');
         if (requestedLocation) document.getElementById('locationCode').value = requestedLocation.toUpperCase();
@@ -1969,6 +2027,7 @@
             loadWarehouseStats();
             loadWarehouseMap();
             loadLocationContents();
+            if (requestedIssue) loadReceiptFromIssue(requestedIssue);
         });
         updateSavePackageButton();
         refreshIcons();

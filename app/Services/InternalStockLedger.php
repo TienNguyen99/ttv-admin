@@ -49,7 +49,7 @@ class InternalStockLedger
                 DB::raw('0 as issue_quantity')
             )
             ->whereDate('i.issue_date', '<', $monthStart)
-            ->groupBy('i.warehouse_code', 'l.location_code', 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color');
+            ->groupBy('i.warehouse_code', 'l.location_code', 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color', 'l.side');
 
         $receiptsThisMonth = $this->receiptQuery()
             ->addSelect(
@@ -75,7 +75,7 @@ class InternalStockLedger
                 DB::raw('SUM(l.quantity) as issue_quantity')
             )
             ->whereBetween('i.issue_date', [$monthStart, $monthEnd])
-            ->groupBy('i.warehouse_code', 'l.location_code', 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color');
+            ->groupBy('i.warehouse_code', 'l.location_code', 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color', 'l.side');
 
         return DB::connection('internal')->query()
             ->fromSub(
@@ -115,7 +115,7 @@ class InternalStockLedger
                 DB::raw("COALESCE(l.internal_item_code, '') as internal_item_code"),
                 DB::raw("COALESCE(l.size, '') as size"),
                 DB::raw("COALESCE(l.color, '') as color"),
-                DB::raw("'' as side")
+                DB::raw("COALESCE(l.side, '') as side")
             );
     }
 }

@@ -22,6 +22,7 @@ use App\Http\Controllers\InternalBtpProductionOrderController;
 use App\Http\Controllers\InternalFinishedGoodsReceiptController;
 use App\Http\Controllers\InternalMaterialIssueController;
 use App\Http\Controllers\InternalItemCatalogController;
+use App\Http\Controllers\LocalQrCodeController;
 use Google\Service\Dfareporting\Order;
 
 
@@ -147,6 +148,7 @@ Route::get('/client/doi-chieu-ton', [InventoryComparisonController::class, 'inde
 Route::get('/api/doi-chieu-ton', [InventoryComparisonController::class, 'data']);
 Route::post('/api/doi-chieu-ton', [InventoryComparisonController::class, 'store']);
 Route::delete('/api/doi-chieu-ton/{inventoryCount}', [InventoryComparisonController::class, 'destroy']);
+Route::get('/qr-code', [LocalQrCodeController::class, 'png']);
 Route::post('/api/phieu-nhap-thanh-pham-noi-bo', [InternalFinishedGoodsReceiptController::class, 'store']);
 Route::get('/client/phieu-nhap-thanh-pham-noi-bo/{receipt}/in', [InternalFinishedGoodsReceiptController::class, 'print']);
 Route::get('/client/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'index']);

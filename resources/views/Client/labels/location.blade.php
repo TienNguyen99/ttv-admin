@@ -30,7 +30,7 @@
 <body onload="window.print()">
     <div class="label">
         <div class="code">{{ $location->location_code }}</div>
-        <img src="https://quickchart.io/qr?size=180&text={{ urlencode(request()->root() . '/client/kiem-ton-kho/vi-tri/' . $location->id) }}" alt="QR {{ $location->location_code }}">
+        <img src="{{ url('/qr-code') }}?size=180&text={{ urlencode(request()->root() . '/client/kiem-ton-kho/vi-tri/' . $location->id) }}" alt="QR {{ $location->location_code }}">
         <div class="name">{{ $location->location_name ?: 'Vị trí kho' }}</div>
         <div class="hint">Quét để xem mã hàng tại vị trí</div>
     </div>

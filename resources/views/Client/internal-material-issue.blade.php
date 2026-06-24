@@ -1360,6 +1360,9 @@
                         const labelPrintButton = issue.btp_label_print_url
                             ? `<a class="btn btn-sm btn-outline-secondary" target="_blank" href="${esc(issue.btp_label_print_url)}">In QR ${num(issue.btp_label_count || 0)}</a>`
                             : '';
+                        const receiveFinishedGoodsButton = issue.issue_type === 'production' || String(issue.issue_code || '').startsWith('PXBTP-')
+                            ? `<a class="btn btn-sm btn-outline-success" href="/client/kiem-ton-kho?view=entry&from_issue=${encodeURIComponent(issue.id)}">Nhập TP</a>`
+                            : '';
                         return `
                         <tr>
                             <td>${esc(issue.issue_code)}</td>
@@ -1374,6 +1377,7 @@
                             <td class="text-nowrap text-end">
                                 <a class="btn btn-sm btn-outline-primary" target="_blank" href="/client/xuat-vat-tu-noi-bo/${issue.id}/in">In</a>
                                 ${labelPrintButton}
+                                ${receiveFinishedGoodsButton}
                                 <button class="btn btn-sm btn-outline-secondary edit-issue" data-id="${issue.id}">Sửa</button>
                                 <button class="btn btn-sm btn-outline-danger delete-issue" data-id="${issue.id}">Xóa</button>
                             </td>

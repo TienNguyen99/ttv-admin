@@ -39,7 +39,25 @@ class InternalItemCatalogController extends Controller
         }
 
         $summaryQuery = clone $query;
-        $rows = $query->orderBy('item_code')->limit($limit)->get();
+        $rows = $query
+            ->select([
+                'id',
+                'source_row',
+                'item_code',
+                'item_name',
+                'unit',
+                'size',
+                'color',
+                'logo_color',
+                'side',
+                'shelf_code',
+                'opening_quantity',
+                'image_url',
+                'updated_at',
+            ])
+            ->orderBy('item_code')
+            ->limit($limit)
+            ->get();
 
         return response()->json([
             'data' => $rows,
