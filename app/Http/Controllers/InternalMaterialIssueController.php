@@ -12,12 +12,12 @@ use App\Models\InternalProductionOrder;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
 use App\Services\InternalAudit;
+use App\Services\InternalCatalogValidator;
 use App\Services\InternalDocumentNumber;
 use App\Services\GoogleSheetInternalCatalog;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 class InternalMaterialIssueController extends Controller
 {
@@ -311,12 +311,10 @@ class InternalMaterialIssueController extends Controller
             'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
         ]);
 
-        foreach ($data['lines'] as $index => $line) {
-            if (trim((string) ($line['ma_hh'] ?? '')) === '' && trim((string) ($line['internal_item_code'] ?? '')) === '') {
-                throw ValidationException::withMessages([
-                    "lines.{$index}.internal_item_code" => 'Moi dong can ma noi bo hoac ma hang.',
-                ]);
-            }
+        $catalogValidator = app(InternalCatalogValidator::class);
+        $catalogErrors = $catalogValidator->errorsForLines(collect($data['lines']));
+        if (!empty($catalogErrors)) {
+            return $catalogValidator->responseForErrors($catalogErrors);
         }
 
         $issueType = $data['issue_type'] ?? 'production';
@@ -836,12 +834,10 @@ class InternalMaterialIssueController extends Controller
             'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
         ]);
 
-        foreach ($data['lines'] as $index => $line) {
-            if (trim((string) ($line['ma_hh'] ?? '')) === '' && trim((string) ($line['internal_item_code'] ?? '')) === '') {
-                throw ValidationException::withMessages([
-                    "lines.{$index}.internal_item_code" => 'Moi dong can ma noi bo hoac ma hang.',
-                ]);
-            }
+        $catalogValidator = app(InternalCatalogValidator::class);
+        $catalogErrors = $catalogValidator->errorsForLines(collect($data['lines']));
+        if (!empty($catalogErrors)) {
+            return $catalogValidator->responseForErrors($catalogErrors);
         }
 
         $issueType = $data['issue_type'] ?? $issue->issue_type ?? 'production';

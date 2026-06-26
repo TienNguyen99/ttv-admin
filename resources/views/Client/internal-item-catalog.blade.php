@@ -11,6 +11,8 @@
         .catalog-table { min-width: 1280px; }
         .catalog-table .name-cell { min-width: 320px; white-space: normal; }
         .sync-note { color:#64748b; font-size:12px; }
+        .color-chip { display:inline-flex; align-items:center; gap:6px; min-width:0; }
+        .color-swatch { width:14px; height:14px; border:1px solid #cbd5e1; border-radius:3px; background:var(--swatch, transparent); box-shadow:inset 0 0 0 1px rgba(255,255,255,.35); }
     </style>
 </head>
 <body>
@@ -24,6 +26,7 @@
         </div>
         <div class="wms-topbar__actions">
             <button id="syncCatalogBtn" class="wms-btn wms-btn--primary"><i data-lucide="refresh-cw"></i> Đồng bộ DANH MỤC</button>
+            <button id="syncShelvesBtn" class="wms-btn"><i data-lucide="map-pinned"></i> Đồng bộ kệ sang vị trí</button>
         </div>
     </header>
 
@@ -92,18 +95,21 @@
                         ? new Date(summary.last_synced_at).toLocaleString('vi-VN')
                         : 'Chưa đồng bộ';
                     document.getElementById('catalogResultLabel').textContent = `${num((result.data || []).length)} / ${num(summary.item_count)} mã`;
-                    rowsEl.innerHTML = (result.data || []).map(row => `<tr>
+                    rowsEl.innerHTML = (result.data || []).map(row => {
+                        const colorLabel = row.color || row.pantone_code || row.pantone_hex || '-';
+                        return `<tr>
                         <td class="wms-code">${esc(row.item_code)}</td>
                         <td class="name-cell">${esc(row.item_name || '-')}</td>
                         <td>${esc(row.unit || '-')}</td>
                         <td>${esc(row.size || '-')}</td>
-                        <td>${esc(row.color || '-')}</td>
+                        <td>${colorLabel !== '-' ? `<span class="color-chip">${row.pantone_hex ? `<span class="color-swatch" style="--swatch:${esc(row.pantone_hex)}"></span>` : ''}<span>${esc(colorLabel)}${row.pantone_code ? ` · ${esc(row.pantone_code)}` : ''}</span></span>` : '-'}</td>
                         <td>${esc(row.logo_color || '-')}</td>
                         <td>${esc(row.side || '-')}</td>
                         <td>${esc(row.shelf_code || '-')}</td>
                         <td class="wms-number">${num(row.opening_quantity)}</td>
                         <td>${num(row.source_row)}</td>
-                    </tr>`).join('') || '<tr><td colspan="10" class="wms-empty">Không có mã phù hợp.</td></tr>';
+                    </tr>`;
+                    }).join('') || '<tr><td colspan="10" class="wms-empty">Không có mã phù hợp.</td></tr>';
                 })
                 .catch(error => rowsEl.innerHTML = `<tr><td colspan="10" class="wms-empty text-danger">${esc(error.message)}</td></tr>`);
         }
@@ -121,6 +127,24 @@
                   const data = result.data || {};
                   resultEl.textContent = `Thêm ${num(data.created)}, cập nhật ${num(data.updated)}, đang dùng ${num(data.active)} mã.`;
                   loadCatalog();
+              })
+              .catch(error => resultEl.textContent = error.message)
+              .finally(() => button.disabled = false);
+        });
+
+        document.getElementById('syncShelvesBtn').addEventListener('click', () => {
+            const button = document.getElementById('syncShelvesBtn');
+            const resultEl = document.getElementById('catalogSyncResult');
+            if (!confirm('Đồng bộ các giá trị cột Kệ hợp lệ từ DANH MỤC sang danh sách vị trí kho nội bộ?')) return;
+            button.disabled = true;
+            resultEl.textContent = 'Đang đồng bộ kệ sang vị trí...';
+            fetch('/api/danh-muc-noi-bo/dong-bo-vi-tri', {
+                method:'POST',
+                headers:{'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
+            }).then(response => jsonOrError(response, 'Không đồng bộ được kệ sang vị trí'))
+              .then(result => {
+                  const data = result.data || {};
+                  resultEl.textContent = `Vị trí: tạo ${num(data.created)}, cập nhật ${num(data.updated)}, bỏ qua ${num(data.skipped)}, hợp lệ ${num(data.total_valid_shelves)}.`;
               })
               .catch(error => resultEl.textContent = error.message)
               .finally(() => button.disabled = false);

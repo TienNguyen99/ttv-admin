@@ -44,6 +44,7 @@ class GoogleSheetInternalCatalog
                     || mb_strpos(mb_strtoupper((string) ($row['size'] ?? '')), $keyword) !== false
                     || mb_strpos(mb_strtoupper((string) ($row['color'] ?? '')), $keyword) !== false
                     || mb_strpos(mb_strtoupper((string) ($row['logo_color'] ?? '')), $keyword) !== false
+                    || mb_strpos(mb_strtoupper((string) ($row['shelf'] ?? '')), $keyword) !== false
                     || mb_strpos(mb_strtoupper((string) ($row['side'] ?? '')), $keyword) !== false;
             })
             ->take($limit)

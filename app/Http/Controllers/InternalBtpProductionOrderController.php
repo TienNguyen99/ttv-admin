@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\InternalBtpProductionOrder;
 use App\Services\InternalAudit;
+use App\Services\InternalCatalogValidator;
 use App\Services\InternalDocumentNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -389,6 +390,12 @@ class InternalBtpProductionOrderController extends Controller
 
     private function ensureLineIdentity(array $lines): void
     {
+        $catalogValidator = app(InternalCatalogValidator::class);
+        $catalogErrors = $catalogValidator->errorsForLines(collect($lines));
+        if (!empty($catalogErrors)) {
+            abort($catalogValidator->responseForErrors($catalogErrors));
+        }
+
         foreach ($lines as $index => $line) {
             if (trim((string) ($line['ma_hh'] ?? '')) === '' && trim((string) ($line['internal_item_code'] ?? '')) === '') {
                 abort(response()->json([

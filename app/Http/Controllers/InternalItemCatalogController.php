@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternalItemCatalog;
+use App\Models\WarehouseLocation;
+use App\Services\PantoneColorMatcher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -53,14 +55,25 @@ class InternalItemCatalogController extends Controller
                 'shelf_code',
                 'opening_quantity',
                 'image_url',
+                'raw_data',
                 'updated_at',
             ])
             ->orderBy('item_code')
             ->limit($limit)
             ->get();
 
+        $matcher = app(PantoneColorMatcher::class);
+
         return response()->json([
-            'data' => $rows,
+            'data' => $rows->map(function ($row) use ($matcher) {
+                $match = $matcher->matchCatalog($row);
+                $data = $row->toArray();
+                unset($data['raw_data']);
+                $data['pantone_code'] = $match['pantone'];
+                $data['pantone_hex'] = $match['hex'];
+                $data['pantone_source'] = $match['source'];
+                return $data;
+            }),
             'summary' => [
                 'item_count' => (clone $summaryQuery)->count(),
                 'shelf_count' => (clone $summaryQuery)->where('shelf_code', '<>', '')->distinct()->count('shelf_code'),
@@ -113,6 +126,7 @@ class InternalItemCatalogController extends Controller
                 ->values()
                 ->map(function ($row) {
                     $code = trim((string) $row->item_code);
+                    $match = app(PantoneColorMatcher::class)->matchCatalog($row);
 
                     return [
                         'code' => $code,
@@ -125,6 +139,9 @@ class InternalItemCatalogController extends Controller
                         'color' => $row->color,
                         'logo_color' => $row->logo_color,
                         'side' => $row->side,
+                        'pantone_code' => $match['pantone'],
+                        'pantone_hex' => $match['hex'],
+                        'pantone_source' => $match['source'],
                     ];
                 })
                 ->unique(function ($row) {
@@ -230,6 +247,87 @@ class InternalItemCatalogController extends Controller
         ]);
     }
 
+    public function syncShelvesToLocations()
+    {
+        $shelves = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereNotNull('shelf_code')
+            ->where('shelf_code', '<>', '')
+            ->pluck('shelf_code')
+            ->flatMap(function ($value) {
+                return preg_split('/[,;|\n\r]+/', (string) $value) ?: [];
+            })
+            ->map(fn ($value) => $this->normalizeShelfLocationCode($value))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+
+        DB::connection('internal')->transaction(function () use ($shelves, &$created, &$updated, &$skipped) {
+            foreach ($shelves as $index => $locationCode) {
+                $existing = WarehouseLocation::query()
+                    ->where('location_code', $locationCode)
+                    ->first();
+
+                $shelf = $this->inferShelfCode($locationCode);
+                $bay = $this->inferBayCode($locationCode);
+
+                if ($existing) {
+                    $changed = false;
+                    if (!$existing->shelf_code && $shelf !== '') {
+                        $existing->shelf_code = $shelf;
+                        $changed = true;
+                    }
+                    if (!$existing->bay_code && $bay !== '') {
+                        $existing->bay_code = $bay;
+                        $changed = true;
+                    }
+                    if (!$existing->location_name) {
+                        $existing->location_name = 'Kệ ' . $locationCode;
+                        $changed = true;
+                    }
+                    if ($changed) {
+                        $existing->save();
+                        $updated++;
+                    } else {
+                        $skipped++;
+                    }
+                    continue;
+                }
+
+                WarehouseLocation::query()->create([
+                    'location_code' => $locationCode,
+                    'warehouse_code' => '',
+                    'shelf_code' => $shelf,
+                    'tier' => 1,
+                    'bay_code' => $bay ?: null,
+                    'grid_x' => (($index % 6) * 4) + 1,
+                    'grid_y' => ((int) floor($index / 6) * 3) + 1,
+                    'grid_w' => 4,
+                    'grid_h' => 2,
+                    'location_name' => 'Kệ ' . $locationCode,
+                    'status' => 'pending',
+                    'note' => 'Tạo từ cột Kệ trong DANH MỤC.',
+                ]);
+                $created++;
+            }
+        });
+
+        return response()->json([
+            'message' => 'Đã đồng bộ kệ trong DANH MỤC sang vị trí kho nội bộ.',
+            'data' => [
+                'created' => $created,
+                'updated' => $updated,
+                'skipped' => $skipped,
+                'total_valid_shelves' => $shelves->count(),
+            ],
+        ]);
+    }
+
     private function parseCsv(string $contents): array
     {
         $stream = fopen('php://temp', 'r+');
@@ -276,5 +374,30 @@ class InternalItemCatalogController extends Controller
         $value = str_replace(['.', ' '], '', $value);
         $value = str_replace(',', '.', $value);
         return is_numeric($value) ? (float) $value : 0;
+    }
+
+    private function normalizeShelfLocationCode($value): string
+    {
+        $raw = strtoupper(trim(Str::ascii((string) $value)));
+        $raw = preg_replace('/\s+/', '', $raw);
+        if ($raw === '' || in_array($raw, ['CHUAXUAT', 'CHUAXEP', 'CHUA-XUAT', 'CHUA-XEP', 'KHONGCO', 'NONE'], true)) {
+            return '';
+        }
+
+        if (preg_match('/^[A-Z]{1,3}0*\d{1,4}$/', $raw)) {
+            return $raw;
+        }
+
+        return '';
+    }
+
+    private function inferShelfCode(string $locationCode): string
+    {
+        return preg_match('/^[A-Z]+/', $locationCode, $match) ? $match[0] : '';
+    }
+
+    private function inferBayCode(string $locationCode): string
+    {
+        return preg_match('/(\d+)$/', $locationCode, $match) ? ltrim($match[1], '0') ?: '0' : '';
     }
 }

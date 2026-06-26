@@ -638,6 +638,10 @@
             if (!row.querySelector('.location-code').value.trim() && item.shelf) {
                 row.querySelector('.location-code').value = item.shelf;
             }
+            if (item.shelf && !row.querySelector('.line-note').value.includes('Kệ danh mục')) {
+                const currentNote = row.querySelector('.line-note').value.trim();
+                row.querySelector('.line-note').value = [currentNote, `Kệ danh mục: ${item.shelf}`].filter(Boolean).join(' - ');
+            }
             row.querySelector('.quantity')?.focus();
         }
 

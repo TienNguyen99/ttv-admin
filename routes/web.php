@@ -185,6 +185,7 @@ Route::delete('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController:
 Route::get('/client/danh-muc-noi-bo', [InternalItemCatalogController::class, 'index']);
 Route::get('/api/danh-muc-noi-bo', [InternalItemCatalogController::class, 'data']);
 Route::post('/api/danh-muc-noi-bo/dong-bo', [InternalItemCatalogController::class, 'sync']);
+Route::post('/api/danh-muc-noi-bo/dong-bo-vi-tri', [InternalItemCatalogController::class, 'syncShelvesToLocations']);
 Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
 Route::get('/client/tivi-nhap-thanh-pham', [WarehouseCountController::class, 'finishedGoodsTvIndex']);
 Route::get('/api/tivi-nhap-thanh-pham', [WarehouseCountController::class, 'finishedGoodsTvData']);
@@ -194,6 +195,7 @@ Route::get('/api/canh-bao-kho', [WarehouseCountController::class, 'qualityData']
 Route::get('/api/kho-noi-bo/nhap-xuat-ngay', [WarehouseCountController::class, 'dailyFlow']);
 Route::get('/api/ton-kho-noi-bo/export', [WarehouseCountController::class, 'exportStock']);
 Route::get('/api/ton-kho-noi-bo/kho', [WarehouseCountController::class, 'stockWarehouses']);
+Route::get('/api/ton-kho-noi-bo/chi-tiet-fifo', [WarehouseCountController::class, 'stockFifoDetail']);
 Route::get('/api/ton-kho-noi-bo', [WarehouseCountController::class, 'stockData']);
 Route::patch('/api/ton-kho-noi-bo/ma-ke-toan', [WarehouseCountController::class, 'assignAccountingCode']);
 Route::patch('/api/ton-kho-noi-bo/vi-tri', [WarehouseCountController::class, 'assignStockLocation']);

@@ -11,8 +11,10 @@ use App\Models\InternalOpeningStock;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
 use App\Services\InternalAudit;
+use App\Services\InternalCatalogValidator;
 use App\Services\InternalDocumentNumber;
 use App\Services\InternalStockLedger;
+use App\Services\PantoneColorMatcher;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -388,9 +390,30 @@ class WarehouseCountController extends Controller
         $summaryQuery = clone $query;
 
         $limit = min(max((int) $request->query('limit', 100), 1), 1000);
+        $packages = $query->limit($limit)->get();
+        $catalogsByItemCode = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereIn('item_code', $packages->pluck('internal_item_code')->filter()->unique()->values())
+            ->get()
+            ->keyBy(fn ($item) => mb_strtoupper(trim((string) $item->item_code)));
+        $matcher = app(PantoneColorMatcher::class);
 
         return response()->json([
-            'data' => $query->limit($limit)->get(),
+            'data' => $packages->map(function ($package) use ($catalogsByItemCode, $matcher) {
+                $catalog = $catalogsByItemCode->get(mb_strtoupper(trim((string) $package->internal_item_code)));
+                $match = $matcher->matchValues([
+                    $package->internal_item_code,
+                    $package->ma_sp,
+                    $package->size,
+                    $package->color,
+                    $package->side,
+                ], $catalog);
+                $package->pantone_code = $match['pantone'];
+                $package->pantone_hex = $match['hex'];
+                $package->pantone_source = $match['source'];
+                $package->catalog_unit = $catalog->unit ?? '';
+                return $package;
+            }),
             'summary' => [
                 'package_count' => $summaryQuery->count(),
                 'total_quantity' => (float) (clone $summaryQuery)->sum('quantity'),
@@ -433,15 +456,21 @@ class WarehouseCountController extends Controller
         }
 
         $limit = min(max((int) $request->query('limit', 100), 1), 500);
-        $receipts = $query->limit($limit)->get();
+        $receipts = $query->with('lines')->limit($limit)->get();
+        $fifoStatuses = $this->receiptFifoStatuses($receipts);
 
         return response()->json([
-            'data' => $receipts->map(function ($receipt) {
+            'data' => $receipts->map(function ($receipt) use ($fifoStatuses) {
                 $issue = InternalMaterialIssue::query()
                     ->where('source_receipt_id', $receipt->id)
                     ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%')
                     ->orderByDesc('id')
                     ->first();
+                $fifo = $fifoStatuses[$receipt->id] ?? [
+                    'issue_status' => $issue ? 'exported' : 'not_exported',
+                    'issued_quantity' => $issue ? (float) ($receipt->total_quantity ?? 0) : 0,
+                    'remaining_quantity' => $issue ? 0 : (float) ($receipt->total_quantity ?? 0),
+                ];
 
                 return [
                     'id' => $receipt->id,
@@ -452,7 +481,9 @@ class WarehouseCountController extends Controller
                     'note' => $receipt->note,
                     'lines_count' => (int) $receipt->lines_count,
                     'total_quantity' => (float) ($receipt->total_quantity ?? 0),
-                    'issue_status' => $issue ? 'exported' : 'not_exported',
+                    'issue_status' => $fifo['issue_status'],
+                    'fifo_issued_quantity' => $fifo['issued_quantity'],
+                    'fifo_remaining_quantity' => $fifo['remaining_quantity'],
                     'issue_code' => $issue->issue_code ?? null,
                     'issue_id' => $issue->id ?? null,
                     'issue_print_url' => $issue ? url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in') : null,
@@ -463,14 +494,90 @@ class WarehouseCountController extends Controller
                 'receipt_count' => $receipts->count(),
                 'line_count' => (int) $receipts->sum('lines_count'),
                 'total_quantity' => (float) $receipts->sum('total_quantity'),
-                'exported_count' => $receipts->filter(function ($receipt) {
-                    return InternalMaterialIssue::query()
-                        ->where('source_receipt_id', $receipt->id)
-                        ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%')
-                        ->exists();
-                })->count(),
+                'exported_count' => collect($fifoStatuses)->filter(fn ($status) => $status['issue_status'] === 'exported')->count(),
             ],
         ]);
+    }
+
+    private function receiptFifoStatuses($receipts): array
+    {
+        $lineKeys = $receipts
+            ->flatMap(fn ($receipt) => $receipt->lines)
+            ->map(fn ($line) => $this->stockFlowKey($line))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($lineKeys->isEmpty()) {
+            return [];
+        }
+
+        $allReceiptLines = DB::connection('internal')->table('internal_material_receipt_lines as l')
+            ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+            ->where('r.source', 'Phieu nhap thanh pham')
+            ->select(
+                'l.id',
+                'l.receipt_id',
+                'l.ma_hh',
+                'l.internal_item_code',
+                'l.size',
+                'l.color',
+                'l.side',
+                'l.quantity',
+                'r.receipt_date'
+            )
+            ->orderBy('r.receipt_date')
+            ->orderBy('l.id')
+            ->get()
+            ->groupBy(fn ($line) => $this->stockFlowKey($line))
+            ->only($lineKeys->all());
+
+        $issueQuantities = DB::connection('internal')->table('internal_material_issue_lines as l')
+            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->select(
+                'l.ma_hh',
+                'l.internal_item_code',
+                'l.size',
+                'l.color',
+                'l.side',
+                DB::raw('SUM(l.quantity) as quantity')
+            )
+            ->groupBy('l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color', 'l.side')
+            ->get()
+            ->reduce(function ($carry, $line) {
+                $key = $this->stockFlowKey($line);
+                $carry[$key] = ($carry[$key] ?? 0) + (float) $line->quantity;
+                return $carry;
+            }, []);
+
+        $consumedByLineId = [];
+        foreach ($allReceiptLines as $key => $lines) {
+            $remainingIssue = (float) ($issueQuantities[$key] ?? 0);
+            foreach ($lines as $line) {
+                $received = (float) $line->quantity;
+                $consumed = min($received, max($remainingIssue, 0));
+                $remainingIssue -= $consumed;
+                $consumedByLineId[(int) $line->id] = $consumed;
+            }
+        }
+
+        $statuses = [];
+        foreach ($receipts as $receipt) {
+            $received = (float) $receipt->lines->sum('quantity');
+            $issued = (float) $receipt->lines->sum(fn ($line) => $consumedByLineId[(int) $line->id] ?? 0);
+            $remaining = $received - $issued;
+            $status = $issued <= 0.0001
+                ? 'not_exported'
+                : ($remaining <= 0.0001 ? 'exported' : 'partial_exported');
+
+            $statuses[$receipt->id] = [
+                'issue_status' => $status,
+                'issued_quantity' => $issued,
+                'remaining_quantity' => max($remaining, 0),
+            ];
+        }
+
+        return $statuses;
     }
 
     public function stockWarehouses()
@@ -573,6 +680,27 @@ class WarehouseCountController extends Controller
                 return $row;
             });
 
+        $catalogs = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereIn('item_code', $data->pluck('internal_item_code')->filter()->unique()->values())
+            ->get()
+            ->keyBy(fn ($item) => mb_strtoupper(trim((string) $item->item_code)));
+        $matcher = app(PantoneColorMatcher::class);
+        $data = $data->map(function ($row) use ($catalogs, $matcher) {
+            $catalog = $catalogs->get(mb_strtoupper(trim((string) $row->internal_item_code)));
+            $match = $matcher->matchValues([
+                $row->internal_item_code,
+                $row->ma_hh ?? $row->ma_sp ?? '',
+                $row->size,
+                $row->color,
+                $row->side,
+            ], $catalog);
+            $row->pantone_code = $match['pantone'];
+            $row->pantone_hex = $match['hex'];
+            $row->pantone_source = $match['source'];
+            return $row;
+        });
+
         return response()->json([
             'data' => $data,
             'summary' => [
@@ -589,6 +717,183 @@ class WarehouseCountController extends Controller
                 'total_quantity' => (float) $data->sum('total_quantity'),
             ],
         ]);
+    }
+
+    public function stockFifoDetail(Request $request)
+    {
+        $month = Carbon::parse($request->query('month', now()->format('Y-m')) . '-01')->startOfMonth();
+        $monthStart = $month->format('Y-m-d');
+        $monthEnd = $month->copy()->endOfMonth()->format('Y-m-d');
+
+        $filter = [
+            'warehouse_code' => strtoupper(trim((string) $request->query('warehouse_code', ''))),
+            'location_code' => strtoupper(trim((string) $request->query('location_code', ''))),
+            'ma_hh' => strtoupper(trim((string) $request->query('ma_hh', ''))),
+            'internal_item_code' => strtoupper(trim((string) $request->query('internal_item_code', ''))),
+            'size' => strtoupper(trim((string) $request->query('size', ''))),
+            'color' => strtoupper(trim((string) $request->query('color', ''))),
+            'side' => strtoupper(trim((string) $request->query('side', ''))),
+        ];
+
+        if ($filter['internal_item_code'] !== '') {
+            $filter['ma_hh'] = '';
+        }
+
+        if ($filter['ma_hh'] === '' && $filter['internal_item_code'] === '') {
+            return response()->json(['message' => 'Thiếu mã kế toán hoặc mã nội bộ để xem chi tiết tồn.'], 422);
+        }
+
+        $receiptLots = collect();
+
+        $openingLots = DB::connection('internal')->table('internal_opening_stocks')
+            ->whereDate('period_month', '<=', $monthStart);
+        $this->applyStockDetailFilter($openingLots, $filter, [
+            'warehouse_code' => 'warehouse_code',
+            'location_code' => 'location_code',
+            'ma_hh' => 'ma_hh',
+            'internal_item_code' => 'internal_item_code',
+            'size' => 'size',
+            'color' => 'color',
+            'side' => 'side',
+        ]);
+
+        $openingLots->select(
+            DB::raw('id as source_id'),
+            DB::raw("'OPENING' as source_type"),
+            DB::raw("CONCAT('TONDAU-', id) as document_code"),
+            DB::raw('period_month as document_date'),
+            'warehouse_code',
+            'location_code',
+            'ma_hh',
+            'internal_item_code',
+            'size',
+            'color',
+            'side',
+            DB::raw('quantity as quantity'),
+            DB::raw('note as note')
+        )->orderBy('period_month')->orderBy('id')->get()->each(function ($row) use ($receiptLots) {
+            $receiptLots->push($row);
+        });
+
+        $receiptQuery = DB::connection('internal')->table('internal_material_receipt_lines as l')
+            ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+            ->where('r.source', 'Phieu nhap thanh pham')
+            ->whereDate('r.receipt_date', '<=', $monthEnd);
+        $this->applyStockDetailFilter($receiptQuery, $filter, [
+            'warehouse_code' => 'r.warehouse_code',
+            'location_code' => "COALESCE(l.location_code, r.location_code, '')",
+            'ma_hh' => 'l.ma_hh',
+            'internal_item_code' => 'l.internal_item_code',
+            'size' => 'l.size',
+            'color' => 'l.color',
+            'side' => 'l.side',
+        ]);
+
+        $receiptQuery->select(
+            DB::raw('l.id as source_id'),
+            DB::raw("'RECEIPT' as source_type"),
+            DB::raw('r.receipt_code as document_code'),
+            DB::raw('r.receipt_date as document_date'),
+            DB::raw("COALESCE(r.warehouse_code, '') as warehouse_code"),
+            DB::raw("COALESCE(l.location_code, r.location_code, '') as location_code"),
+            DB::raw("COALESCE(l.ma_hh, '') as ma_hh"),
+            DB::raw("COALESCE(l.internal_item_code, '') as internal_item_code"),
+            DB::raw("COALESCE(l.size, '') as size"),
+            DB::raw("COALESCE(l.color, '') as color"),
+            DB::raw("COALESCE(l.side, '') as side"),
+            DB::raw('l.quantity as quantity'),
+            DB::raw('l.note as note')
+        )->orderBy('r.receipt_date')->orderBy('l.id')->get()->each(function ($row) use ($receiptLots) {
+            $receiptLots->push($row);
+        });
+
+        $issueQuery = DB::connection('internal')->table('internal_material_issue_lines as l')
+            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->whereDate('i.issue_date', '<=', $monthEnd);
+        $this->applyStockDetailFilter($issueQuery, $filter, [
+            'warehouse_code' => 'i.warehouse_code',
+            'location_code' => 'l.location_code',
+            'ma_hh' => 'l.ma_hh',
+            'internal_item_code' => 'l.internal_item_code',
+            'size' => 'l.size',
+            'color' => 'l.color',
+            'side' => 'l.side',
+        ]);
+
+        $issueRows = $issueQuery->select(
+            DB::raw('l.id as line_id'),
+            DB::raw('i.issue_code as document_code'),
+            DB::raw('i.issue_date as document_date'),
+            DB::raw('l.quantity as quantity'),
+            DB::raw('i.receiver_name as receiver_name'),
+            DB::raw('i.purpose as purpose')
+        )->orderBy('i.issue_date')->orderBy('l.id')->get();
+
+        $remainingIssue = (float) $issueRows->sum('quantity');
+        $lots = $receiptLots->map(function ($lot) use (&$remainingIssue) {
+            $received = (float) $lot->quantity;
+            $consumed = min($received, max($remainingIssue, 0));
+            $remainingIssue -= $consumed;
+
+            return [
+                'source_type' => $lot->source_type,
+                'source_id' => (int) $lot->source_id,
+                'document_code' => $lot->document_code,
+                'document_date' => $lot->document_date,
+                'location_code' => $lot->location_code ?: 'CHUA-XEP',
+                'ma_hh' => $lot->ma_hh,
+                'internal_item_code' => $lot->internal_item_code,
+                'size' => $lot->size,
+                'color' => $lot->color,
+                'side' => $lot->side,
+                'received_quantity' => $received,
+                'issued_quantity' => $consumed,
+                'remaining_quantity' => $received - $consumed,
+                'is_fully_issued' => $received > 0 && ($received - $consumed) <= 0.0001,
+                'note' => $lot->note,
+            ];
+        })->values();
+
+        return response()->json([
+            'data' => [
+                'filter' => $filter,
+                'month' => $month->format('Y-m'),
+                'month_end' => $monthEnd,
+                'lots' => $lots,
+                'issues' => $issueRows->map(fn ($row) => [
+                    'line_id' => (int) $row->line_id,
+                    'document_code' => $row->document_code,
+                    'document_date' => $row->document_date,
+                    'quantity' => (float) $row->quantity,
+                    'receiver_name' => $row->receiver_name,
+                    'purpose' => $row->purpose,
+                ])->values(),
+                'summary' => [
+                    'received_quantity' => (float) $receiptLots->sum('quantity'),
+                    'issue_quantity' => (float) $issueRows->sum('quantity'),
+                    'remaining_quantity' => (float) $lots->sum('remaining_quantity') - max($remainingIssue, 0),
+                    'over_issued_quantity' => max($remainingIssue, 0),
+                ],
+            ],
+        ]);
+    }
+
+    private function applyStockDetailFilter($query, array $filter, array $columns): void
+    {
+        foreach ($filter as $key => $value) {
+            if ($key === 'location_code' && $value === 'CHUA-XEP') {
+                $column = $columns[$key];
+                $query->whereRaw("UPPER(TRIM(COALESCE({$column}, ''))) IN ('', 'CHUA-XEP')");
+                continue;
+            }
+
+            if ($value === '') {
+                continue;
+            }
+
+            $column = $columns[$key];
+            $query->whereRaw('UPPER(TRIM(COALESCE(' . $column . ", ''))) = ?", [$value]);
+        }
     }
 
     public function qualityData(Request $request)
@@ -1172,6 +1477,7 @@ class WarehouseCountController extends Controller
 
     public function locationContents(Request $request)
     {
+        $locationCode = strtoupper(trim((string) $request->query('location_code')));
         $data = InventoryPackage::query()
             ->join('warehouse_locations as wl', 'inventory_packages.warehouse_location_id', '=', 'wl.id')
             ->join('inventory_counts as ic', 'inventory_packages.inventory_count_id', '=', 'ic.id')
@@ -1185,7 +1491,7 @@ class WarehouseCountController extends Controller
                 DB::raw('COUNT(*) as package_count'),
                 DB::raw('MAX(inventory_packages.checked_at) as latest_checked_at')
             )
-            ->where('wl.location_code', strtoupper(trim((string) $request->query('location_code'))))
+            ->where('wl.location_code', $locationCode)
             ->when($request->filled('checked_at'), function ($query) use ($request) {
                 $query->whereDate('inventory_packages.checked_at', $request->query('checked_at'));
             })
@@ -1198,6 +1504,119 @@ class WarehouseCountController extends Controller
             )
             ->orderBy('inventory_packages.internal_item_code')
             ->get();
+
+        $catalogsByItemCode = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereIn('item_code', $data->pluck('internal_item_code')->filter()->unique()->values())
+            ->get()
+            ->keyBy(fn ($item) => mb_strtoupper(trim((string) $item->item_code)));
+        $matcher = app(PantoneColorMatcher::class);
+        $data = $data->map(function ($row) use ($catalogsByItemCode, $matcher) {
+            $catalog = $catalogsByItemCode->get(mb_strtoupper(trim((string) $row->internal_item_code)));
+            $match = $matcher->matchValues([
+                $row->internal_item_code,
+                $row->ma_sp,
+                $row->size,
+                $row->color,
+                $row->side,
+            ], $catalog);
+            $row->pantone_code = $match['pantone'];
+            $row->pantone_hex = $match['hex'];
+            $row->pantone_source = $match['source'];
+            $row->catalog_only = false;
+            $row->catalog_item_name = $catalog->item_name ?? '';
+            $row->catalog_unit = $catalog->unit ?? '';
+            $row->catalog_shelf_code = $catalog->shelf_code ?? '';
+            return $row;
+        })
+            ->groupBy(fn ($row) => mb_strtoupper(trim((string) ($row->internal_item_code ?: $row->ma_sp))))
+            ->map(function ($rows) use ($matcher) {
+                $first = $rows->first();
+                $variants = $rows->map(function ($row) {
+                    return [
+                        'ma_sp' => (string) $row->ma_sp,
+                        'size' => (string) $row->size,
+                        'color' => (string) $row->color,
+                        'side' => (string) $row->side,
+                        'quantity' => (float) $row->total_quantity,
+                        'package_count' => (int) $row->package_count,
+                    ];
+                })->values();
+                $match = $matcher->matchValues([
+                    $first->internal_item_code,
+                    $first->ma_sp,
+                    $first->color,
+                    $first->size,
+                    $first->side,
+                    $first->catalog_item_name,
+                ]);
+
+                return (object) [
+                    'internal_item_code' => (string) $first->internal_item_code,
+                    'ma_sp' => $rows->pluck('ma_sp')->filter()->unique()->implode(', '),
+                    'size' => $rows->pluck('size')->filter()->unique()->implode(', '),
+                    'color' => $rows->pluck('color')->filter()->unique()->implode(', '),
+                    'side' => $rows->pluck('side')->filter()->unique()->implode(', '),
+                    'total_quantity' => (float) $rows->sum('total_quantity'),
+                    'package_count' => (int) $rows->sum('package_count'),
+                    'latest_checked_at' => $rows->max('latest_checked_at'),
+                    'pantone_code' => $first->pantone_code ?: $match['pantone'],
+                    'pantone_hex' => $first->pantone_hex ?: $match['hex'],
+                    'pantone_source' => $first->pantone_source ?: $match['source'],
+                    'catalog_only' => false,
+                    'catalog_item_name' => (string) $first->catalog_item_name,
+                    'catalog_unit' => (string) $first->catalog_unit,
+                    'catalog_shelf_code' => (string) $first->catalog_shelf_code,
+                    'variants' => $variants,
+                ];
+            })
+            ->values();
+
+        $existingKeys = $data->mapWithKeys(function ($row) {
+            return [mb_strtoupper(trim((string) $row->internal_item_code)) => true];
+        });
+
+        $catalogRows = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereNotNull('shelf_code')
+            ->where('shelf_code', '<>', '')
+            ->orderBy('item_code')
+            ->get()
+            ->filter(function ($item) use ($locationCode) {
+                $shelves = preg_split('/[,;|\n\r]+/', (string) $item->shelf_code) ?: [];
+                return collect($shelves)->contains(function ($shelf) use ($locationCode) {
+                    return strtoupper(trim((string) $shelf)) === $locationCode;
+                });
+            })
+            ->map(function ($item) use ($matcher) {
+                $match = $matcher->matchCatalog($item);
+                return (object) [
+                    'internal_item_code' => trim((string) $item->item_code),
+                    'ma_sp' => '',
+                    'size' => trim((string) $item->size),
+                    'color' => trim((string) $item->color),
+                    'side' => trim((string) $item->side),
+                    'total_quantity' => 0,
+                    'package_count' => 0,
+                    'latest_checked_at' => null,
+                    'pantone_code' => $match['pantone'],
+                    'pantone_hex' => $match['hex'],
+                    'pantone_source' => $match['source'],
+                    'catalog_only' => true,
+                    'catalog_item_name' => trim((string) $item->item_name),
+                    'catalog_unit' => trim((string) $item->unit),
+                    'catalog_shelf_code' => trim((string) $item->shelf_code),
+                ];
+            })
+            ->filter(function ($row) use ($existingKeys) {
+                return trim((string) $row->internal_item_code) !== ''
+                    && !$existingKeys->has(mb_strtoupper(trim((string) $row->internal_item_code)));
+            })
+            ->values();
+
+        $data = $data->concat($catalogRows)
+            ->sortBy(fn ($row) => mb_strtoupper(trim((string) ($row->internal_item_code ?: $row->catalog_item_name))))
+            ->values();
 
         return response()->json([
             'data' => $data,
@@ -1683,6 +2102,14 @@ class WarehouseCountController extends Controller
             ], 422);
         }
 
+        $catalogValidator = app(InternalCatalogValidator::class);
+        $catalogErrors = $catalogValidator->errorsForLines(collect([
+            ['internal_item_code' => $data['internal_item_code'] ?? ''],
+        ]));
+        if (!empty($catalogErrors)) {
+            return $catalogValidator->responseForErrors($catalogErrors);
+        }
+
         $locationCode = strtoupper(trim($data['location_code'] ?? '')) ?: 'CHUA-XEP';
         $warehouseCode = '';
         $location = WarehouseLocation::query()->firstOrCreate(
@@ -1860,6 +2287,12 @@ class WarehouseCountController extends Controller
             return response()->json([
                 'message' => 'Nhập ít nhất 1 dòng có Mã nội bộ và Số lượng lớn hơn 0. Mã kế toán có thể gán sau.',
             ], 422);
+        }
+
+        $catalogValidator = app(InternalCatalogValidator::class);
+        $catalogErrors = $catalogValidator->errorsForLines($lines);
+        if (!empty($catalogErrors)) {
+            return $catalogValidator->responseForErrors($catalogErrors);
         }
 
         $locationCode = strtoupper(trim($data['location_code'] ?? '')) ?: 'CHUA-XEP';
@@ -2181,6 +2614,12 @@ class WarehouseCountController extends Controller
             return response()->json([
                 'message' => 'Nhập ít nhất 1 dòng có Mã nội bộ và Số lượng lớn hơn 0.',
             ], 422);
+        }
+
+        $catalogValidator = app(InternalCatalogValidator::class);
+        $catalogErrors = $catalogValidator->errorsForLines($lines);
+        if (!empty($catalogErrors)) {
+            return $catalogValidator->responseForErrors($catalogErrors);
         }
 
         $warehouseCode = '';
@@ -2746,6 +3185,33 @@ class WarehouseCountController extends Controller
             trim((string) $row->size),
             trim((string) $row->color),
             trim((string) $row->side),
+        ]);
+    }
+
+    private function locationContentKey($row): string
+    {
+        return implode('|', [
+            strtoupper(trim((string) $row->internal_item_code)),
+            strtoupper(trim((string) ($row->ma_sp ?? ''))),
+            strtoupper(trim((string) $row->size)),
+            strtoupper(trim((string) $row->color)),
+            strtoupper(trim((string) $row->side)),
+        ]);
+    }
+
+    private function stockFlowKey($row): string
+    {
+        $internalCode = strtoupper(trim((string) $row->internal_item_code));
+        if ($internalCode !== '') {
+            return 'INTERNAL|' . $internalCode;
+        }
+
+        return implode('|', [
+            'ACCOUNTING',
+            strtoupper(trim((string) ($row->ma_hh ?? $row->ma_sp ?? ''))),
+            strtoupper(trim((string) $row->size)),
+            strtoupper(trim((string) $row->color)),
+            strtoupper(trim((string) $row->side)),
         ]);
     }
 }

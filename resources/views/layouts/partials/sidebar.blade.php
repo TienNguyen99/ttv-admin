@@ -554,7 +554,7 @@
     </details>
 
     <div class="summary-sidebar__footer">
-        <a class="summary-sidebar__link" href="{{ url('/client/kiem-ton-kho?view=editor') }}"><i data-lucide="grid-3x3"></i>Thiết lập sơ đồ</a>
+        <a class="summary-sidebar__link" href="{{ url('/client/kiem-ton-kho?view=editor') }}"><i data-lucide="grid-3x3"></i>Sơ đồ kho</a>
     </div>
 </aside>
 
