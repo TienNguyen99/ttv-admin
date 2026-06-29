@@ -12,6 +12,7 @@ use App\Models\InternalProductionOrder;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
 use App\Services\InternalAudit;
+use App\Services\InternalBtpOrderMatcher;
 use App\Services\InternalCatalogValidator;
 use App\Services\InternalDocumentNumber;
 use App\Services\GoogleSheetInternalCatalog;
@@ -318,8 +319,11 @@ class InternalMaterialIssueController extends Controller
         }
 
         $issueType = $data['issue_type'] ?? 'production';
+        $createdBtpOrderCodes = [];
 
-        $issue = DB::connection('internal')->transaction(function () use ($data, $issueType) {
+        $issue = DB::connection('internal')->transaction(function () use ($data, $issueType, &$createdBtpOrderCodes) {
+            $createdBtpOrderCodes = $this->createMissingBtpOrdersForIssue($data, $issueType);
+
             $issue = InternalMaterialIssue::query()->create([
                 'issue_code' => $this->nextIssueCode($issueType),
                 'issue_type' => $issueType,
@@ -333,7 +337,19 @@ class InternalMaterialIssueController extends Controller
                 'note' => trim($data['note'] ?? ''),
             ]);
 
+            $matchedProductionOrders = [];
             foreach ($data['lines'] as $line) {
+                if ($issueType === 'customer' && trim((string) ($line['production_order'] ?? '')) === '') {
+                    $matchedBtpLine = app(InternalBtpOrderMatcher::class)->find($line);
+                    if ($matchedBtpLine) {
+                        $line['production_order'] = trim((string) $matchedBtpLine->btp_order_code);
+                        $line['production_order_id'] = null;
+                    }
+                }
+                if (trim((string) ($line['production_order'] ?? '')) !== '') {
+                    $matchedProductionOrders[] = trim((string) $line['production_order']);
+                }
+
                 $issueLine = $issue->lines()->create([
                     'production_order_id' => $line['production_order_id'] ?? null,
                     'production_order' => trim($line['production_order'] ?? ''),
@@ -359,22 +375,17 @@ class InternalMaterialIssueController extends Controller
                 );
             }
 
+            $matchedProductionOrders = array_values(array_unique(array_filter($matchedProductionOrders)));
+            if (!empty($matchedProductionOrders) && trim((string) $issue->production_order) === '') {
+                $issue->production_order = implode(', ', $matchedProductionOrders);
+                $issue->save();
+            }
+
             return $issue->load('lines');
         });
 
         if ($issueType === 'production') {
-            $btpOrders = $issue->lines
-                ->pluck('production_order')
-                ->merge([$issue->production_order])
-                ->filter()
-                ->map(fn ($value) => trim((string) $value))
-                ->filter(fn ($value) => preg_match('/^BTP\d{4}-\d{4}$/', $value))
-                ->unique()
-                ->values();
-
-            foreach ($btpOrders as $btpOrderCode) {
-                InternalBtpProductionOrderController::markIssued($btpOrderCode, $issue);
-            }
+            $this->markBtpOrdersIssuedFromIssue($issue);
         }
 
         app(InternalAudit::class)->model('issue.created', $issue, [
@@ -387,6 +398,7 @@ class InternalMaterialIssueController extends Controller
                 ? 'Đã tạo phiếu xuất BTP đi sản xuất.'
                 : ($issueType === 'customer' ? 'Đã tạo phiếu xuất thành phẩm cho khách hàng.' : 'Đã tạo phiếu xuất kho nội bộ.'),
             'data' => $issue,
+            'btp_order_codes' => $createdBtpOrderCodes,
             'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in'),
         ]);
     }
@@ -446,6 +458,7 @@ class InternalMaterialIssueController extends Controller
                 'note' => trim($data['note'] ?? '') ?: ('Tạo từ phiếu nhập ' . $receipt->receipt_code),
             ]);
 
+            $matchedProductionOrders = [];
             foreach ($receipt->lines as $receiptLine) {
                 $line = [
                     'production_order_id' => $receiptLine->production_order_id,
@@ -455,17 +468,41 @@ class InternalMaterialIssueController extends Controller
                     'ma_hh' => strtoupper(trim((string) $receiptLine->ma_hh)),
                     'ten_hh' => trim((string) $receiptLine->ten_hh),
                     'dvt' => trim((string) $receiptLine->dvt),
+                    'ordered_quantity' => (float) ($receiptLine->ordered_quantity ?? 0),
                     'quantity' => (float) $receiptLine->quantity,
                     'location_code' => strtoupper(trim((string) ($receiptLine->location_code ?: $receipt->location_code))),
                     'internal_item_code' => trim((string) $receiptLine->internal_item_code),
                     'size' => trim((string) $receiptLine->size),
                     'color' => trim((string) $receiptLine->color),
+                    'logo_color' => trim((string) ($receiptLine->logo_color ?? '')),
                     'side' => trim((string) $receiptLine->side),
                     'note' => trim((string) $receiptLine->note),
                 ];
 
-                $issueLine = $issue->lines()->create($line);
+                if ($line['production_order'] === '') {
+                    $matchedBtpLine = app(InternalBtpOrderMatcher::class)->find($line);
+                    if ($matchedBtpLine) {
+                        $line['production_order'] = trim((string) $matchedBtpLine->btp_order_code);
+                        $line['production_order_id'] = null;
+                        $receiptLine->production_order = $line['production_order'];
+                        $receiptLine->production_order_id = null;
+                        $receiptLine->save();
+                    }
+                }
+                if ($line['production_order'] !== '') {
+                    $matchedProductionOrders[] = $line['production_order'];
+                }
+
+                $issueLineData = $line;
+                unset($issueLineData['logo_color']);
+                $issueLine = $issue->lines()->create($issueLineData);
                 $this->decreaseInternalStock($line, $warehouseCode, $issueLine->id);
+            }
+
+            $matchedProductionOrders = array_values(array_unique(array_filter($matchedProductionOrders)));
+            if (!empty($matchedProductionOrders) && trim((string) $issue->production_order) === '') {
+                $issue->production_order = implode(', ', $matchedProductionOrders);
+                $issue->save();
             }
 
             return $issue->load('lines');
@@ -749,6 +786,27 @@ class InternalMaterialIssueController extends Controller
                 $warnings[] = 'Số lượng xuất lớn hơn tồn phù hợp.';
             }
 
+            $logoColor = trim((string) ($line['logo_color'] ?? ''));
+            $matchedBtpLine = $this->findMatchingBtpOrderLine([
+                'ps_number' => $psNumber,
+                'internal_item_code' => $internalCode,
+                'ma_hh' => $maHh,
+                'size' => $size ?: ($catalogItem['size'] ?? ''),
+                'color' => $color ?: ($catalogItem['color'] ?? ''),
+                'logo_color' => $logoColor,
+                'side' => $side ?: ($catalogItem['side'] ?? ''),
+                'ordered_quantity' => (float) ($line['ordered_quantity'] ?? 0),
+            ]);
+
+            if ($matchedBtpLine) {
+                if ($productionOrderCode === '') {
+                    $productionOrderCode = trim((string) $matchedBtpLine->btp_order_code);
+                }
+
+                $warnings[] = 'Dong PS nay da co trong lenh BTP ' . $matchedBtpLine->btp_order_code
+                    . ' (' . $matchedBtpLine->status . ').';
+            }
+
             return [
                 'source_row' => $index + 1,
                 'issue_date' => $line['issue_date'] ?? null,
@@ -761,6 +819,7 @@ class InternalMaterialIssueController extends Controller
                 'internal_item_code' => $internalCode,
                 'size' => $size ?: ($catalogItem['size'] ?? ''),
                 'color' => $color ?: ($catalogItem['color'] ?? ''),
+                'logo_color' => $logoColor,
                 'side' => $side ?: ($catalogItem['side'] ?? ''),
                 'dvt' => trim((string) ($line['dvt'] ?? '')) ?: ($catalogItem['unit'] ?? ''),
                 'ordered_quantity' => (float) ($line['ordered_quantity'] ?? 0),
@@ -829,9 +888,11 @@ class InternalMaterialIssueController extends Controller
             'lines.*.note' => 'nullable|string|max:1000',
             'lines.*.production_order_id' => 'nullable|integer',
             'lines.*.production_order' => 'nullable|string|max:100',
+            'lines.*.ps_number' => 'nullable|string|max:100',
             'lines.*.purchase_order' => 'nullable|string|max:1000',
             'lines.*.customer' => 'nullable|string|max:200',
             'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
+            'lines.*.logo_color' => 'nullable|string|max:100',
         ]);
 
         $catalogValidator = app(InternalCatalogValidator::class);
@@ -841,8 +902,11 @@ class InternalMaterialIssueController extends Controller
         }
 
         $issueType = $data['issue_type'] ?? $issue->issue_type ?? 'production';
+        $createdBtpOrderCodes = [];
 
-        $updatedIssue = DB::connection('internal')->transaction(function () use ($issue, $data, $issueType) {
+        $updatedIssue = DB::connection('internal')->transaction(function () use ($issue, $data, $issueType, &$createdBtpOrderCodes) {
+            $createdBtpOrderCodes = $this->createMissingBtpOrdersForIssue($data, $issueType);
+
             $issue->load('lines.allocations');
             foreach ($issue->lines as $line) {
                 $this->restoreIssueLineStock($issue, $line);
@@ -886,6 +950,10 @@ class InternalMaterialIssueController extends Controller
             return $issue->fresh()->load('lines');
         });
 
+        if ($issueType === 'production') {
+            $this->markBtpOrdersIssuedFromIssue($updatedIssue);
+        }
+
         app(InternalAudit::class)->model('issue.updated', $updatedIssue, [
             'line_count' => $updatedIssue->lines->count(),
             'total_quantity' => (float) $updatedIssue->lines->sum('quantity'),
@@ -894,6 +962,7 @@ class InternalMaterialIssueController extends Controller
         return response()->json([
             'message' => 'Đã cập nhật phiếu xuất kho nội bộ.',
             'data' => $updatedIssue,
+            'btp_order_codes' => $createdBtpOrderCodes,
             'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $updatedIssue->id . '/in'),
         ]);
     }
@@ -968,6 +1037,106 @@ class InternalMaterialIssueController extends Controller
 
         return app(InternalDocumentNumber::class)
             ->next($prefix, 4);
+    }
+
+    private function findMatchingBtpOrderLine(array $line)
+    {
+        return app(InternalBtpOrderMatcher::class)->find($line);
+    }
+
+    private function createMissingBtpOrdersForIssue(array &$data, string $issueType): array
+    {
+        if ($issueType !== 'production') {
+            return [];
+        }
+
+        $createdCodes = [];
+        $issueDate = $data['issue_date'] ?? now()->format('Y-m-d');
+        $receiverName = trim((string) ($data['receiver_name'] ?? ''));
+        $department = trim((string) ($data['department'] ?? '')) ?: 'San xuat';
+        $purpose = trim((string) ($data['purpose'] ?? '')) ?: 'Xuat BTP di san xuat';
+        $headerNote = trim((string) ($data['note'] ?? ''));
+
+        foreach ($data['lines'] as &$line) {
+            $existingOrder = trim((string) ($line['production_order'] ?? ''));
+            if ($existingOrder !== '') {
+                continue;
+            }
+
+            $quantity = (float) ($line['quantity'] ?? 0);
+            $internalCode = trim((string) ($line['internal_item_code'] ?? ''));
+            if ($quantity <= 0 || $internalCode === '') {
+                continue;
+            }
+
+            $matchedBtpLine = $this->findMatchingBtpOrderLine([
+                'ps_number' => $line['ps_number'] ?? ($line['purchase_order'] ?? ''),
+                'internal_item_code' => $internalCode,
+                'ma_hh' => $line['ma_hh'] ?? '',
+                'size' => $line['size'] ?? '',
+                'color' => $line['color'] ?? '',
+                'logo_color' => $line['logo_color'] ?? '',
+                'side' => $line['side'] ?? '',
+                'ordered_quantity' => $line['ordered_quantity'] ?? 0,
+            ]);
+
+            if ($matchedBtpLine) {
+                $line['production_order'] = trim((string) $matchedBtpLine->btp_order_code);
+                continue;
+            }
+
+            $btpOrderCode = app(InternalDocumentNumber::class)->nextYearly('BTP', 4);
+            $customer = trim((string) ($line['customer'] ?? '')) ?: $receiverName;
+
+            $order = InternalBtpProductionOrder::query()->create([
+                'btp_order_code' => $btpOrderCode,
+                'order_date' => $issueDate,
+                'status' => 'draft',
+                'receiver_name' => $receiverName,
+                'customer' => mb_substr($customer, 0, 200),
+                'department' => $department,
+                'purpose' => $purpose,
+                'note' => trim($headerNote . ' Tu tao tu dong xuat BTP.'),
+            ]);
+
+            $order->lines()->create([
+                'ps_number' => trim((string) ($line['ps_number'] ?? ($line['purchase_order'] ?? ''))),
+                'ma_hh' => strtoupper(trim((string) ($line['ma_hh'] ?? $internalCode))),
+                'ten_hh' => mb_substr(trim((string) ($line['ten_hh'] ?? '')), 0, 255),
+                'dvt' => trim((string) ($line['dvt'] ?? 'PCS')),
+                'ordered_quantity' => $line['ordered_quantity'] ?? null,
+                'quantity' => $quantity,
+                'location_code' => strtoupper(trim((string) ($line['location_code'] ?? ''))),
+                'internal_item_code' => $internalCode,
+                'size' => mb_substr(trim((string) ($line['size'] ?? '')), 0, 100),
+                'color' => mb_substr(trim((string) ($line['color'] ?? '')), 0, 100),
+                'logo_color' => mb_substr(trim((string) ($line['logo_color'] ?? '')), 0, 100),
+                'side' => mb_substr(trim((string) ($line['side'] ?? '')), 0, 100),
+                'note' => mb_substr(trim((string) ($line['note'] ?? '')), 0, 500),
+            ]);
+
+            $line['production_order'] = $btpOrderCode;
+            $createdCodes[] = $btpOrderCode;
+        }
+        unset($line);
+
+        return $createdCodes;
+    }
+
+    private function markBtpOrdersIssuedFromIssue(InternalMaterialIssue $issue): void
+    {
+        $btpOrders = $issue->lines
+            ->pluck('production_order')
+            ->merge([$issue->production_order])
+            ->filter()
+            ->map(fn ($value) => trim((string) $value))
+            ->filter(fn ($value) => preg_match('/^BTP\d{4}-\d{4}$/', $value))
+            ->unique()
+            ->values();
+
+        foreach ($btpOrders as $btpOrderCode) {
+            InternalBtpProductionOrderController::markIssued($btpOrderCode, $issue);
+        }
     }
 
     private function productionTrackingKey($productionOrder, $size, $color): string
@@ -1105,23 +1274,41 @@ class InternalMaterialIssueController extends Controller
         $maHh = strtoupper(trim($line['ma_hh'] ?? ($line['internal_item_code'] ?? '')));
         $checkedAt = now()->format('Y-m-d');
         $note = trim((string) ($line['note'] ?? ''));
-        $negativeNote = trim(implode(' - ', array_filter([
+        $negativeNote = mb_substr(trim(implode(' - ', array_filter([
             'Xuat am ton noi bo',
             "Can {$requestedQuantity}, co {$available}, am {$quantity}",
             $note,
-        ])));
+        ]))), 0, 500);
 
-        $count = InternalInventoryCount::query()->create([
+        $countAttributes = [
             'ma_sp' => $maHh,
             'ma_ko' => strtoupper(trim($warehouseCode)),
             'internal_item_code' => trim($line['internal_item_code'] ?? ''),
             'size' => trim($line['size'] ?? ''),
             'color' => trim($line['color'] ?? ''),
             'side' => trim($line['side'] ?? ''),
-            'counted_quantity' => -abs($quantity),
             'checked_at' => $checkedAt,
-            'note' => $negativeNote,
-        ]);
+        ];
+
+        $count = InternalInventoryCount::query()
+            ->where($countAttributes)
+            ->lockForUpdate()
+            ->first();
+
+        if (!$count) {
+            $count = InternalInventoryCount::query()->create($countAttributes + [
+                'counted_quantity' => 0,
+                'note' => $negativeNote,
+            ]);
+        }
+
+        $count->counted_quantity = (float) $count->counted_quantity - abs($quantity);
+        $count->note = mb_substr(
+            'Xuat am ton noi bo - Tong am ' . abs((float) $count->counted_quantity) . ' - Lan cuoi: ' . $negativeNote,
+            0,
+            500
+        );
+        $count->save();
 
         $package = InventoryPackage::query()->create([
             'package_code' => $this->nextPackageCode(),

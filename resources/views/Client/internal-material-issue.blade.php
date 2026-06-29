@@ -360,7 +360,7 @@
             },
             ELITE: {
                 guide: 'Dán 10-20 dòng: Ngày xuất | ITEM# (mã nội bộ) | PS# nếu có | Size | Màu | Logo color | ĐVT | SL đơn hàng | SL xuất | Ghi chú | Vị trí/mặt',
-                columns: ['issue_date','internal_item_code','production_order','size','color','logo_color','dvt','ordered_quantity','quantity','note','side']
+                columns: ['issue_date','internal_item_code','ps_number','size','color','logo_color','dvt','ordered_quantity','quantity','note','side']
             },
             CUSTOM: {
                 guide: 'Dán kèm hàng tiêu đề. Tối thiểu cần Mã nội bộ và Số lượng. Các cột khác như Size, Màu, Vị trí, Ghi chú có thể có hoặc để trống.',
@@ -431,6 +431,9 @@
             tr.dataset.productionOrderId = data.production_order_id || '';
             tr.dataset.purchaseOrder = data.purchase_order || '';
             tr.dataset.customer = data.customer || '';
+            tr.dataset.psNumber = data.ps_number || data.purchase_order || '';
+            tr.dataset.logoColor = data.logo_color || '';
+            tr.dataset.side = data.side || '';
             tr.innerHTML = `
                 <td><input class="form-control internal-code" list="internalCatalogOptions" autocomplete="off" value="${esc(data.internal_item_code || '')}" placeholder="Mã nội bộ"></td>
                 <td><input class="form-control ten-hh" value="${esc(data.ten_hh || '')}"></td>
@@ -467,6 +470,7 @@
                 dvt: row.querySelector('.dvt').value.trim(),
                 production_order_id: row.dataset.productionOrderId || null,
                 production_order: row.querySelector('.line-production-order').value.trim(),
+                ps_number: row.dataset.psNumber || row.dataset.purchaseOrder || '',
                 purchase_order: row.dataset.purchaseOrder || '',
                 customer: row.dataset.customer || value('customerName'),
                 ordered_quantity: row.querySelector('.ordered-quantity').value || null,
@@ -475,6 +479,8 @@
                 internal_item_code: row.querySelector('.internal-code').value.trim(),
                 size: row.querySelector('.size').value.trim(),
                 color: row.querySelector('.color').value.trim(),
+                logo_color: row.dataset.logoColor || '',
+                side: row.dataset.side || '',
                 note: row.querySelector('.line-note').value.trim(),
             })).filter(line => line.ma_hh || line.internal_item_code || line.quantity);
         }
@@ -648,6 +654,9 @@
         function fillIssueLine(row, data) {
             row.dataset.productionOrderId = data.production_order_id || '';
             row.dataset.purchaseOrder = data.purchase_order || '';
+            row.dataset.psNumber = data.ps_number || data.purchase_order || '';
+            row.dataset.logoColor = data.logo_color || '';
+            row.dataset.side = data.side || '';
             row.dataset.customer = data.customer || '';
             row.querySelector('.line-production-order').value = data.production_order || '';
             row.querySelector('.ma-hh').value = data.ma_hh || '';
@@ -854,8 +863,12 @@
             const hasHeader = detectedHeaders.filter(Boolean).length >= 2;
             let mapping = saved.some(Boolean) ? saved : (hasHeader ? detectedHeaders : (pastePresets[customer]?.columns || []));
 
-            if (customer === 'UNIPAX') {
-                mapping = mapping.map(field => field === 'production_order' ? 'ps_number' : field);
+            if (['UNIPAX', 'ELITE'].includes(customer)) {
+                mapping = mapping.map(field => {
+                    if (field === 'production_order') return 'ps_number';
+                    if (field === 'location_code') return 'side';
+                    return field;
+                });
             }
 
             return Array.from({ length: maxColumns }, (_, index) => mapping[index] || '');
@@ -989,6 +1002,10 @@
                 line.ma_hh = String(line.ma_hh || '').toUpperCase();
                 line.location_code = String(line.location_code || '').toUpperCase();
                 line.side = String(line.side || '').toUpperCase();
+                if (!line.side && /^(FRONT|BACK|UPPER|UNDER|L\/B|L\/S\+R\/S|LEFT|RIGHT|F|B)$/i.test(line.location_code)) {
+                    line.side = line.location_code;
+                    line.location_code = '';
+                }
                 line.internal_item_code = String(line.internal_item_code || '').trim();
                 return line;
             }).filter(line => line.ma_hh || line.internal_item_code || line.quantity);
@@ -1082,7 +1099,9 @@
                 dvt: line.dvt || '',
                 quantity: line.quantity || 0,
                 location_code: line.location_code || '',
-                purchase_order: line.purchase_order || '',
+                purchase_order: line.purchase_order || line.ps_number || '',
+                ordered_quantity: line.ordered_quantity || null,
+                logo_color: line.logo_color || '',
                 customer: 'UNIPAX',
                 note: [line.issue_date ? `Ngay Excel: ${isoToDateVn(line.issue_date)}` : '', line.note || ''].filter(Boolean).join(' - '),
                 issue_date: value('issueDate'),
@@ -1194,6 +1213,10 @@
             }).then(response => jsonOrError(response, 'Không tạo được phiếu xuất kho'))
               .then(result => {
                   window.open(result.print_url, '_blank');
+                  const autoCodes = Array.isArray(result.btp_order_codes) ? result.btp_order_codes : [];
+                  if (autoCodes.length) {
+                      alert(`Da tu tao ${autoCodes.length} lenh BTP: ${autoCodes.join(', ')}`);
+                  }
                   resetIssueForm();
                   loadIssues();
               })
@@ -1311,6 +1334,7 @@
                       headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                       body: JSON.stringify({
                           order_ids: orders.map(order => order.id).filter(Boolean),
+                          order_codes: orders.map(order => order.btp_order_code).filter(Boolean),
                           issue_date: value('issueDate'),
                           receiver_name: value('receiverName'),
                           department: value('department') || 'San xuat',

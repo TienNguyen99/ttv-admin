@@ -20,16 +20,19 @@ class InternalMaterialReceiptLine extends Model
         'ma_hh',
         'ten_hh',
         'dvt',
+        'ordered_quantity',
         'quantity',
         'location_code',
         'internal_item_code',
         'size',
         'color',
+        'logo_color',
         'side',
         'note',
     ];
 
     protected $casts = [
+        'ordered_quantity' => 'float',
         'quantity' => 'float',
     ];
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternalBtpProductionOrder;
+use App\Models\InternalMaterialIssue;
 use App\Services\InternalAudit;
 use App\Services\InternalCatalogValidator;
 use App\Services\InternalDocumentNumber;
@@ -250,11 +251,125 @@ class InternalBtpProductionOrderController extends Controller
         ]);
     }
 
+    public function bulkDestroy(Request $request)
+    {
+        $ids = collect($request->input('order_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+        $codes = collect($request->input('order_codes', []))
+            ->map(fn ($code) => strtoupper(trim((string) $code)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty() && $codes->isEmpty()) {
+            return response()->json(['message' => 'Chua chon lenh BTP de xoa.'], 422);
+        }
+
+        $orders = InternalBtpProductionOrder::query()
+            ->where(function ($query) use ($ids, $codes) {
+                if ($ids->isNotEmpty()) {
+                    $query->whereIn('id', $ids->all());
+                }
+                if ($codes->isNotEmpty()) {
+                    $query->orWhereIn('btp_order_code', $codes->all());
+                }
+            })
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return response()->json(['message' => 'Khong tim thay lenh BTP can xoa.'], 422);
+        }
+
+        $selectedIds = $orders->pluck('id')->unique()->values();
+        $issueIds = $orders->pluck('issue_id')->filter()->unique()->values();
+        foreach ($issueIds as $issueId) {
+            $allIssueOrderIds = InternalBtpProductionOrder::query()
+                ->where('issue_id', $issueId)
+                ->pluck('id')
+                ->unique()
+                ->values();
+
+            if ($allIssueOrderIds->diff($selectedIds)->isNotEmpty()) {
+                $issueCode = InternalBtpProductionOrder::query()
+                    ->where('issue_id', $issueId)
+                    ->value('issue_code');
+
+                return response()->json([
+                    'message' => 'Phieu xuat ' . ($issueCode ?: ('ID ' . $issueId)) . ' gom nhieu lenh BTP. Hay chon tat ca lenh trong phieu do roi xoa lai de khong lech ton.',
+                ], 422);
+            }
+        }
+
+        $deletedIssues = [];
+        DB::connection('internal')->transaction(function () use ($orders, $issueIds, $request, &$deletedIssues) {
+            foreach ($issueIds as $issueId) {
+                $issue = InternalMaterialIssue::query()->find($issueId);
+                if ($issue) {
+                    $deletedIssues[] = $issue->issue_code;
+                    app(InternalMaterialIssueController::class)->destroy($issue);
+                }
+            }
+
+            foreach ($orders as $order) {
+                app(InternalAudit::class)->model('btp_order.deleted', $order, [
+                    'btp_order_code' => $order->btp_order_code,
+                    'bulk_deleted' => true,
+                ], $request);
+                $order->delete();
+            }
+        });
+
+        return response()->json([
+            'message' => 'Da xoa ' . $orders->count() . ' lenh BTP' . (count($deletedIssues) ? ' va hoan/xoa ' . count($deletedIssues) . ' phieu xuat lien quan.' : '.'),
+            'deleted_issues' => $deletedIssues,
+        ]);
+    }
+
     public function createIssueFromOrders(Request $request)
     {
+        $payload = $request->all();
+        if (!isset($payload['order_ids']) && !isset($payload['order_codes'])) {
+            $raw = trim((string) $request->getContent());
+            if ($raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $payload = array_replace($decoded, $payload);
+                }
+            }
+        }
+
+        $payload['order_ids'] = collect($payload['order_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        $payload['order_codes'] = collect($payload['order_codes'] ?? [])
+            ->map(fn ($code) => strtoupper(trim((string) $code)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($payload['order_ids']) && empty($payload['order_codes'])) {
+            abort(response()->json([
+                'message' => 'Chua co lenh BTP hop le de tao phieu xuat. Hay tao lenh BTP truoc, hoac tai lai trang roi thu lai.',
+                'errors' => [
+                    'order_ids' => ['Chua co lenh BTP hop le.'],
+                ],
+            ], 422));
+        }
+
+        $request->replace($payload);
+
         $data = $request->validate([
-            'order_ids' => 'required|array|min:1|max:50',
+            'order_ids' => 'nullable|array|max:50',
             'order_ids.*' => 'integer',
+            'order_codes' => 'nullable|array|max:50',
+            'order_codes.*' => 'string|max:50',
             'issue_date' => 'nullable|date',
             'receiver_name' => 'nullable|string|max:150',
             'department' => 'nullable|string|max:150',
@@ -262,17 +377,25 @@ class InternalBtpProductionOrderController extends Controller
             'note' => 'nullable|string|max:1000',
         ]);
 
-        $orderIds = array_values(array_unique($data['order_ids']));
+        $orderIds = array_values(array_unique($data['order_ids'] ?? []));
+        $orderCodes = array_values(array_unique($data['order_codes'] ?? []));
         $orders = InternalBtpProductionOrder::query()
             ->with('lines')
-            ->whereIn('id', $orderIds)
+            ->where(function ($query) use ($orderIds, $orderCodes) {
+                if (!empty($orderIds)) {
+                    $query->whereIn('id', $orderIds);
+                }
+                if (!empty($orderCodes)) {
+                    $query->orWhereIn('btp_order_code', $orderCodes);
+                }
+            })
             ->orderBy('order_date')
             ->orderBy('id')
             ->get();
 
-        if ($orders->count() !== count($orderIds)) {
+        if ($orders->isEmpty()) {
             throw ValidationException::withMessages([
-                'order_ids' => 'Co lenh BTP khong ton tai.',
+                'order_ids' => 'Khong tim thay lenh BTP vua tao.',
             ]);
         }
 
@@ -288,7 +411,7 @@ class InternalBtpProductionOrderController extends Controller
                 return [
                     'production_order_id' => null,
                     'production_order' => $order->btp_order_code,
-                    'purchase_order' => '',
+                    'purchase_order' => trim((string) $line->ps_number),
                     'customer' => trim((string) $order->customer),
                     'ma_hh' => strtoupper(trim((string) ($line->ma_hh ?: $line->internal_item_code))),
                     'ten_hh' => mb_substr(trim((string) $line->ten_hh), 0, 255),
@@ -299,6 +422,7 @@ class InternalBtpProductionOrderController extends Controller
                     'internal_item_code' => trim((string) $line->internal_item_code),
                     'size' => mb_substr(trim((string) $line->size), 0, 100),
                     'color' => mb_substr(trim((string) $line->color), 0, 100),
+                    'logo_color' => mb_substr(trim((string) $line->logo_color), 0, 100),
                     'side' => mb_substr(trim((string) $line->side), 0, 100),
                     'note' => mb_substr(trim((string) $line->note), 0, 500),
                 ];
@@ -323,7 +447,11 @@ class InternalBtpProductionOrderController extends Controller
             'lines' => $lines->all(),
         ];
 
-        $issueRequest = $request->duplicate(null, $issuePayload);
+        $issueRequest = Request::create('/api/xuat-vat-tu-noi-bo', 'POST', $issuePayload);
+        $issueRequest->headers->set('Accept', 'application/json');
+        $issueRequest->headers->set('X-CSRF-TOKEN', (string) $request->header('X-CSRF-TOKEN', ''));
+        $issueRequest->setUserResolver($request->getUserResolver());
+        $issueRequest->setRouteResolver($request->getRouteResolver());
 
         return app(InternalMaterialIssueController::class)->store($issueRequest);
     }
@@ -365,6 +493,28 @@ class InternalBtpProductionOrderController extends Controller
 
     private function validatedPayload(Request $request): array
     {
+        $payload = $request->all();
+        if (!isset($payload['lines'])) {
+            $raw = trim((string) $request->getContent());
+            if ($raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $payload = array_replace($decoded, $payload);
+                }
+            }
+        }
+
+        if (!isset($payload['lines']) || !is_array($payload['lines']) || count($payload['lines']) === 0) {
+            abort(response()->json([
+                'message' => 'Chua co dong BTP de tao lenh. Neu dang paste Excel, hay bam "Dua vao phieu xuat BTP" truoc, hoac nhap it nhat 1 dong co ma noi bo va so luong.',
+                'errors' => [
+                    'lines' => ['Chua co dong BTP de tao lenh.'],
+                ],
+            ], 422));
+        }
+
+        $request->replace($payload);
+
         return $request->validate([
             'order_date' => 'nullable|date',
             'customer' => 'nullable|string|max:200',
@@ -374,6 +524,7 @@ class InternalBtpProductionOrderController extends Controller
             'note' => 'nullable|string|max:1000',
             'lines' => 'required|array|min:1|max:200',
             'lines.*.ma_hh' => 'nullable|string|max:100',
+            'lines.*.ps_number' => 'nullable|string|max:100',
             'lines.*.customer' => 'nullable|string|max:200',
             'lines.*.ten_hh' => 'nullable|string|max:1000',
             'lines.*.dvt' => 'nullable|string|max:50',
@@ -383,6 +534,7 @@ class InternalBtpProductionOrderController extends Controller
             'lines.*.internal_item_code' => 'nullable|string|max:100',
             'lines.*.size' => 'nullable|string|max:255',
             'lines.*.color' => 'nullable|string|max:1000',
+            'lines.*.logo_color' => 'nullable|string|max:100',
             'lines.*.side' => 'nullable|string|max:255',
             'lines.*.note' => 'nullable|string|max:1000',
         ]);
@@ -436,6 +588,7 @@ class InternalBtpProductionOrderController extends Controller
         $materialCode = strtoupper(trim($line['ma_hh'] ?? $internalCode));
 
         return [
+            'ps_number' => trim($line['ps_number'] ?? ''),
             'ma_hh' => $materialCode,
             'ten_hh' => mb_substr(trim($line['ten_hh'] ?? ''), 0, 255),
             'dvt' => trim($line['dvt'] ?? ''),
@@ -445,6 +598,7 @@ class InternalBtpProductionOrderController extends Controller
             'internal_item_code' => $internalCode,
             'size' => mb_substr(trim($line['size'] ?? ''), 0, 100),
             'color' => mb_substr(trim($line['color'] ?? ''), 0, 100),
+            'logo_color' => mb_substr(trim($line['logo_color'] ?? ''), 0, 100),
             'side' => mb_substr(trim($line['side'] ?? ''), 0, 100),
             'note' => mb_substr(trim($line['note'] ?? ''), 0, 500),
         ];

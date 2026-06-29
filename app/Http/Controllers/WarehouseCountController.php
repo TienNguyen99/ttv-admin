@@ -11,6 +11,7 @@ use App\Models\InternalOpeningStock;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
 use App\Services\InternalAudit;
+use App\Services\InternalBtpOrderMatcher;
 use App\Services\InternalCatalogValidator;
 use App\Services\InternalDocumentNumber;
 use App\Services\InternalStockLedger;
@@ -2250,7 +2251,9 @@ class WarehouseCountController extends Controller
             'lines.*.color' => 'nullable|string|max:100',
             'lines.*.side' => 'nullable|string|max:100',
             'lines.*.dvt' => 'nullable|string|max:50',
+            'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
             'lines.*.quantity' => 'nullable|numeric|min:0',
+            'lines.*.logo_color' => 'nullable|string|max:100',
             'lines.*.location_code' => 'nullable|string|max:100',
             'lines.*.note' => 'nullable|string|max:500',
             'lines.*.production_order_id' => 'nullable|integer',
@@ -2269,7 +2272,9 @@ class WarehouseCountController extends Controller
                     'color' => trim((string) ($line['color'] ?? '')),
                     'side' => trim((string) ($line['side'] ?? '')),
                     'dvt' => trim((string) ($line['dvt'] ?? '')),
+                    'ordered_quantity' => (float) ($line['ordered_quantity'] ?? 0),
                     'quantity' => (float) ($line['quantity'] ?? 0),
+                    'logo_color' => trim((string) ($line['logo_color'] ?? '')),
                     'location_code' => strtoupper(trim((string) ($line['location_code'] ?? ''))),
                     'note' => trim((string) ($line['note'] ?? '')),
                     'production_order_id' => $line['production_order_id'] ?? null,
@@ -2353,6 +2358,25 @@ class WarehouseCountController extends Controller
             $packages = collect();
 
             foreach ($lines as $line) {
+                if ($line['production_order'] === '') {
+                    $matchedBtpLine = app(InternalBtpOrderMatcher::class)->find([
+                        'ps_number' => $line['purchase_order'],
+                        'purchase_order' => $line['purchase_order'],
+                        'internal_item_code' => $line['internal_item_code'],
+                        'ma_hh' => $line['ma_sp'],
+                        'size' => $line['size'],
+                        'color' => $line['color'],
+                        'logo_color' => $line['logo_color'],
+                        'side' => $line['side'],
+                        'ordered_quantity' => $line['ordered_quantity'],
+                        'note' => $line['note'],
+                    ]);
+                    if ($matchedBtpLine) {
+                        $line['production_order'] = trim((string) $matchedBtpLine->btp_order_code);
+                        $line['production_order_id'] = null;
+                    }
+                }
+
                 $lineLocation = $location;
                 if ($line['location_code'] !== '' && $line['location_code'] !== $location->location_code) {
                     $lineLocation = WarehouseLocation::query()->firstOrCreate(
@@ -2427,11 +2451,13 @@ class WarehouseCountController extends Controller
                     'ma_hh' => $line['ma_sp'],
                     'ten_hh' => $line['category'] ?: ($internalCatalogItem->item_name ?? ($catalogItem->Ten_hh ?? '')),
                     'dvt' => $line['dvt'] ?: ($internalCatalogItem->unit ?? ($catalogItem->Dvt ?? '')),
+                    'ordered_quantity' => $line['ordered_quantity'] ?: null,
                     'quantity' => $line['quantity'],
                     'location_code' => $lineLocation->location_code,
                     'internal_item_code' => $line['internal_item_code'],
                     'size' => $line['size'],
                     'color' => $line['color'],
+                    'logo_color' => $line['logo_color'],
                     'side' => $line['side'],
                     'note' => $line['note'] ?: null,
                 ]);
@@ -2555,7 +2581,9 @@ class WarehouseCountController extends Controller
             'lines.*.color' => 'nullable|string|max:100',
             'lines.*.side' => 'nullable|string|max:100',
             'lines.*.dvt' => 'nullable|string|max:50',
+            'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
             'lines.*.quantity' => 'nullable|numeric|min:0',
+            'lines.*.logo_color' => 'nullable|string|max:100',
             'lines.*.location_code' => 'nullable|string|max:100',
             'lines.*.note' => 'nullable|string|max:500',
             'lines.*.production_order_id' => 'nullable|integer',
@@ -2598,7 +2626,9 @@ class WarehouseCountController extends Controller
                     'color' => trim((string) ($line['color'] ?? '')),
                     'side' => trim((string) ($line['side'] ?? '')),
                     'dvt' => trim((string) ($line['dvt'] ?? '')),
+                    'ordered_quantity' => (float) ($line['ordered_quantity'] ?? 0),
                     'quantity' => (float) ($line['quantity'] ?? 0),
+                    'logo_color' => trim((string) ($line['logo_color'] ?? '')),
                     'location_code' => strtoupper(trim((string) ($line['location_code'] ?? ''))),
                     'note' => trim((string) ($line['note'] ?? '')),
                     'production_order_id' => $line['production_order_id'] ?? null,
@@ -2671,6 +2701,25 @@ class WarehouseCountController extends Controller
             ]);
 
             foreach ($lines as $line) {
+                if ($line['production_order'] === '') {
+                    $matchedBtpLine = app(InternalBtpOrderMatcher::class)->find([
+                        'ps_number' => $line['purchase_order'],
+                        'purchase_order' => $line['purchase_order'],
+                        'internal_item_code' => $line['internal_item_code'],
+                        'ma_hh' => $line['ma_sp'],
+                        'size' => $line['size'],
+                        'color' => $line['color'],
+                        'logo_color' => $line['logo_color'],
+                        'side' => $line['side'],
+                        'ordered_quantity' => $line['ordered_quantity'],
+                        'note' => $line['note'],
+                    ]);
+                    if ($matchedBtpLine) {
+                        $line['production_order'] = trim((string) $matchedBtpLine->btp_order_code);
+                        $line['production_order_id'] = null;
+                    }
+                }
+
                 $targetLocationCode = $line['location_code'] ?: $locationCode;
                 $lineLocation = WarehouseLocation::query()->firstOrCreate(
                     ['location_code' => $targetLocationCode],
@@ -2720,11 +2769,13 @@ class WarehouseCountController extends Controller
                     'ma_hh' => $line['ma_sp'],
                     'ten_hh' => $line['category'],
                     'dvt' => $line['dvt'],
+                    'ordered_quantity' => $line['ordered_quantity'] ?: null,
                     'quantity' => $line['quantity'],
                     'location_code' => $lineLocation->location_code,
                     'internal_item_code' => $line['internal_item_code'],
                     'size' => $line['size'],
                     'color' => $line['color'],
+                    'logo_color' => $line['logo_color'],
                     'side' => $line['side'],
                     'note' => $line['note'] ?: null,
                 ]);

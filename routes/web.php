@@ -179,6 +179,7 @@ Route::get('/api/lenh-btp', [InternalBtpProductionOrderController::class, 'data'
 Route::post('/api/lenh-btp', [InternalBtpProductionOrderController::class, 'store']);
 Route::post('/api/lenh-btp/hang-loat', [InternalBtpProductionOrderController::class, 'storeBatch']);
 Route::post('/api/lenh-btp/tao-phieu-xuat', [InternalBtpProductionOrderController::class, 'createIssueFromOrders']);
+Route::delete('/api/lenh-btp/xoa-hang-loat', [InternalBtpProductionOrderController::class, 'bulkDestroy']);
 Route::get('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'show']);
 Route::put('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'update']);
 Route::delete('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'destroy']);

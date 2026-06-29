@@ -178,6 +178,20 @@
     const firstLine = row => Array.isArray(row.lines) && row.lines.length ? row.lines[0] : {};
     let timer = null;
 
+    function ensureDeleteSelectedButton() {
+        if (document.getElementById('deleteSelectedBtn')) return;
+        const issueButton = document.getElementById('issueSelectedBtn');
+        if (!issueButton) return;
+        const button = document.createElement('button');
+        button.id = 'deleteSelectedBtn';
+        button.type = 'button';
+        button.className = 'wms-btn';
+        button.disabled = true;
+        button.innerHTML = '<i data-lucide="trash-2"></i>Xoa lenh da chon';
+        issueButton.insertAdjacentElement('afterend', button);
+        button.addEventListener('click', deleteSelectedOrders);
+    }
+
     function formatDate(value) {
         if (!value) return '';
         const parts = String(value).slice(0, 10).split('-');
@@ -199,13 +213,14 @@
     }
 
     function renderLineInfo(line) {
+        const sideValue = line.side || (/^(FRONT|BACK|UPPER|UNDER|L\/B|L\/S\+R\/S|LEFT|RIGHT|F|B)$/i.test(line.location_code || '') ? line.location_code : '');
         return `
             <strong>${esc(line.internal_item_code || line.ma_hh || '-')}</strong>
             <div class="text-muted small">${esc(line.ten_hh || '')}</div>
             <div class="btp-line-meta">
                 ${line.size ? `<span class="btp-chip">Size ${esc(line.size)}</span>` : ''}
                 ${line.color ? `<span class="btp-chip">Màu ${esc(line.color)}</span>` : ''}
-                ${line.side ? `<span class="btp-chip">Mặt ${esc(line.side)}</span>` : ''}
+                ${sideValue ? `<span class="btp-chip">Mặt ${esc(sideValue)}</span>` : ''}
             </div>
         `;
     }
@@ -216,10 +231,17 @@
             .filter(Boolean);
     }
 
+    function selectedOrderCodes() {
+        return Array.from(document.querySelectorAll('.btp-select:checked'))
+            .map(input => String(input.closest('tr')?.querySelector('.wms-code')?.textContent || '').trim())
+            .filter(Boolean);
+    }
+
     function updateIssueSelectedState() {
         const ids = selectedOrderIds();
         const button = document.getElementById('issueSelectedBtn');
         const printButton = document.getElementById('printSelectedLabelsBtn');
+        const deleteButton = document.getElementById('deleteSelectedBtn');
         if (!button) return;
 
         button.disabled = ids.length === 0;
@@ -228,6 +250,10 @@
             printButton.disabled = ids.length === 0;
             printButton.innerHTML = `<i data-lucide="qr-code"></i>${ids.length ? `In QR ${ids.length} lệnh` : 'In QR lệnh'}`;
         }
+        if (deleteButton) {
+            deleteButton.disabled = ids.length === 0;
+            deleteButton.innerHTML = `<i data-lucide="trash-2"></i>${ids.length ? `Xoa ${ids.length} lenh` : 'Xoa lenh da chon'}`;
+        }
         if (window.lucide) lucide.createIcons();
     }
 
@@ -235,6 +261,32 @@
         const ids = selectedOrderIds();
         if (!ids.length) return;
         window.open(`/client/lenh-btp/tem-qr?ids=${encodeURIComponent(ids.join(','))}`, '_blank');
+    }
+
+    function deleteSelectedOrders() {
+        const ids = selectedOrderIds();
+        const codes = selectedOrderCodes();
+        if (!ids.length && !codes.length) return;
+
+        const count = Math.max(ids.length, codes.length);
+        if (!confirm(`Xoa ${count} lenh BTP da chon? Lenh da xuat se hoan/xoa phieu xuat lien quan neu ban chon du tat ca lenh trong cung phieu.`)) {
+            return;
+        }
+
+        const button = document.getElementById('deleteSelectedBtn');
+        if (button) button.disabled = true;
+
+        fetch('/api/lenh-btp/xoa-hang-loat', {
+            method: 'DELETE',
+            headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+            body: JSON.stringify({order_ids: ids, order_codes: codes})
+        }).then(response => jsonOrError(response, 'Khong xoa duoc lenh BTP da chon.'))
+          .then(result => {
+              alert(result.message || 'Da xoa lenh BTP da chon.');
+              loadBtpOrders();
+          })
+          .catch(error => alert(error.message))
+          .finally(updateIssueSelectedState);
     }
 
     function renderCustomerFilter(customers) {
@@ -258,7 +310,8 @@
 
     function createIssueFromSelectedOrders() {
         const ids = selectedOrderIds();
-        if (!ids.length) return;
+        const codes = selectedOrderCodes();
+        if (!ids.length && !codes.length) return;
 
         if (!confirm(`Tạo 1 phiếu xuất BTP gồm ${ids.length} lệnh đã chọn?`)) {
             return;
@@ -273,6 +326,7 @@
             headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
             body: JSON.stringify({
                 order_ids: ids,
+                order_codes: codes,
                 issue_date: todayLocalDate(),
                 receiver_name: 'San xuat',
                 department: 'San xuat',
@@ -340,6 +394,9 @@
                     </tr>
                 `}).join('') || '<tr><td colspan="12" class="wms-empty">Chưa có lệnh BTP.</td></tr>';
 
+                document.querySelectorAll('.btp-select').forEach(input => {
+                    input.disabled = false;
+                });
                 document.getElementById('selectAllDraftOrders').checked = false;
                 updateIssueSelectedState();
                 if (window.lucide) lucide.createIcons();
@@ -430,6 +487,8 @@
           .then(loadBtpOrders)
           .catch(error => alert(error.message));
     }
+
+    ensureDeleteSelectedButton();
 
     document.getElementById('topKeyword').addEventListener('input', () => {
         clearTimeout(timer);
