@@ -60,7 +60,7 @@
             </div>
             <div class="col-6 col-md-2">
                 <div class="summary-card">
-                    <div class="summary-label">Âm tồn</div>
+                    <div class="summary-label">�m tn</div>
                     <div class="summary-value text-danger" id="negativeItems">0</div>
                 </div>
             </div>
@@ -96,7 +96,7 @@
                     <option value="">Tất cả</option>
                     <option value="positive">Có tồn</option>
                     <option value="zero">Hết tồn</option>
-                    <option value="negative">Âm tồn</option>
+                    <option value="negative">�m tn</option>
                 </select>
             </div>
             <div class="col-md-4">
@@ -157,7 +157,7 @@
 
         function statusLabel(ton) {
             if (ton > 0) return '<span class="badge text-bg-success">Có tồn</span>';
-            if (ton < 0) return '<span class="badge text-bg-danger">Âm tồn</span>';
+            if (ton < 0) return '<span class="badge text-bg-danger">�m tn</span>';
             return '<span class="badge text-bg-secondary">Hết tồn</span>';
         }
 

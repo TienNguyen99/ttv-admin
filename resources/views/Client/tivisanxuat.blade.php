@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="{{ asset('favicon.ico') }}" type="image/x-icon" />
-    <title>CÔNG TY TNHH NHÃN THỜI GIAN VIỆT TIẾN - BẢNG THEO DÕI SẢN XUẤT</title>
+    <title>C�NG TY TNHH NH�N THI GIAN VIT TIN - BNG THEO D�I SN XUT</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="{{ asset('css/tivicss.css') }}" rel="stylesheet">

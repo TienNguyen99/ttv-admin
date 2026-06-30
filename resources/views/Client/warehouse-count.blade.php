@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
@@ -79,8 +79,8 @@
         .zone-stack { display: grid; align-content: space-between; gap: 10px; }
         .aisle-column { position: relative; min-height: 100%; border-left: 1px dashed #cbd5e1; border-right: 1px dashed #cbd5e1; }
         .aisle-column::before, .aisle-column::after { position: absolute; left: 50%; transform: translateX(-50%); color: #475569; font-size: 38px; font-weight: 900; line-height: 1; }
-        .aisle-column::before { content: "↓"; top: 12px; }
-        .aisle-column::after { content: "↓"; bottom: 12px; }
+        .aisle-column::before { content: "â†“"; top: 12px; }
+        .aisle-column::after { content: "â†“"; bottom: 12px; }
         .shelf-area { display: grid; gap: 8px; }
         .shelf-row { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px; align-items: stretch; }
         .shelf-label { display: flex; flex-direction: column; justify-content: center; padding: 10px; border: 1px solid #94a3b8; border-radius: 0; background: rgba(248, 250, 252, 0.9); }
@@ -89,8 +89,8 @@
         .shelf-lanes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
         .shelf-tier { min-height: 132px; border: 1px solid #94a3b8; border-radius: 0; background: rgba(255, 255, 255, 0.95); }
         .shelf-tier-title { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 7px 34px; border-bottom: 1px solid #edf2f7; color: #475569; font-size: 12px; font-weight: 800; }
-        .shelf-tier-title::before { content: "←"; position: absolute; left: 10px; top: 4px; color: #475569; font-size: 18px; }
-        .shelf-tier-title::after { content: "→"; position: absolute; right: 10px; top: 4px; color: #475569; font-size: 18px; }
+        .shelf-tier-title::before { content: "â†"; position: absolute; left: 10px; top: 4px; color: #475569; font-size: 18px; }
+        .shelf-tier-title::after { content: "â†’"; position: absolute; right: 10px; top: 4px; color: #475569; font-size: 18px; }
         .shelf-tier-body { display: grid; gap: 8px; padding: 8px; }
         .map-card { position: relative; border: 1px solid var(--line); border-radius: 8px; background: #fff; overflow: visible; }
         .map-card.has-stock { border-color: #bfdbfe; }
@@ -147,7 +147,7 @@
             pointer-events: none;
         }
         .layout-editor::after {
-            content: "Kéo kệ để sắp xếp · Double click để chọn vị trí";
+            content: "Kéo kệ để sắp xếp · Double click để chn vị trí";
             position: sticky;
             left: 12px;
             top: 12px;
@@ -230,7 +230,7 @@
             <input id="warehouseTopSearch" aria-label="Tìm mã hoặc vị trí kho" placeholder="Tìm mã hàng, vị trí hoặc quét mã...">
         </div>
         <div class="wms-topbar__actions">
-            <button id="warehouseTopMic" type="button" class="wms-btn" title="Tìm bằng giọng nói"><i data-lucide="mic"></i><span class="visually-hidden">Tìm bằng giọng nói</span></button>
+            <button id="warehouseTopMic" type="button" class="wms-btn" title="Tìm bằng ging nói"><i data-lucide="mic"></i><span class="visually-hidden">Tìm bằng ging nói</span></button>
             <a class="wms-btn" href="{{ url('/client/ton-kho-noi-bo') }}"><i data-lucide="boxes"></i> Xem tồn</a>
         </div>
     </header>
@@ -253,11 +253,11 @@
             </div>
         </div>
 
-        <section class="panel voice-assistant mb-3" aria-label="Trợ lý giọng nói kho">
+        <section class="panel voice-assistant mb-3" aria-label="Trợ lý ging nói kho">
             <button id="voiceLookupBtn" type="button" class="btn btn-outline-primary btn-icon voice-button" title="Nói mã hàng cần tìm"><i data-lucide="mic"></i></button>
             <input id="voiceLookupInput" class="form-control" placeholder="Nói hoặc nhập mã hàng, mã nội bộ">
             <button id="voiceSearchBtn" type="button" class="btn btn-outline-primary btn-icon"><i data-lucide="search"></i>Tìm</button>
-            <div id="voiceLookupResult" class="voice-result">Bấm micro và nói: “Tìm mã BTPDAYHAIRB1-1”.</div>
+            <div id="voiceLookupResult" class="voice-result">Bấm micro và nói: “Tìm mã BTPDAYHAIRB1-1.</div>
         </section>
 
         <section class="kpi-grid">
@@ -269,8 +269,8 @@
 
         <section class="panel context-bar mb-3">
             <div class="row g-2 align-items-end">
-                <div class="col-lg-5"><label class="form-label">Vị trí đang kiểm</label><input id="locationCode" list="locationOptions" class="form-control" placeholder="Để trống nếu chưa xếp vị trí"></div>
-                <div class="col-lg-2"><label class="form-label">Ngày kiểm kê</label><input id="checkedAt" type="text" class="form-control date-vn" inputmode="numeric" placeholder="dd/mm/yyyy" value="{{ now()->format('d/m/Y') }}"></div>
+                <input id="checkedAt" type="hidden" value="{{ now()->format('d/m/Y') }}">
+                <div class="col-lg-7"><label class="form-label">V&#7883; tr&#237; &#273;ang ki&#7875;m</label><input id="locationCode" list="locationOptions" class="form-control" placeholder="&#272;&#7875; tr&#7889;ng n&#7871;u ch&#432;a x&#7871;p v&#7883; tr&#237;"></div>
                 <div class="col-lg-2"><button type="button" class="btn btn-outline-secondary btn-icon w-100 justify-content-center" onclick="openLocationModal(value('locationCode').toUpperCase())"><i data-lucide="settings-2"></i>Quản lý vị trí</button></div>
             </div>
             <datalist id="locationOptions"></datalist>
@@ -290,12 +290,12 @@
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="renderLayoutEditor()"><i data-lucide="refresh-cw"></i>Tải lại</button>
             </div>
             <div class="layout-editor-toolbar">
-                <input id="mapSearch" class="form-control" style="max-width:320px" placeholder="Lọc mã hàng, màu hoặc vị trí">
+                <input id="mapSearch" class="form-control" style="max-width:320px" placeholder="Lc mã hàng, màu hoặc vị trí">
                 <input id="layoutBackgroundInput" type="file" accept="image/*" class="d-none">
                 <button type="button" class="btn btn-outline-primary btn-icon" id="uploadLayoutBackgroundBtn"><i data-lucide="image-plus"></i>Thêm background sơ đồ</button>
-                <button type="button" class="btn btn-outline-secondary btn-icon" id="clearLayoutBackgroundBtn"><i data-lucide="image-off"></i>Xóa nền</button>
+                <button type="button" class="btn btn-outline-secondary btn-icon" id="clearLayoutBackgroundBtn"><i data-lucide="image-off"></i>Xóa nn</button>
                 <label class="d-flex align-items-center gap-2 small text-secondary mb-0"><input id="showEmptyLocations" type="checkbox" class="form-check-input mt-0">Hiện vị trí trống</label>
-                <label class="d-flex align-items-center gap-2 small text-secondary mb-0">Độ mờ nền <input id="layoutBackgroundOpacity" type="range" class="form-range" min="10" max="90" value="36"></label>
+                <label class="d-flex align-items-center gap-2 small text-secondary mb-0">ộ m nn <input id="layoutBackgroundOpacity" type="range" class="form-range" min="10" max="90" value="36"></label>
                 <label class="d-flex align-items-center gap-2 small text-secondary mb-0">Zoom
                     <select id="layoutZoom" class="form-select form-select-sm" style="width:92px">
                         <option value="0.65">65%</option>
@@ -325,7 +325,7 @@
             <section class="panel">
                 <div class="panel-header">
                     <div>
-                        <h2 class="panel-title">Hàng tại <span id="selectedLocationTitle">chưa chọn vị trí</span></h2>
+                        <h2 class="panel-title">Hàng tại <span id="selectedLocationTitle">chưa chn vị trí</span></h2>
                         <div id="selectedLocationName" class="location-meta mt-1"></div>
                     </div>
                     <div id="locationSummary" class="summary-strip"></div>
@@ -343,7 +343,7 @@
             <div class="panel-header">
                 <div>
                     <h2 class="panel-title">Phiếu kho</h2>
-                    <div id="entryLocationContext" class="section-hint mt-1">Nếu chưa chọn vị trí, phiếu sẽ lưu vào CHUA-XEP để xếp kệ sau.</div>
+                    <div id="entryLocationContext" class="section-hint mt-1">Nếu chưa chn vị trí, phiếu sẽ lưu vào CHUA-XEP để xếp kệ sau.</div>
                 </div>
                 <div class="d-flex gap-2 align-items-center">
                     <select id="warehouseFlowEntry" class="form-select" style="width:180px" onchange="handleWarehouseFlow(this.value)">
@@ -362,7 +362,7 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Vị trí nhập</label>
-                        <input id="receiptLocationCode" list="locationOptions" class="form-control" placeholder="Để trống: CHUA-XEP">
+                        <input id="receiptLocationCode" list="locationOptions" class="form-control" placeholder="ể trống: CHUA-XEP">
                     </div>
                     <div class="col-md-4"><label class="form-label">Ghi chú phiếu</label><input id="receiptHeaderNote" class="form-control" placeholder="Ví dụ: KCS giao kho, ca sáng"></div>
                     <div class="col-md-3 d-flex align-items-end justify-content-md-end"><span class="section-hint">Mã nội bộ + Số lượng là bắt buộc. Mã kế toán có thể thêm sau.</span></div>
@@ -381,7 +381,7 @@
                                 <th style="min-width:130px">Màu sắc</th>
                                 <th style="min-width:110px">Size</th>
                                 <th style="min-width:120px" class="text-end">Số lượng</th>
-                                <th style="min-width:90px">Đvt</th>
+                                <th style="min-width:90px">vt</th>
                                 <th style="min-width:160px">Lệnh sản xuất</th>
                                 <th style="min-width:180px">Ghi chú dòng</th>
                             </tr>
@@ -411,7 +411,7 @@
             <div class="panel-header">
                 <div>
                     <h2 class="panel-title">Danh sách phiếu nhập thành phẩm</h2>
-                    <div id="receiptListSummary" class="section-hint mt-1">Mỗi dòng là một phiếu cha, bên trong có nhiều dòng hàng.</div>
+                    <div id="receiptListSummary" class="section-hint mt-1">Mỗi dòng là một phiếu cha, bên trong có nhiu dòng hàng.</div>
                 </div>
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="loadReceipts()"><i data-lucide="refresh-cw"></i>Tải lại</button>
             </div>
@@ -426,7 +426,7 @@
                         <input id="receiptFilterDate" type="text" class="form-control date-vn" inputmode="numeric" placeholder="dd/mm/yyyy">
                     </div>
                     <div class="col-md-2">
-                        <button id="clearReceiptFilter" type="button" class="btn btn-outline-secondary w-100">Xóa lọc</button>
+                        <button id="clearReceiptFilter" type="button" class="btn btn-outline-secondary w-100">Xóa lc</button>
                     </div>
                 </div>
             </div>
@@ -464,7 +464,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="locationModalTitle">Lưu vị trí kho</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="óng"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3"><label class="form-label">Vị trí kho</label><input id="editLocationCode" class="form-control" placeholder="A1"></div>
@@ -495,14 +495,14 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <div><h5 class="modal-title">Chuyển vị trí kiện</h5><div id="movePackageTitle" class="text-muted small"></div></div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="óng"></button>
                 </div>
                 <div class="modal-body">
                     <label class="form-label">Vị trí đích</label>
                     <select id="moveTargetLocationId" class="form-select"></select>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">óng</button>
                     <button id="confirmMovePackageBtn" type="button" class="btn btn-primary">Chuyển kiện</button>
                 </div>
             </div>
@@ -513,7 +513,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <div><h5 class="modal-title">Tạo nhanh vị trí kệ</h5><div class="text-muted small">Ví dụ: A đến D, số 1 đến 100 sẽ tạo A1...D100.</div></div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="óng"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row g-2 mb-3">
@@ -522,13 +522,13 @@
                         <div class="col-6"><label class="form-label">Số từ</label><input id="bulkNumberFrom" type="number" min="1" max="999" class="form-control" value="1"></div>
                         <div class="col-6"><label class="form-label">Số đến</label><input id="bulkNumberTo" type="number" min="1" max="999" class="form-control" value="100"></div>
                         <div class="col-12"><label class="form-label">Tầng mặc định</label><select id="bulkTier" class="form-select"><option value="1">Tầng 1</option><option value="2">Tầng 2</option></select></div>
-                        <div class="col-12"><label class="form-label">Tên tiền tố</label><input id="bulkNamePrefix" class="form-control" value="Kệ"></div>
+                        <div class="col-12"><label class="form-label">Tên tin tố</label><input id="bulkNamePrefix" class="form-control" value="Kệ"></div>
                     </div>
                     <div id="bulkLocationPreview" class="section-hint"></div>
                     <div id="bulkLocationStatus" class="small mt-2"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">óng</button>
                     <button id="createBulkLocationsBtn" type="button" class="btn btn-primary btn-icon"><i data-lucide="grid-2x2-plus"></i>Tạo vị trí</button>
                 </div>
             </div>
@@ -538,8 +538,8 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <div><h5 class="modal-title">In QR vị trí hàng loạt</h5><div class="text-muted small">Chọn dãy vị trí đã tạo, ví dụ A đến D và 1 đến 100.</div></div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                    <div><h5 class="modal-title">In QR vị trí hàng loạt</h5><div class="text-muted small">Chn dãy vị trí đã tạo, ví dụ A đến D và 1 đến 100.</div></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="óng"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row g-2 mb-3">
@@ -551,7 +551,7 @@
                     <div id="bulkPrintLocationPreview" class="section-hint"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">óng</button>
                     <button id="printBulkLocationsBtn" type="button" class="btn btn-primary btn-icon"><i data-lucide="printer"></i>Mở trang in</button>
                 </div>
             </div>
@@ -562,7 +562,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <div><h5 class="modal-title">Gán vị trí phiếu nhập</h5><div id="receiptLocationTitle" class="text-muted small"></div></div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="óng"></button>
                 </div>
                 <div class="modal-body">
                     <label class="form-label">Vị trí đích</label>
@@ -570,7 +570,7 @@
                     <div class="section-hint mt-2">Toàn bộ kiện còn tồn thuộc phiếu sẽ được chuyển sang vị trí này.</div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">óng</button>
                     <button id="confirmReceiptLocationBtn" type="button" class="btn btn-primary btn-icon"><i data-lucide="map-pin-check"></i>Lưu vị trí</button>
                 </div>
             </div>
@@ -739,12 +739,15 @@
 
         function normalizeVoiceKeyword(text) {
             let normalized = String(text || '').toUpperCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/Đ/g, 'D')
                 .replace(/[.,?!:;]/g, ' ')
                 .replace(/\s+/g, ' ');
             [
-                'CHO T�I BI?T', 'C�N BAO NHI�U', 'V? TR� N�O', 'M� N?I B?',
-                'KI?M TRA', 'TRA C?U', 'M� H�NG', 'T?N KHO', 'K? N�O',
-                'N?M ?', '? ��U', 'BAO NHI�U', 'V? TR�', 'T�M', 'M�', 'T?N', 'N?M', 'K?'
+                'CHO TOI BIET', 'CAN BAO NHIEU', 'VI TRI NAO', 'MA NOI BO',
+                'KIEM TRA', 'TRA CUU', 'MA HANG', 'TON KHO', 'KE NAO',
+                'NAM O', 'O DAU', 'BAO NHIEU', 'VI TRI', 'TIM', 'MA', 'TEN', 'NAM', 'KE'
             ].forEach(phrase => {
                 normalized = normalized.split(phrase).join(' ');
             });
@@ -775,7 +778,7 @@
                 return;
             }
 
-            resultBox.textContent = `Đang tìm ${keyword}...`;
+            resultBox.textContent = `ang tìm ${keyword}...`;
             fetch(`/api/kiem-ton-kho/tra-cuu-giong-noi?keyword=${encodeURIComponent(keyword)}`)
                 .then(r => jsonOrError(r, 'Không tra cứu được tồn kho'))
                 .then(result => {
@@ -814,7 +817,7 @@
             const resultBox = document.getElementById('voiceLookupResult');
 
             if (!SpeechRecognition) {
-                resultBox.textContent = 'Trình duyệt không hỗ trợ nhận diện giọng nói. Hãy dùng Chrome hoặc Edge.';
+                resultBox.textContent = 'Trình duyệt không hỗ trợ nhận diện ging nói. Hãy dùng Chrome hoặc Edge.';
                 return;
             }
 
@@ -828,7 +831,7 @@
             voiceRecognition.interimResults = false;
             voiceRecognition.maxAlternatives = 3;
             button.classList.add('is-listening');
-            resultBox.textContent = 'Đang nghe...';
+            resultBox.textContent = 'ang nghe...';
 
             voiceRecognition.onresult = event => {
                 const transcript = event.results[0][0].transcript;
@@ -837,7 +840,7 @@
             };
             voiceRecognition.onerror = event => {
                 resultBox.textContent = event.error === 'not-allowed'
-                    ? 'Chưa được cấp quyền micro cho trình duyệt.'
+                    ? 'Chưa được cấp quyn micro cho trình duyệt.'
                     : 'Không nghe rõ. Hãy thử nói lại.';
             };
             voiceRecognition.onend = () => {
@@ -1294,7 +1297,7 @@
 
             document.querySelector('#receiptEntryRows .receipt-quantity')?.focus();
             scheduleReceiptDuplicateCheck();
-            showWarehouseToast('Đã nạp phiếu xuất BTP', 'Kiểm lại số lượng, vị trí nhập rồi bấm Lưu + in.');
+            showWarehouseToast('ã nạp phiếu xuất BTP', 'Kiểm lại số lượng, vị trí nhập rồi bấm Lưu + in.');
         }
 
         function loadReceiptFromIssue(issueId) {
@@ -1327,12 +1330,12 @@
             const location = selectedLocation();
             if (!location) {
                 if (!value('locationCode')) {
-                    document.getElementById('entryLocationContext').textContent = 'Chưa chọn vị trí: kiện sẽ lưu vào CHUA-XEP để xếp kệ sau.';
+                    document.getElementById('entryLocationContext').textContent = 'Chưa chn vị trí: kiện sẽ lưu vào CHUA-XEP để xếp kệ sau.';
                 }
                 return;
             }
             document.getElementById('locationCode').value = location.location_code;
-            document.getElementById('entryLocationContext').textContent = `Đang nhập tại ${location.location_code} · Kho ${location.warehouse_code || '-'}`;
+            document.getElementById('entryLocationContext').textContent = `ang nhập tại ${location.location_code} · Kho ${location.warehouse_code || '-'}`;
         }
 
         function setLocationStatus(message, isError = false) {
@@ -1455,7 +1458,7 @@
                     <div class="layout-block-meta">Kệ ${escapeHtml(location.shelf_code || shelfCodeForLocation(location.location_code))} - Tầng ${escapeHtml(location.tier || 1)}${location.bay_code ? ` - Ô ${escapeHtml(location.bay_code)}` : ''}</div>
                     ${packages.length ? `<div class="layout-block-count">${packages.length}</div><div class="layout-block-stock">SL ${formatNumber(totalQuantity)}</div><div class="layout-stock-hover"><div class="layout-stock-title"><span>${escapeHtml(location.location_code)}</span><span>${formatNumber(totalQuantity)}</span></div>${hoverRows}</div>` : ''}
                 </div>`;
-            }).join('') || '<div class="layout-empty-note">Không có vị trí nào có hàng theo bộ lọc hiện tại.</div>';
+            }).join('') || '<div class="layout-empty-note">Không có vị trí nào có hàng theo bộ lc hiện tại.</div>';
             applyLayoutEditorSettings();
         }
         function saveLocationLayout(locationId, gridX, gridY, gridW, gridH) {
@@ -1655,13 +1658,13 @@
 
         function renderReceiptRow(receipt) {
             const receiptStatus = receipt.issue_status === 'exported'
-                ? `<span class="badge text-bg-success">Đã xuất hết · ${formatNumber(receipt.fifo_issued_quantity || 0)}</span>`
+                ? `<span class="badge text-bg-success">ã xuất hết · ${formatNumber(receipt.fifo_issued_quantity || 0)}</span>`
                 : receipt.issue_status === 'partial_exported'
                     ? `<span class="badge text-bg-warning">Xuất một phần · còn ${formatNumber(receipt.fifo_remaining_quantity || 0)}</span>`
                     : '<span class="badge text-bg-secondary">Chưa xuất</span>';
             const issueButtonLabel = receipt.issue_print_url
                 ? 'In PXTP'
-                : (receipt.issue_status === 'exported' ? 'Đã FIFO' : 'Xuất TP');
+                : (receipt.issue_status === 'exported' ? 'ã FIFO' : 'Xuất TP');
             const issueButtonIcon = receipt.issue_print_url
                 ? 'file-check-2'
                 : (receipt.issue_status === 'exported' ? 'check-circle-2' : 'send');
@@ -1700,8 +1703,8 @@
             if (value('receiptKeyword')) params.set('keyword', value('receiptKeyword'));
             fetch(`/api/kiem-ton-kho/phieu-nhap-tp?${params}`).then(r => r.json()).then(result => {
                 const rows = result.data || [];
-                document.getElementById('receiptRows').innerHTML = rows.map(renderReceiptRow).join('') || '<tr><td colspan="8" class="empty-state text-center">Chưa có phiếu nhập trong ngày/kho đang chọn</td></tr>';
-                document.getElementById('receiptListSummary').textContent = `${formatNumber(result.summary?.receipt_count || 0)} phiếu · ${formatNumber(result.summary?.line_count || 0)} dòng · SL ${formatNumber(result.summary?.total_quantity || 0)} · Đã xuất hết ${formatNumber(result.summary?.exported_count || 0)}`;
+                document.getElementById('receiptRows').innerHTML = rows.map(renderReceiptRow).join('') || '<tr><td colspan="8" class="empty-state text-center">Chưa có phiếu nhập trong ngày/kho đang chn</td></tr>';
+                document.getElementById('receiptListSummary').textContent = `${formatNumber(result.summary?.receipt_count || 0)} phiếu · ${formatNumber(result.summary?.line_count || 0)} dòng · SL ${formatNumber(result.summary?.total_quantity || 0)} · ã xuất hết ${formatNumber(result.summary?.exported_count || 0)}`;
                 refreshIcons();
             });
         }
@@ -1710,10 +1713,10 @@
             const rows = document.getElementById('locationContentRows');
             const summary = document.getElementById('locationSummary');
             const location = selectedLocation();
-            document.getElementById('selectedLocationTitle').textContent = locationCode || 'chưa chọn vị trí';
+            document.getElementById('selectedLocationTitle').textContent = locationCode || 'chưa chn vị trí';
             document.getElementById('selectedLocationName').textContent = location?.location_name || '';
             if (!locationCode) {
-                rows.innerHTML = '<tr><td colspan="7" class="empty-state text-center">Chọn vị trí để xem hàng đang chứa</td></tr>';
+                rows.innerHTML = '<tr><td colspan="7" class="empty-state text-center">Chn vị trí để xem hàng đang chứa</td></tr>';
                 summary.innerHTML = '';
                 return;
             }
@@ -1738,7 +1741,7 @@
 
         function saveCatalogStockFromLocation(code) {
             const item = (locationContentsCache || []).find(row => String(row.internal_item_code || '') === String(code));
-            if (!item) return alert('Không tìm thấy mã danh mục trong kệ đang chọn.');
+            if (!item) return alert('Không tìm thấy mã danh mục trong kệ đang chn.');
             const quantity = Number(prompt(`Nhập số lượng tồn cho ${item.internal_item_code}${item.catalog_unit ? ` (${item.catalog_unit})` : ''}`, ''));
             if (!quantity || quantity <= 0) return;
             fetch('/api/kiem-ton-kho/kien', {
@@ -1773,7 +1776,7 @@
                 })
             }).then(r => jsonOrError(r, 'Không lưu được vị trí'))
               .then(result => {
-                  setLocationStatus(`Đã lưu ${result.data.location_code}`);
+                  setLocationStatus(`ã lưu ${result.data.location_code}`);
                   document.getElementById('locationCode').value = result.data.location_code;
                   document.getElementById('receiptLocationCode').value = result.data.location_code;
                   loadLocations();
@@ -1810,7 +1813,7 @@
             const status = document.getElementById('bulkLocationStatus');
             button.disabled = true;
             status.className = 'small mt-2 text-muted';
-            status.textContent = 'Đang tạo vị trí...';
+            status.textContent = 'ang tạo vị trí...';
             fetch('/api/kiem-ton-kho/vi-tri/tao-nhanh', {
                 method: 'POST',
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
@@ -1819,7 +1822,7 @@
               .then(result => {
                   const data = result.data || {};
                   status.className = 'small mt-2 text-success';
-                  status.textContent = `Tạo mới ${formatNumber(data.created || 0)}, cập nhật ${formatNumber(data.updated || 0)}, bỏ qua ${formatNumber(data.skipped || 0)} vị trí đã có.`;
+                  status.textContent = `Tạo mới ${formatNumber(data.created || 0)}, cập nhật ${formatNumber(data.updated || 0)}, b qua ${formatNumber(data.skipped || 0)} vị trí đã có.`;
                   return loadLocations().then(() => {
                       renderLocations();
                       loadWarehouseMap();
@@ -1860,7 +1863,7 @@
             const lines = collectReceiptLines();
             const validLines = lines.filter(line => line.internal_item_code && Number(line.quantity || 0) > 0);
             if (!validLines.length) return alert('Nhập ít nhất 1 dòng có Mã nội bộ và Số lượng lớn hơn 0. Mã kế toán có thể thêm sau.');
-            if (!value('receiptDate')) return alert('Chọn ngày nhập kho.');
+            if (!value('receiptDate')) return alert('Chn ngày nhập kho.');
             const printWindow = window.open('', '_blank');
             await warnReceiptDuplicates(validLines);
 
@@ -1900,7 +1903,7 @@
 
         document.getElementById('packageRows').addEventListener('click', event => {
             const button = event.target.closest('.delete-package-btn');
-            if (!button || !confirm(`Xóa kiện ${button.dataset.code}? Số lượng sẽ được trừ khỏi đối chiếu tồn.`)) return;
+            if (!button || !confirm(`Xóa kiện ${button.dataset.code}? Số lượng sẽ được trừ khi đối chiếu tồn.`)) return;
             fetch(`/api/kiem-ton-kho/kien/${button.dataset.id}`, {
                 method: 'DELETE', headers: {'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
             }).then(r => jsonOrError(r, 'Không xóa được kiện'))
@@ -1925,7 +1928,7 @@
                     return;
                 }
 
-                const receiver = prompt(`Khách hàng/người nhận cho phiếu xuất TP từ ${issueButton.dataset.code}:`, 'Khách hàng');
+                const receiver = prompt(`Khách hàng/ngưi nhận cho phiếu xuất TP từ ${issueButton.dataset.code}:`, 'Khách hàng');
                 if (receiver === null) return;
                 if (!confirm(`Tạo phiếu xuất thành phẩm cho khách từ toàn bộ dòng của ${issueButton.dataset.code}? Phiếu này sẽ trừ tồn nội bộ.`)) return;
 
@@ -2042,13 +2045,13 @@
         document.getElementById('layoutBackgroundInput')?.addEventListener('change', event => {
             const file = event.target.files?.[0];
             if (!file) return;
-            if (!file.type.startsWith('image/')) return alert('Chọn file ảnh sơ đồ kho.');
+            if (!file.type.startsWith('image/')) return alert('Chn file ảnh sơ đồ kho.');
             const reader = new FileReader();
             reader.onload = () => {
                 layoutBackgroundImage = String(reader.result || '');
                 localStorage.setItem('warehouseLayoutBackground', layoutBackgroundImage);
                 applyLayoutEditorSettings();
-                setLayoutSaveStatus('Đã thêm background sơ đồ.', 'success');
+                setLayoutSaveStatus('ã thêm background sơ đồ.', 'success');
             };
             reader.readAsDataURL(file);
         });
@@ -2056,7 +2059,7 @@
             layoutBackgroundImage = '';
             localStorage.removeItem('warehouseLayoutBackground');
             applyLayoutEditorSettings();
-            setLayoutSaveStatus('Đã xóa background.', 'secondary');
+            setLayoutSaveStatus('ã xóa background.', 'secondary');
         });
         document.getElementById('layoutBackgroundOpacity')?.addEventListener('input', event => {
             layoutBackgroundOpacity = Number(event.target.value || 36);
@@ -2091,7 +2094,7 @@
                 gridH: layout.h,
             };
             block.classList.add('is-dragging');
-            setLayoutSaveStatus(`Đang kéo ${location.location_code}...`, 'primary');
+            setLayoutSaveStatus(`ang kéo ${location.location_code}...`, 'primary');
             block.setPointerCapture(event.pointerId);
         });
         document.getElementById('layoutEditor').addEventListener('pointermove', event => {
@@ -2121,14 +2124,14 @@
             draggingLayout = null;
             const hint = document.getElementById('layoutDragHint');
             if (hint) hint.style.display = 'none';
-            setLayoutSaveStatus(`Đang lưu ${currentDrag.location.location_code}...`, 'primary');
+            setLayoutSaveStatus(`ang lưu ${currentDrag.location.location_code}...`, 'primary');
             saveLocationLayout(currentDrag.location.id, nextX, nextY, currentDrag.gridW, currentDrag.gridH)
                 .then(result => {
                     const index = locations.findIndex(item => item.id === result.data.id);
                     if (index >= 0) locations[index] = result.data;
                     renderLayoutEditor();
                     applyLayoutEditorSettings();
-                    setLayoutSaveStatus(`Đã lưu ${result.data.location_code}.`, 'success');
+                    setLayoutSaveStatus(`ã lưu ${result.data.location_code}.`, 'success');
                 })
                 .catch(error => {
                     alert(error.message);
@@ -2223,6 +2226,8 @@
         const pageParams = new URLSearchParams(window.location.search);
         const requestedView = pageParams.get('view');
         const requestedIssue = pageParams.get('from_issue');
+        const requestedKeyword = pageParams.get('keyword');
+        if (requestedKeyword) document.getElementById('receiptKeyword').value = requestedKeyword;
         switchWorkspace(requestedView === 'map' ? 'editor' : (['entry', 'receipts', 'history', 'overview', 'editor'].includes(requestedView) ? requestedView : 'entry'));
         const requestedLocation = pageParams.get('location_code');
         if (requestedLocation) document.getElementById('locationCode').value = requestedLocation.toUpperCase();
@@ -2240,6 +2245,7 @@
     </script>
 </body>
 </html>
+
 
 
 

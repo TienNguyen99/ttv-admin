@@ -291,7 +291,7 @@
             const segments = [
                 { label: 'Có vị trí', value: positiveAssigned, color: '#15803d' },
                 { label: 'Chưa xếp', value: unassigned, color: '#d97706' },
-                { label: 'Âm tồn', value: negative, color: '#b91c1c' },
+                { label: '�m tn', value: negative, color: '#b91c1c' },
                 { label: 'Thiếu danh mục', value: missingCatalog, color: '#0f5fa8' },
             ];
             document.getElementById('stockStatusMeta').textContent = `${dashboardNum(stockRows.length)} dòng tồn`;

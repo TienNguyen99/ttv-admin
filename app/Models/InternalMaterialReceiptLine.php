@@ -22,6 +22,9 @@ class InternalMaterialReceiptLine extends Model
         'dvt',
         'ordered_quantity',
         'quantity',
+        'base_quantity',
+        'base_dvt',
+        'unit_factor',
         'location_code',
         'internal_item_code',
         'size',
@@ -34,6 +37,8 @@ class InternalMaterialReceiptLine extends Model
     protected $casts = [
         'ordered_quantity' => 'float',
         'quantity' => 'float',
+        'base_quantity' => 'float',
+        'unit_factor' => 'float',
     ];
 
     public function receipt()

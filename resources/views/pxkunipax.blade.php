@@ -52,7 +52,7 @@
                     <th>Back lỗi</th>
                     <th>Ghi chú</th>
                     <th>S2315CA1028+GFU</th>
-                    <th>TỔNG HỢP MÃ KHÁC</th>
+                    <th>TNG HP M� KH�C</th>
                 </tr>
             </thead>
             <tbody>

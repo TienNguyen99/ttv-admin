@@ -51,7 +51,7 @@
         </div>
 
         <section class="quality-grid">
-            <article class="quality-card"><div class="quality-card__label">Âm tồn</div><div id="negativeCount" class="quality-card__value">0</div></article>
+            <article class="quality-card"><div class="quality-card__label">�m tn</div><div id="negativeCount" class="quality-card__value">0</div></article>
             <article class="quality-card"><div class="quality-card__label">Chưa xếp vị trí</div><div id="unassignedCount" class="quality-card__value">0</div></article>
             <article class="quality-card"><div class="quality-card__label">Thiếu danh mục</div><div id="catalogCount" class="quality-card__value">0</div></article>
             <article class="quality-card"><div class="quality-card__label">Nhiều vị trí</div><div id="multiLocationCount" class="quality-card__value">0</div></article>

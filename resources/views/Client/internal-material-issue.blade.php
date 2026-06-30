@@ -916,8 +916,8 @@
                             <div class="d-flex justify-content-between align-items-center gap-1">
                                 <strong>C${index + 1}</strong>
                                 <div class="paste-map-tools">
-                                    <button type="button" class="paste-map-left" data-index="${index}" title="Dich mapping sang trai">�</button>
-                                    <button type="button" class="paste-map-right" data-index="${index}" title="Dich mapping sang phai">�</button>
+                                    <button type="button" class="paste-map-left" data-index="${index}" title="Dich mapping sang trai">&larr;</button>
+                                    <button type="button" class="paste-map-right" data-index="${index}" title="Dich mapping sang phai">&rarr;</button>
                                 </div>
                             </div>
                             <select class="form-select form-select-sm paste-map-select" data-index="${index}">
@@ -1534,7 +1534,13 @@
             document.getElementById('topIssueKeyword').value = event.target.value;
         });
 
-        const requestedType = new URLSearchParams(window.location.search).get('type');
+        const pageParams = new URLSearchParams(window.location.search);
+        const requestedType = pageParams.get('type');
+        const requestedKeyword = pageParams.get('keyword');
+        if (requestedKeyword) {
+            document.getElementById('keyword').value = requestedKeyword;
+            document.getElementById('topIssueKeyword').value = requestedKeyword;
+        }
         document.getElementById('pasteColumnGuide').textContent = pastePresets.UNIPAX.guide;
         document.getElementById('issueType').value = requestedType === 'customer' ? 'customer' : 'production';
         applyIssueType(document.getElementById('issueType').value);
@@ -1544,6 +1550,7 @@
     </script>
 </body>
 </html>
+
 
 
 

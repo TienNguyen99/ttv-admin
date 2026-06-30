@@ -11,36 +11,17 @@ class PantoneColorMatcher
 
     private array $byCode = [];
 
+    private array $byName = [];
+
+    private array $nameKeys = [];
+
     public function __construct()
     {
-        $path = storage_path('app/pantone-colors.json');
-        if (!is_file($path)) {
-            $path = resource_path('data/pantone-colors.json');
-        }
-        if (!is_file($path)) {
-            return;
-        }
+        $this->loadPantoneColors();
+        $this->loadTcxColors();
 
-        $json = json_decode((string) file_get_contents($path), true);
-        if (!is_array($json)) {
-            return;
-        }
-
-        foreach ($json as $row) {
-            $pantone = trim((string) ($row['pantone'] ?? ''));
-            $hex = strtolower(trim((string) ($row['hex'] ?? '')));
-            if ($pantone === '' || !$this->isHex($hex)) {
-                continue;
-            }
-
-            $color = [
-                'pantone' => strtoupper($pantone),
-                'hex' => $hex,
-            ];
-
-            $this->colors[] = $color;
-            $this->byCode[$this->normalizePantoneCode($pantone)] = $color;
-        }
+        $this->nameKeys = array_keys($this->byName);
+        usort($this->nameKeys, fn ($a, $b) => strlen($b) <=> strlen($a));
     }
 
     public function matchCatalog(?InternalItemCatalog $catalog): array
@@ -102,17 +83,54 @@ class PantoneColorMatcher
             return $this->emptyMatch();
         }
 
+        if (preg_match_all('/\b([0-9]{2})\s*[- ]\s*([0-9]{4})(?:\s*(TCX|TPX|TPG))?\b/i', $text, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $suffix = $match[3] ?? '';
+                $keys = [
+                    $this->normalizePantoneCode($match[1] . '-' . $match[2] . ' ' . $suffix),
+                    $this->normalizePantoneCode($match[1] . '-' . $match[2] . ' TCX'),
+                    $this->normalizePantoneCode($match[1] . '-' . $match[2]),
+                ];
+
+                foreach ($keys as $key) {
+                    if (isset($this->byCode[$key])) {
+                        return array_merge($this->byCode[$key], ['source' => 'text']);
+                    }
+                }
+            }
+        }
+
         if (preg_match_all('/(?:PANTONE|PMS)?\s*([0-9]{2,4})\s*[- ]?\s*([A-Z]{1,4})\b/i', $text, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 $key = $this->normalizePantoneCode($match[1] . $match[2]);
                 if (isset($this->byCode[$key])) {
-                    return $this->byCode[$key] + ['source' => 'text'];
+                    return array_merge($this->byCode[$key], ['source' => 'text']);
                 }
             }
         }
 
         $key = $this->normalizePantoneCode($text);
-        return $this->byCode[$key] ?? $this->emptyMatch();
+        if (isset($this->byCode[$key])) {
+            return array_merge($this->byCode[$key], ['source' => 'text']);
+        }
+
+        return $this->matchColorName($text);
+    }
+
+    private function matchColorName(string $text): array
+    {
+        if (empty($this->nameKeys)) {
+            return $this->emptyMatch();
+        }
+
+        $haystack = ' ' . $this->normalizeSearch($text) . ' ';
+        foreach ($this->nameKeys as $nameKey) {
+            if ($nameKey !== '' && strpos($haystack, ' ' . $nameKey . ' ') !== false) {
+                return array_merge($this->byName[$nameKey], ['source' => 'color_name']);
+            }
+        }
+
+        return $this->emptyMatch();
     }
 
     private function matchCommonColor(array $values): array
@@ -181,6 +199,93 @@ class PantoneColorMatcher
     private function isHex(string $value): bool
     {
         return (bool) preg_match('/^#[0-9a-f]{6}$/i', trim($value));
+    }
+
+    private function normalizeHex(string $value): string
+    {
+        $value = strtolower(trim($value));
+        if ($value !== '' && $value[0] !== '#') {
+            $value = '#' . $value;
+        }
+
+        return $this->isHex($value) ? $value : '';
+    }
+
+    private function loadPantoneColors(): void
+    {
+        $json = $this->readJson('pantone-colors.json');
+        if (!is_array($json)) {
+            return;
+        }
+
+        foreach ($json as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $this->registerColor(
+                trim((string) ($row['pantone'] ?? '')),
+                (string) ($row['hex'] ?? '')
+            );
+        }
+    }
+
+    private function loadTcxColors(): void
+    {
+        $json = $this->readJson('pantone-tcx.json');
+        if (!is_array($json)) {
+            return;
+        }
+
+        foreach ($json as $code => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $name = trim((string) ($row['name'] ?? ''));
+            $displayCode = strtoupper(trim((string) $code)) . ' TCX';
+            $this->registerColor($displayCode, (string) ($row['hex'] ?? ''), $name);
+        }
+    }
+
+    private function readJson(string $fileName): ?array
+    {
+        $path = storage_path('app/' . $fileName);
+        if (!is_file($path)) {
+            $path = resource_path('data/' . $fileName);
+        }
+        if (!is_file($path)) {
+            return null;
+        }
+
+        $json = json_decode((string) file_get_contents($path), true);
+        return is_array($json) ? $json : null;
+    }
+
+    private function registerColor(string $pantone, string $hex, string $name = ''): void
+    {
+        $pantone = trim($pantone);
+        $hex = $this->normalizeHex($hex);
+        if ($pantone === '' || $hex === '') {
+            return;
+        }
+
+        $color = [
+            'pantone' => strtoupper($pantone),
+            'hex' => $hex,
+        ];
+
+        $this->colors[] = $color;
+        $this->byCode[$this->normalizePantoneCode($pantone)] = $color;
+
+        if (preg_match('/^([0-9]{2})-([0-9]{4})\s+TCX$/i', $pantone, $match)) {
+            $this->byCode[$this->normalizePantoneCode($match[1] . '-' . $match[2])] = $color;
+        }
+
+        $nameKey = $this->normalizeSearch($name);
+        if ($nameKey !== '') {
+            $this->byName[$nameKey] = $color;
+        }
     }
 
     private function emptyMatch(): array

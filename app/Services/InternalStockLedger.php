@@ -9,6 +9,30 @@ class InternalStockLedger
 {
     public function query(string $monthStart, string $monthEnd): Builder
     {
+        $catalogOpening = DB::connection('internal')->table('internal_item_catalogs as c')
+            ->select(
+                DB::raw("'' as warehouse_code"),
+                DB::raw("COALESCE(NULLIF(c.shelf_code, ''), 'CHUA-XEP') as location_code"),
+                DB::raw("'' as ma_hh"),
+                DB::raw("COALESCE(c.item_code, '') as internal_item_code"),
+                DB::raw("COALESCE(c.size, '') as size"),
+                DB::raw("COALESCE(c.color, '') as color"),
+                DB::raw("COALESCE(c.side, '') as side"),
+                DB::raw('SUM(c.opening_quantity) as opening_quantity'),
+                DB::raw('0 as receipt_quantity'),
+                DB::raw('0 as issue_quantity')
+            )
+            ->where('c.is_active', true)
+            ->whereRaw('COALESCE(c.opening_quantity, 0) <> 0')
+            ->whereRaw("TRIM(COALESCE(c.item_code, '')) <> ''")
+            ->whereNotExists(function ($query) use ($monthStart) {
+                $query->select(DB::raw(1))
+                    ->from('internal_opening_stocks as os')
+                    ->whereDate('os.period_month', '<=', $monthStart)
+                    ->whereRaw("UPPER(TRIM(COALESCE(os.internal_item_code, ''))) = UPPER(TRIM(COALESCE(c.item_code, '')))");
+            })
+            ->groupBy('c.shelf_code', 'c.item_code', 'c.size', 'c.color', 'c.side');
+
         $openingAdjustments = DB::connection('internal')->table('internal_opening_stocks')
             ->select(
                 'warehouse_code',
@@ -27,7 +51,7 @@ class InternalStockLedger
 
         $receiptsBeforeMonth = $this->receiptQuery()
             ->addSelect(
-                DB::raw('SUM(l.quantity) as opening_quantity'),
+                DB::raw('SUM(COALESCE(l.base_quantity, l.quantity)) as opening_quantity'),
                 DB::raw('0 as receipt_quantity'),
                 DB::raw('0 as issue_quantity')
             )
@@ -44,7 +68,7 @@ class InternalStockLedger
 
         $issuesBeforeMonth = $this->issueQuery()
             ->addSelect(
-                DB::raw('SUM(-l.quantity) as opening_quantity'),
+                DB::raw('SUM(-COALESCE(l.base_quantity, l.quantity)) as opening_quantity'),
                 DB::raw('0 as receipt_quantity'),
                 DB::raw('0 as issue_quantity')
             )
@@ -54,7 +78,7 @@ class InternalStockLedger
         $receiptsThisMonth = $this->receiptQuery()
             ->addSelect(
                 DB::raw('0 as opening_quantity'),
-                DB::raw('SUM(l.quantity) as receipt_quantity'),
+                DB::raw('SUM(COALESCE(l.base_quantity, l.quantity)) as receipt_quantity'),
                 DB::raw('0 as issue_quantity')
             )
             ->whereBetween('r.receipt_date', [$monthStart, $monthEnd])
@@ -72,14 +96,15 @@ class InternalStockLedger
             ->addSelect(
                 DB::raw('0 as opening_quantity'),
                 DB::raw('0 as receipt_quantity'),
-                DB::raw('SUM(l.quantity) as issue_quantity')
+                DB::raw('SUM(COALESCE(l.base_quantity, l.quantity)) as issue_quantity')
             )
             ->whereBetween('i.issue_date', [$monthStart, $monthEnd])
             ->groupBy('i.warehouse_code', 'l.location_code', 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color', 'l.side');
 
         return DB::connection('internal')->query()
             ->fromSub(
-                $openingAdjustments
+                $catalogOpening
+                    ->unionAll($openingAdjustments)
                     ->unionAll($receiptsBeforeMonth)
                     ->unionAll($issuesBeforeMonth)
                     ->unionAll($receiptsThisMonth)

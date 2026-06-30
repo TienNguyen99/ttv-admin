@@ -15,6 +15,7 @@ use App\Services\InternalBtpOrderMatcher;
 use App\Services\InternalCatalogValidator;
 use App\Services\InternalDocumentNumber;
 use App\Services\InternalStockLedger;
+use App\Services\InternalUnitConverter;
 use App\Services\PantoneColorMatcher;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -1775,7 +1776,7 @@ class WarehouseCountController extends Controller
             ->first(fn ($value) => preg_match('/\d/', $value) || strlen($value) >= 4);
 
         if (!$keyword) {
-            $keyword = preg_replace('/^(TON|TỒN|MA|MÃ|HANG|HÀNG|KE|KỆ|VI|VỊ|TRI|TRÍ)+/u', '', $normalized);
+            $keyword = preg_replace('/^(TON|TN|MA|M�|HANG|H�NG|KE|K|VI|V|TRI|TR�)+/u', '', $normalized);
         }
         $request->query->set('keyword', $keyword ?: $normalized);
 
@@ -2323,7 +2324,9 @@ class WarehouseCountController extends Controller
                 return mb_strtoupper(trim((string) $item->item_code));
             });
 
-        [$receipt, $packages] = DB::connection('internal')->transaction(function () use ($data, $lines, $locationCode, $receiptLocationCode, $warehouseCode, $catalogItems, $internalCatalogItems) {
+        $unitConverter = app(InternalUnitConverter::class);
+
+        [$receipt, $packages] = DB::connection('internal')->transaction(function () use ($data, $lines, $locationCode, $receiptLocationCode, $warehouseCode, $catalogItems, $internalCatalogItems, $unitConverter) {
             $location = WarehouseLocation::query()->firstOrCreate(
                 ['location_code' => $locationCode],
                 [
@@ -2409,6 +2412,13 @@ class WarehouseCountController extends Controller
                     'checked_at' => $data['checked_at'],
                 ];
 
+                $base = $unitConverter->toBase(
+                    $line['internal_item_code'],
+                    (float) $line['quantity'],
+                    $line['dvt'],
+                    $line['dvt']
+                );
+
                 $count = InternalInventoryCount::query()->firstOrCreate(
                     $attributes,
                     [
@@ -2417,7 +2427,7 @@ class WarehouseCountController extends Controller
                     ]
                 );
 
-                $count->counted_quantity = (float) $count->counted_quantity + (float) $line['quantity'];
+                $count->counted_quantity = (float) $count->counted_quantity + (float) $base['quantity'];
                 $count->note = $line['note'] ?: $count->note;
                 $count->save();
 
@@ -2425,7 +2435,7 @@ class WarehouseCountController extends Controller
                     'package_code' => $this->nextPackageCode(),
                     'warehouse_location_id' => $lineLocation->id,
                     'inventory_count_id' => $count->id,
-                    'quantity' => $line['quantity'],
+                    'quantity' => $base['quantity'],
                     'note' => $line['note'] ?: null,
                 ]));
 
@@ -2453,6 +2463,9 @@ class WarehouseCountController extends Controller
                     'dvt' => $line['dvt'] ?: ($internalCatalogItem->unit ?? ($catalogItem->Dvt ?? '')),
                     'ordered_quantity' => $line['ordered_quantity'] ?: null,
                     'quantity' => $line['quantity'],
+                    'base_quantity' => $base['quantity'],
+                    'base_dvt' => $base['unit'],
+                    'unit_factor' => $base['factor'],
                     'location_code' => $lineLocation->location_code,
                     'internal_item_code' => $line['internal_item_code'],
                     'size' => $line['size'],
@@ -2609,7 +2622,7 @@ class WarehouseCountController extends Controller
         foreach ($receipt->lines as $receiptLine) {
             $package = $this->resolveReceiptLinePackage($receiptLine);
 
-            if (!$package || (float) $package->quantity + 0.0001 < (float) $receiptLine->quantity) {
+            if (!$package || (float) $package->quantity + 0.0001 < (float) ($receiptLine->base_quantity ?: $receiptLine->quantity)) {
                 return response()->json([
                     'message' => 'Không thể sửa phiếu nhập vì một phần hàng đã được xuất kho hoặc thay đổi. Hãy hoàn/xóa phiếu xuất liên quan trước.',
                 ], 422);
@@ -2659,7 +2672,9 @@ class WarehouseCountController extends Controller
             ? $lineLocationCodes->first()
             : ($lineLocationCodes->isEmpty() ? $locationCode : '');
 
-        DB::connection('internal')->transaction(function () use ($receipt, $data, $lines, $warehouseCode, $locationCode, $receiptLocationCode) {
+        $unitConverter = app(InternalUnitConverter::class);
+
+        DB::connection('internal')->transaction(function () use ($receipt, $data, $lines, $warehouseCode, $locationCode, $receiptLocationCode, $unitConverter) {
             $receipt->load('lines');
             $oldLocationIds = [];
 
@@ -2745,18 +2760,24 @@ class WarehouseCountController extends Controller
                     'side' => $line['side'],
                     'checked_at' => $data['checked_at'],
                 ];
+                $base = $unitConverter->toBase(
+                    $line['internal_item_code'],
+                    (float) $line['quantity'],
+                    $line['dvt'],
+                    $line['dvt']
+                );
                 $count = InternalInventoryCount::query()->firstOrCreate($attributes, [
                     'counted_quantity' => 0,
                     'note' => $line['note'] ?: ($data['note'] ?? null),
                 ]);
-                $count->counted_quantity = (float) $count->counted_quantity + (float) $line['quantity'];
+                $count->counted_quantity = (float) $count->counted_quantity + (float) $base['quantity'];
                 $count->save();
 
                 $package = InventoryPackage::query()->create(array_merge($attributes, [
                     'package_code' => $this->nextPackageCode(),
                     'warehouse_location_id' => $lineLocation->id,
                     'inventory_count_id' => $count->id,
-                    'quantity' => $line['quantity'],
+                    'quantity' => $base['quantity'],
                     'note' => $line['note'] ?: null,
                 ]));
 
@@ -2771,6 +2792,9 @@ class WarehouseCountController extends Controller
                     'dvt' => $line['dvt'],
                     'ordered_quantity' => $line['ordered_quantity'] ?: null,
                     'quantity' => $line['quantity'],
+                    'base_quantity' => $base['quantity'],
+                    'base_dvt' => $base['unit'],
+                    'unit_factor' => $base['factor'],
                     'location_code' => $lineLocation->location_code,
                     'internal_item_code' => $line['internal_item_code'],
                     'size' => $line['size'],

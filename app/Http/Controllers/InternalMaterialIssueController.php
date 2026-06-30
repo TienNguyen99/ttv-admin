@@ -16,6 +16,7 @@ use App\Services\InternalBtpOrderMatcher;
 use App\Services\InternalCatalogValidator;
 use App\Services\InternalDocumentNumber;
 use App\Services\GoogleSheetInternalCatalog;
+use App\Services\InternalUnitConverter;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -350,6 +351,8 @@ class InternalMaterialIssueController extends Controller
                     $matchedProductionOrders[] = trim((string) $line['production_order']);
                 }
 
+                $base = $this->baseQuantityForLine($line);
+
                 $issueLine = $issue->lines()->create([
                     'production_order_id' => $line['production_order_id'] ?? null,
                     'production_order' => trim($line['production_order'] ?? ''),
@@ -360,6 +363,9 @@ class InternalMaterialIssueController extends Controller
                     'dvt' => trim($line['dvt'] ?? ''),
                     'ordered_quantity' => $line['ordered_quantity'] ?? null,
                     'quantity' => $line['quantity'],
+                    'base_quantity' => $base['quantity'],
+                    'base_dvt' => $base['unit'],
+                    'unit_factor' => $base['factor'],
                     'location_code' => strtoupper(trim($line['location_code'] ?? '')),
                     'internal_item_code' => trim($line['internal_item_code'] ?? ''),
                     'size' => mb_substr(trim($line['size'] ?? ''), 0, 100),
@@ -493,8 +499,12 @@ class InternalMaterialIssueController extends Controller
                     $matchedProductionOrders[] = $line['production_order'];
                 }
 
+                $base = $this->baseQuantityForLine($line);
                 $issueLineData = $line;
                 unset($issueLineData['logo_color']);
+                $issueLineData['base_quantity'] = $base['quantity'];
+                $issueLineData['base_dvt'] = $base['unit'];
+                $issueLineData['unit_factor'] = $base['factor'];
                 $issueLine = $issue->lines()->create($issueLineData);
                 $this->decreaseInternalStock($line, $warehouseCode, $issueLine->id);
             }
@@ -779,10 +789,16 @@ class InternalMaterialIssueController extends Controller
             }
 
             $quantity = (float) ($line['quantity'] ?? 0);
+            $base = app(InternalUnitConverter::class)->toBase(
+                $internalCode,
+                $quantity,
+                trim((string) ($line['dvt'] ?? '')),
+                $catalogItem['unit'] ?? trim((string) ($line['dvt'] ?? ''))
+            );
             $available = (float) $packages->sum('quantity');
             if ($quantity <= 0) {
                 $warnings[] = 'Số lượng xuất chưa hợp lệ.';
-            } elseif (!$isUnipaxReceipt && $available > 0 && $quantity > $available + 0.0001) {
+            } elseif (!$isUnipaxReceipt && $available > 0 && (float) $base['quantity'] > $available + 0.0001) {
                 $warnings[] = 'Số lượng xuất lớn hơn tồn phù hợp.';
             }
 
@@ -824,6 +840,9 @@ class InternalMaterialIssueController extends Controller
                 'dvt' => trim((string) ($line['dvt'] ?? '')) ?: ($catalogItem['unit'] ?? ''),
                 'ordered_quantity' => (float) ($line['ordered_quantity'] ?? 0),
                 'quantity' => $quantity,
+                'base_quantity' => (float) $base['quantity'],
+                'base_dvt' => $base['unit'],
+                'unit_factor' => $base['factor'],
                 'location_code' => $locationCode ?: ($locations->count() === 1 ? $locations->first() : ''),
                 'available_quantity' => $available,
                 'note' => trim((string) ($line['note'] ?? '')),
@@ -926,6 +945,8 @@ class InternalMaterialIssueController extends Controller
             ]);
 
             foreach ($data['lines'] as $line) {
+                $base = $this->baseQuantityForLine($line);
+
                 $issueLine = $issue->lines()->create([
                     'production_order_id' => $line['production_order_id'] ?? null,
                     'production_order' => trim($line['production_order'] ?? ''),
@@ -936,6 +957,9 @@ class InternalMaterialIssueController extends Controller
                     'dvt' => trim($line['dvt'] ?? ''),
                     'ordered_quantity' => $line['ordered_quantity'] ?? null,
                     'quantity' => $line['quantity'],
+                    'base_quantity' => $base['quantity'],
+                    'base_dvt' => $base['unit'],
+                    'unit_factor' => $base['factor'],
                     'location_code' => strtoupper(trim($line['location_code'] ?? '')),
                     'internal_item_code' => trim($line['internal_item_code'] ?? ''),
                     'size' => mb_substr(trim($line['size'] ?? ''), 0, 100),
@@ -1146,9 +1170,22 @@ class InternalMaterialIssueController extends Controller
         }, [$productionOrder, $size, $color]));
     }
 
+    private function baseQuantityForLine(array $line): array
+    {
+        return app(InternalUnitConverter::class)->toBase(
+            trim((string) ($line['internal_item_code'] ?? '')),
+            (float) ($line['quantity'] ?? 0),
+            trim((string) ($line['dvt'] ?? '')),
+            trim((string) ($line['dvt'] ?? ''))
+        );
+    }
+
     private function decreaseInternalStock(array $line, string $warehouseCode, int $issueLineId): void
     {
-        $requestedQuantity = (float) $line['quantity'];
+        $requestedQuantity = (float) ($line['base_quantity'] ?? 0);
+        if ($requestedQuantity <= 0) {
+            $requestedQuantity = (float) $this->baseQuantityForLine($line)['quantity'];
+        }
         $remaining = $requestedQuantity;
         $maHh = strtoupper(trim($line['ma_hh'] ?? ''));
         $locationCode = strtoupper(trim($line['location_code'] ?? ''));
@@ -1410,7 +1447,8 @@ class InternalMaterialIssueController extends Controller
 
         $this->increaseInternalStock([
             'ma_hh' => $line->ma_hh,
-            'quantity' => $line->quantity,
+            'dvt' => $line->base_dvt ?: $line->dvt,
+            'quantity' => $line->base_quantity ?: $line->quantity,
             'location_code' => $line->location_code,
             'internal_item_code' => $line->internal_item_code,
             'size' => $line->size,

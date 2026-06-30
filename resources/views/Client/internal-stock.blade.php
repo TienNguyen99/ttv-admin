@@ -133,7 +133,7 @@
                         <div class="col-md-3"><div class="wms-kpi h-100"><div><div class="wms-kpi__label">Tổng nhập</div><div id="fifoReceiptQty" class="wms-kpi__value">0</div></div></div></div>
                         <div class="col-md-3"><div class="wms-kpi h-100"><div><div class="wms-kpi__label">Tổng xuất</div><div id="fifoIssueQty" class="wms-kpi__value">0</div></div></div></div>
                         <div class="col-md-3"><div class="wms-kpi h-100"><div><div class="wms-kpi__label">Còn lại</div><div id="fifoRemainQty" class="wms-kpi__value">0</div></div></div></div>
-                        <div class="col-md-3"><div class="wms-kpi h-100"><div><div class="wms-kpi__label">Âm tồn</div><div id="fifoOverQty" class="wms-kpi__value text-danger">0</div></div></div></div>
+                        <div class="col-md-3"><div class="wms-kpi h-100"><div><div class="wms-kpi__label">�m tn</div><div id="fifoOverQty" class="wms-kpi__value text-danger">0</div></div></div></div>
                     </div>
                     <h3 class="fs-6 mb-2">Phiếu nhập bị trừ theo thứ tự cũ nhất</h3>
                     <div class="wms-table-wrap mb-3">
@@ -208,7 +208,7 @@
                     ? '<span class="wms-badge wms-badge--secondary">Đã xuất hết</span>'
                     : remaining > 0
                         ? '<span class="wms-badge">Còn tồn</span>'
-                        : '<span class="wms-badge wms-badge--danger">Âm/thiếu</span>';
+                        : '<span class="wms-badge wms-badge--danger">�m/thiu</span>';
                 return `<tr>
                     <td>${esc(lot.document_date || '')}</td>
                     <td class="wms-code">${esc(lot.document_code || '')}</td>
@@ -378,7 +378,7 @@
                         const status = unassigned
                             ? '<span class="wms-badge wms-badge--warning">Chưa xếp</span>'
                             : quantity < 0
-                                ? '<span class="wms-badge wms-badge--danger">Âm tồn</span>'
+                                ? '<span class="wms-badge wms-badge--danger">�m tn</span>'
                                 : '<span class="wms-badge">Có tồn</span>';
                         const locationStatus = row.location_count > 1
                             ? `<span class="wms-badge wms-badge--secondary">${num(row.location_count)} vị trí</span>`

@@ -25,23 +25,10 @@ class InternalItemCatalogController extends Controller
     {
         $keyword = trim((string) $request->query('keyword', ''));
         $limit = min(max((int) $request->query('limit', 500), 1), 2000);
-        $query = InternalItemCatalog::query()->where('is_active', true);
+        $tokens = $this->searchTokens($keyword);
 
-        if ($keyword !== '') {
-            $query->where(function ($q) use ($keyword) {
-                $q->where('item_code', 'like', '%' . $keyword . '%')
-                    ->orWhere('item_name', 'like', '%' . $keyword . '%')
-                    ->orWhere('unit', 'like', '%' . $keyword . '%')
-                    ->orWhere('shelf_code', 'like', '%' . $keyword . '%')
-                    ->orWhere('size', 'like', '%' . $keyword . '%')
-                    ->orWhere('color', 'like', '%' . $keyword . '%')
-                    ->orWhere('logo_color', 'like', '%' . $keyword . '%')
-                    ->orWhere('side', 'like', '%' . $keyword . '%');
-            });
-        }
-
-        $summaryQuery = clone $query;
-        $rows = $query
+        $allRows = InternalItemCatalog::query()
+            ->where('is_active', true)
             ->select([
                 'id',
                 'source_row',
@@ -59,9 +46,13 @@ class InternalItemCatalogController extends Controller
                 'updated_at',
             ])
             ->orderBy('item_code')
-            ->limit($limit)
             ->get();
 
+        $filteredRows = $allRows
+            ->filter(fn ($row) => $this->matchesTokens($this->catalogSearchText($row), $tokens))
+            ->values();
+
+        $rows = $filteredRows->take($limit)->values();
         $matcher = app(PantoneColorMatcher::class);
 
         return response()->json([
@@ -75,9 +66,9 @@ class InternalItemCatalogController extends Controller
                 return $data;
             }),
             'summary' => [
-                'item_count' => (clone $summaryQuery)->count(),
-                'shelf_count' => (clone $summaryQuery)->where('shelf_code', '<>', '')->distinct()->count('shelf_code'),
-                'with_unit_count' => (clone $summaryQuery)->where('unit', '<>', '')->count(),
+                'item_count' => $filteredRows->count(),
+                'shelf_count' => $filteredRows->pluck('shelf_code')->filter()->unique()->count(),
+                'with_unit_count' => $filteredRows->filter(fn ($row) => trim((string) $row->unit) !== '')->count(),
                 'last_synced_at' => InternalItemCatalog::query()->max('updated_at'),
             ],
             'source' => [
@@ -85,6 +76,117 @@ class InternalItemCatalogController extends Controller
                 'sheet' => self::SHEET_NAME,
                 'mode' => 'read_only',
             ],
+        ]);
+    }
+
+    public function invalidDocumentCodes(Request $request)
+    {
+        $keyword = trim((string) $request->query('keyword', ''));
+        $type = trim((string) $request->query('type', 'all'));
+        $limit = min(max((int) $request->query('limit', 500), 1), 2000);
+        $tokens = $this->searchTokens($keyword);
+
+        $receiptRows = collect();
+        if (in_array($type, ['all', 'receipt'], true)) {
+            $receiptRows = DB::connection('internal')
+                ->table('internal_material_receipt_lines as l')
+                ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+                ->leftJoin('internal_item_catalogs as c', function ($join) {
+                    $join->whereRaw("UPPER(TRIM(COALESCE(c.item_code, ''))) = UPPER(TRIM(COALESCE(l.internal_item_code, '')))")
+                        ->where('c.is_active', true);
+                })
+                ->whereRaw("TRIM(COALESCE(l.internal_item_code, '')) <> ''")
+                ->whereNull('c.id')
+                ->select([
+                    DB::raw("'receipt' as document_type"),
+                    'r.id as document_id',
+                    'l.id as line_id',
+                    'r.receipt_code as document_code',
+                    'r.receipt_date as document_date',
+                    'l.internal_item_code',
+                    'l.ma_hh',
+                    'l.ten_hh',
+                    'l.size',
+                    'l.color',
+                    'l.side',
+                    'l.quantity',
+                    'l.location_code',
+                    'l.note',
+                ])
+                ->get();
+        }
+
+        $issueRows = collect();
+        if (in_array($type, ['all', 'issue'], true)) {
+            $issueRows = DB::connection('internal')
+                ->table('internal_material_issue_lines as l')
+                ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+                ->leftJoin('internal_item_catalogs as c', function ($join) {
+                    $join->whereRaw("UPPER(TRIM(COALESCE(c.item_code, ''))) = UPPER(TRIM(COALESCE(l.internal_item_code, '')))")
+                        ->where('c.is_active', true);
+                })
+                ->whereRaw("TRIM(COALESCE(l.internal_item_code, '')) <> ''")
+                ->whereNull('c.id')
+                ->select([
+                    DB::raw("'issue' as document_type"),
+                    'i.id as document_id',
+                    'l.id as line_id',
+                    'i.issue_code as document_code',
+                    'i.issue_date as document_date',
+                    'l.internal_item_code',
+                    'l.ma_hh',
+                    'l.ten_hh',
+                    'l.size',
+                    'l.color',
+                    'l.side',
+                    'l.quantity',
+                    'l.location_code',
+                    'l.note',
+                ])
+                ->get();
+        }
+
+        $allRows = $receiptRows
+            ->concat($issueRows)
+            ->filter(fn ($row) => $this->matchesTokens($this->documentLineSearchText($row), $tokens))
+            ->sortByDesc('document_date')
+            ->values();
+
+        $summary = [
+            'total' => $allRows->count(),
+            'receipt_count' => $allRows->where('document_type', 'receipt')->count(),
+            'issue_count' => $allRows->where('document_type', 'issue')->count(),
+            'unique_code_count' => $allRows->pluck('internal_item_code')->map(fn ($value) => mb_strtoupper(trim((string) $value)))->unique()->count(),
+        ];
+
+        $rows = $allRows
+            ->take($limit)
+            ->map(function ($row) {
+                return [
+                    'document_type' => $row->document_type,
+                    'document_label' => $row->document_type === 'receipt' ? 'Phiếu nhập' : 'Phiếu xuất',
+                    'document_id' => $row->document_id,
+                    'line_id' => $row->line_id,
+                    'document_code' => $row->document_code,
+                    'document_date' => $row->document_date,
+                    'internal_item_code' => $row->internal_item_code,
+                    'ma_hh' => $row->ma_hh,
+                    'ten_hh' => $row->ten_hh,
+                    'size' => $row->size,
+                    'color' => $row->color,
+                    'side' => $row->side,
+                    'quantity' => (float) $row->quantity,
+                    'location_code' => $row->location_code,
+                    'note' => $row->note,
+                    'edit_url' => $row->document_type === 'receipt'
+                        ? url('/client/kiem-ton-kho?view=receipts&keyword=' . rawurlencode($row->document_code))
+                        : url('/client/xuat-vat-tu-noi-bo?keyword=' . rawurlencode($row->document_code)),
+                ];
+            });
+
+        return response()->json([
+            'data' => $rows,
+            'summary' => $summary,
         ]);
     }
 
@@ -247,6 +349,31 @@ class InternalItemCatalogController extends Controller
         ]);
     }
 
+    public function autoSync(Request $request)
+    {
+        $minutes = min(max((int) $request->input('minutes', 30), 5), 1440);
+        $lastSync = InternalItemCatalog::query()->max('updated_at');
+
+        if ($lastSync && now()->diffInMinutes($lastSync) < $minutes) {
+            return response()->json([
+                'message' => 'Danh muc van con moi, chua can dong bo.',
+                'skipped' => true,
+                'data' => [
+                    'last_synced_at' => $lastSync,
+                    'next_sync_at' => \Carbon\Carbon::parse($lastSync)->addMinutes($minutes)->toDateTimeString(),
+                    'active' => InternalItemCatalog::query()->where('is_active', true)->count(),
+                    'sheet' => self::SHEET_NAME,
+                ],
+            ]);
+        }
+
+        $response = $this->sync();
+        $payload = $response->getData(true);
+        $payload['skipped'] = false;
+
+        return response()->json($payload, $response->getStatusCode());
+    }
+
     public function syncShelvesToLocations()
     {
         $shelves = InternalItemCatalog::query()
@@ -352,6 +479,57 @@ class InternalItemCatalogController extends Controller
         $value = Str::ascii(mb_strtolower(trim((string) $value)));
         $value = preg_replace('/[^a-z0-9]+/', ' ', $value);
         return trim(preg_replace('/\s+/', ' ', $value));
+    }
+
+    private function searchTokens($keyword)
+    {
+        return collect(explode(' ', $this->normalizeSearchText($keyword)))
+            ->filter()
+            ->values();
+    }
+
+    private function matchesTokens(string $haystack, $tokens): bool
+    {
+        if ($tokens->isEmpty()) {
+            return true;
+        }
+
+        $haystack = $this->normalizeSearchText($haystack);
+        return $tokens->every(fn ($token) => strpos($haystack, $token) !== false);
+    }
+
+    private function catalogSearchText($row): string
+    {
+        return implode(' ', [
+            $row->item_code,
+            $row->item_name,
+            $row->unit,
+            $row->size,
+            $row->color,
+            $row->logo_color,
+            $row->side,
+            $row->shelf_code,
+            $row->opening_quantity,
+            $row->source_row,
+            is_array($row->raw_data) ? json_encode($row->raw_data, JSON_UNESCAPED_UNICODE) : $row->raw_data,
+        ]);
+    }
+
+    private function documentLineSearchText($row): string
+    {
+        return implode(' ', [
+            $row->document_code,
+            $row->document_date,
+            $row->internal_item_code,
+            $row->ma_hh,
+            $row->ten_hh,
+            $row->size,
+            $row->color,
+            $row->side,
+            $row->quantity,
+            $row->location_code,
+            $row->note,
+        ]);
     }
 
     private function pick(array $row, array $keys): string

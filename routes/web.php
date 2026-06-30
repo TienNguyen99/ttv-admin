@@ -22,6 +22,7 @@ use App\Http\Controllers\InternalBtpProductionOrderController;
 use App\Http\Controllers\InternalFinishedGoodsReceiptController;
 use App\Http\Controllers\InternalMaterialIssueController;
 use App\Http\Controllers\InternalItemCatalogController;
+use App\Http\Controllers\InternalUnitConversionController;
 use App\Http\Controllers\LocalQrCodeController;
 use Google\Service\Dfareporting\Order;
 
@@ -184,9 +185,15 @@ Route::get('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::cl
 Route::put('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'update']);
 Route::delete('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'destroy']);
 Route::get('/client/danh-muc-noi-bo', [InternalItemCatalogController::class, 'index']);
+Route::view('/client/quy-doi-don-vi', 'client.internal-unit-conversions');
 Route::get('/api/danh-muc-noi-bo', [InternalItemCatalogController::class, 'data']);
+Route::get('/api/danh-muc-noi-bo/loi-ma-phieu', [InternalItemCatalogController::class, 'invalidDocumentCodes']);
 Route::post('/api/danh-muc-noi-bo/dong-bo', [InternalItemCatalogController::class, 'sync']);
+Route::post('/api/danh-muc-noi-bo/tu-dong-dong-bo', [InternalItemCatalogController::class, 'autoSync']);
 Route::post('/api/danh-muc-noi-bo/dong-bo-vi-tri', [InternalItemCatalogController::class, 'syncShelvesToLocations']);
+Route::get('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'index']);
+Route::post('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'store']);
+Route::delete('/api/quy-doi-don-vi/{unitConversion}', [InternalUnitConversionController::class, 'destroy']);
 Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
 Route::get('/client/tivi-nhap-thanh-pham', [WarehouseCountController::class, 'finishedGoodsTvIndex']);
 Route::get('/api/tivi-nhap-thanh-pham', [WarehouseCountController::class, 'finishedGoodsTvData']);

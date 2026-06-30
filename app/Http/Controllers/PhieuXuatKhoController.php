@@ -153,8 +153,8 @@ class PhieuXuatKhoController extends Controller
             $sheet->setCellValue("C{$currentRow}", $row->Ten_hh ?? '');
             $sheet->setCellValue("D{$currentRow}", $row->Soseri ?? '');
             $sheet->setCellValue("E{$currentRow}", $row->Msize ?? '');
-            $formulaF = "=VLOOKUP(D{$currentRow};'Y:\\1. DUY 2024\\17. UNIPAX 2024\\1. THEO DÕI ĐƠN HÀNG + MẪU\\[1. THEO DÕI ĐƠN HÀNG UNIPAX - GIA CÔNG 18-05-2024.xlsx]TỔNG HỢP MÃ KHÁC'!\$D\$7:\$O\$50000;3;FALSE)";
-            $formulaG = "=VLOOKUP(D{$currentRow};'Y:\\1. DUY 2024\\17. UNIPAX 2024\\1. THEO DÕI ĐƠN HÀNG + MẪU\\[1. THEO DÕI ĐƠN HÀNG UNIPAX - GIA CÔNG 18-05-2024.xlsx]TỔNG HỢP MÃ KHÁC'!\$D\$7:\$O\$50000;4;FALSE)";
+            $formulaF = "=VLOOKUP(D{$currentRow};'Y:\\1. DUY 2024\\17. UNIPAX 2024\\1. THEO D�I N H�NG + MU\\[1. THEO D�I N H�NG UNIPAX - GIA C�NG 18-05-2024.xlsx]TNG HP M� KH�C'!\$D\$7:\$O\$50000;3;FALSE)";
+            $formulaG = "=VLOOKUP(D{$currentRow};'Y:\\1. DUY 2024\\17. UNIPAX 2024\\1. THEO D�I N H�NG + MU\\[1. THEO D�I N H�NG UNIPAX - GIA C�NG 18-05-2024.xlsx]TNG HP M� KH�C'!\$D\$7:\$O\$50000;4;FALSE)";
             $sheet->setCellValueExplicit("F{$currentRow}", $formulaF, DataType::TYPE_STRING);
             $sheet->setCellValueExplicit("G{$currentRow}", $formulaG, DataType::TYPE_STRING);
             $sheet->setCellValue("H{$currentRow}", $row->Dvt ?? '');

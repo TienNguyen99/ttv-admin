@@ -9,10 +9,13 @@
     <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
     <style>
         .catalog-table { min-width: 1280px; }
+        .invalid-code-table { min-width: 1320px; }
         .catalog-table .name-cell { min-width: 320px; white-space: normal; }
         .sync-note { color:#64748b; font-size:12px; }
         .color-chip { display:inline-flex; align-items:center; gap:6px; min-width:0; }
         .color-swatch { width:14px; height:14px; border:1px solid #cbd5e1; border-radius:3px; background:var(--swatch, transparent); box-shadow:inset 0 0 0 1px rgba(255,255,255,.35); }
+        .invalid-code { color:#b91c1c; font-weight:800; }
+        .compact-note { max-width:280px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     </style>
 </head>
 <body>
@@ -54,6 +57,39 @@
             <div><button id="clearCatalogFilter" class="wms-btn"><i data-lucide="filter-x"></i> Xóa lọc</button></div>
         </section>
 
+        <section class="wms-panel mb-3">
+            <div class="wms-panel__header">
+                <div>
+                    <h2>Ma noi bo ngoai danh muc</h2>
+                    <p class="sync-note mb-0">Quet phieu nhap / xuat de tim dong co ma noi bo chua ton tai trong DANH MUC.</p>
+                </div>
+                <span id="invalidCodeResultLabel" class="text-secondary small">Chua quet</span>
+            </div>
+            <section class="wms-filterbar" style="grid-template-columns:180px minmax(260px,1fr) auto">
+                <div>
+                    <label for="invalidCodeType">Loai phieu</label>
+                    <select id="invalidCodeType" class="form-select">
+                        <option value="all">Tat ca</option>
+                        <option value="receipt">Phieu nhap</option>
+                        <option value="issue">Phieu xuat</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="invalidCodeKeyword">Tim trong phieu loi</label>
+                    <input id="invalidCodeKeyword" class="form-control" placeholder="Ma noi bo, so phieu, size, mau...">
+                </div>
+                <div>
+                    <button id="scanInvalidCodesBtn" class="wms-btn wms-btn--primary"><i data-lucide="search-check"></i> Quet ma loi</button>
+                </div>
+            </section>
+            <div class="wms-table-wrap">
+                <table class="wms-table invalid-code-table">
+                    <thead><tr><th>Loai</th><th>So phieu</th><th>Ngay</th><th>Ma noi bo loi</th><th>Ma ke toan</th><th>Ten hang</th><th>Size</th><th>Mau</th><th>Mat</th><th class="text-end">SL</th><th>Vi tri</th><th>Ghi chu</th><th></th></tr></thead>
+                    <tbody id="invalidCodeRows"><tr><td colspan="13" class="wms-empty">Bam Quet ma loi de kiem tra.</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+
         <section class="wms-panel">
             <div class="wms-panel__header"><h2>Danh sách mã nội bộ</h2><span id="catalogResultLabel" class="text-secondary small">Đang tải...</span></div>
             <div class="wms-table-wrap">
@@ -68,9 +104,13 @@
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const rowsEl = document.getElementById('catalogRows');
+        const invalidCodeRowsEl = document.getElementById('invalidCodeRows');
         const keywordEl = document.getElementById('catalogKeyword');
         const topKeywordEl = document.getElementById('topCatalogKeyword');
+        const invalidCodeTypeEl = document.getElementById('invalidCodeType');
+        const invalidCodeKeywordEl = document.getElementById('invalidCodeKeyword');
         let searchTimer = null;
+        let invalidCodeSearchTimer = null;
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits:3});
 
@@ -114,6 +154,45 @@
                 .catch(error => rowsEl.innerHTML = `<tr><td colspan="10" class="wms-empty text-danger">${esc(error.message)}</td></tr>`);
         }
 
+        function loadInvalidCodes() {
+            const params = new URLSearchParams({
+                limit: 2000,
+                type: invalidCodeTypeEl.value || 'all',
+            });
+            if (invalidCodeKeywordEl.value.trim()) params.set('keyword', invalidCodeKeywordEl.value.trim());
+            invalidCodeRowsEl.innerHTML = '<tr><td colspan="13" class="wms-loading">Dang quet phieu nhap / xuat...</td></tr>';
+
+            fetch('/api/danh-muc-noi-bo/loi-ma-phieu?' + params.toString())
+                .then(response => jsonOrError(response, 'Khong quet duoc ma noi bo ngoai danh muc'))
+                .then(result => {
+                    const rows = result.data || [];
+                    const summary = result.summary || {};
+                    document.getElementById('invalidCodeResultLabel').textContent =
+                        `${num(summary.total)} dong loi - ${num(summary.unique_code_count)} ma - Nhap ${num(summary.receipt_count)} / Xuat ${num(summary.issue_count)}`;
+                    invalidCodeRowsEl.innerHTML = rows.map(row => `
+                        <tr>
+                            <td>${esc(row.document_label)}</td>
+                            <td class="wms-code">${esc(row.document_code)}</td>
+                            <td>${esc(row.document_date || '')}</td>
+                            <td class="invalid-code">${esc(row.internal_item_code)}</td>
+                            <td>${esc(row.ma_hh || '-')}</td>
+                            <td>${esc(row.ten_hh || '-')}</td>
+                            <td>${esc(row.size || '-')}</td>
+                            <td>${esc(row.color || '-')}</td>
+                            <td>${esc(row.side || '-')}</td>
+                            <td class="wms-number">${num(row.quantity)}</td>
+                            <td>${esc(row.location_code || '-')}</td>
+                            <td class="compact-note" title="${esc(row.note || '')}">${esc(row.note || '-')}</td>
+                            <td class="text-end"><a class="wms-btn" target="_blank" href="${esc(row.edit_url)}">Mo phieu</a></td>
+                        </tr>
+                    `).join('') || '<tr><td colspan="13" class="wms-empty">Khong co ma noi bo ngoai danh muc.</td></tr>';
+                })
+                .catch(error => {
+                    document.getElementById('invalidCodeResultLabel').textContent = 'Loi quet';
+                    invalidCodeRowsEl.innerHTML = `<tr><td colspan="13" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
+                });
+        }
+
         document.getElementById('syncCatalogBtn').addEventListener('click', () => {
             const button = document.getElementById('syncCatalogBtn');
             const resultEl = document.getElementById('catalogSyncResult');
@@ -131,6 +210,27 @@
               .catch(error => resultEl.textContent = error.message)
               .finally(() => button.disabled = false);
         });
+
+        function autoSyncCatalog() {
+            const resultEl = document.getElementById('catalogSyncResult');
+            resultEl.textContent = 'Dang kiem tra auto sync...';
+            fetch('/api/danh-muc-noi-bo/tu-dong-dong-bo', {
+                method:'POST',
+                headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({minutes: 30})
+            }).then(response => jsonOrError(response, 'Khong auto sync duoc DANH MUC'))
+              .then(result => {
+                  const data = result.data || {};
+                  if (result.skipped) {
+                      resultEl.textContent = `Auto sync: chua den 30 phut. Lan cuoi ${data.last_synced_at ? new Date(data.last_synced_at).toLocaleString('vi-VN') : '-'}.`;
+                      return;
+                  }
+                  resultEl.textContent = `Auto sync xong: them ${num(data.created)}, cap nhat ${num(data.updated)}, dang dung ${num(data.active)} ma.`;
+                  loadCatalog();
+                  loadInvalidCodes();
+              })
+              .catch(error => resultEl.textContent = error.message);
+        }
 
         document.getElementById('syncShelvesBtn').addEventListener('click', () => {
             const button = document.getElementById('syncShelvesBtn');
@@ -164,7 +264,16 @@
             topKeywordEl.value = '';
             loadCatalog();
         });
+        document.getElementById('scanInvalidCodesBtn').addEventListener('click', loadInvalidCodes);
+        invalidCodeTypeEl.addEventListener('change', loadInvalidCodes);
+        invalidCodeKeywordEl.addEventListener('input', () => {
+            clearTimeout(invalidCodeSearchTimer);
+            invalidCodeSearchTimer = setTimeout(loadInvalidCodes, 250);
+        });
         loadCatalog();
+        loadInvalidCodes();
+        autoSyncCatalog();
+        setInterval(autoSyncCatalog, 30 * 60 * 1000);
     </script>
 </body>
 </html>

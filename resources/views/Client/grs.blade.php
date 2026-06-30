@@ -119,9 +119,9 @@
                     <th>STT</th>
                     <th>SỐ ĐƠN HÀNG</th>
                     <th>TÊN PO</th>
-                    <th>MÃ LỆNH</th>
+                    <th>M� LNH</th>
                     <th>KHÁCH HÀNG</th>
-                    <th>MÃ KINH DOANH</th>
+                    <th>M� KINH DOANH</th>
                     <th>Mã HH</th>
                     <th>TÊN SP</th>
                     <th>SIZE</th>
