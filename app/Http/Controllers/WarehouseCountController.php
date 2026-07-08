@@ -428,7 +428,10 @@ class WarehouseCountController extends Controller
         $query = InternalMaterialReceipt::query()
             ->withCount('lines')
             ->withSum('lines as total_quantity', 'quantity')
-            ->where('source', 'Phieu nhap thanh pham')
+            ->where(function ($query) {
+                $query->where('source', 'Phieu nhap thanh pham')
+                    ->orWhere('receipt_code', 'like', 'PNTP-%');
+            })
             ->orderByDesc('receipt_date')
             ->orderByDesc('id');
 
@@ -2582,6 +2585,7 @@ class WarehouseCountController extends Controller
     public function updateReceiptBatch(Request $request, InternalMaterialReceipt $receipt)
     {
         $data = $request->validate([
+            'force' => 'nullable|boolean',
             'location_code' => 'nullable|string|max:100',
             'ma_ko' => 'nullable|string|max:50',
             'checked_at' => 'required|date',
@@ -2604,28 +2608,49 @@ class WarehouseCountController extends Controller
             'lines.*.purchase_order' => 'nullable|string|max:1000',
             'lines.*.customer' => 'nullable|string|max:200',
         ]);
-
-        $linkedIssue = InternalMaterialIssue::query()
+        $force = $request->boolean('force');
+        $linkedIssues = InternalMaterialIssue::query()
             ->where(function ($query) use ($receipt) {
                 $query->where('source_receipt_id', $receipt->id)
                     ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%');
             })
-            ->first();
+            ->get();
 
-        if ($linkedIssue) {
+        if ($linkedIssues->isNotEmpty() && !$force) {
             return response()->json([
-                'message' => 'Phiếu nhập đã có phiếu xuất liên quan ' . $linkedIssue->issue_code . '. Hãy xóa/hoàn phiếu xuất đó trước khi sửa chi tiết phiếu nhập.',
-            ], 422);
+                'message' => 'Phiếu nhập có phiếu xuất liên quan. Nếu chắc chắn sửa, hệ thống sẽ xóa phiếu xuất liên quan trước rồi cập nhật lại phiếu nhập.',
+                'force_required' => true,
+                'linked_issues' => $linkedIssues->map(fn ($issue) => [
+                    'id' => $issue->id,
+                    'issue_code' => $issue->issue_code,
+                    'issue_date' => optional($issue->issue_date)->format('Y-m-d'),
+                ])->values(),
+            ], 409);
+        }
+
+        if ($linkedIssues->isNotEmpty() && $force) {
+            foreach ($linkedIssues as $issue) {
+                app(InternalMaterialIssueController::class)->destroy($issue);
+            }
         }
 
         $receipt->load('lines');
         foreach ($receipt->lines as $receiptLine) {
             $package = $this->resolveReceiptLinePackage($receiptLine);
-
-            if (!$package || (float) $package->quantity + 0.0001 < (float) ($receiptLine->base_quantity ?: $receiptLine->quantity)) {
+            if (!$package && !$force) {
                 return response()->json([
-                    'message' => 'Không thể sửa phiếu nhập vì một phần hàng đã được xuất kho hoặc thay đổi. Hãy hoàn/xóa phiếu xuất liên quan trước.',
-                ], 422);
+                    'message' => 'Phiếu nhập không còn đủ kiện tồn liên kết. Nếu chắc chắn sửa, hệ thống sẽ cập nhật phiếu theo dữ liệu mới.',
+                    'force_required' => true,
+                    'linked_issues' => [],
+                ], 409);
+            }
+
+            if ($package && (float) $package->quantity + 0.0001 < (float) ($receiptLine->base_quantity ?: $receiptLine->quantity) && !$force) {
+                return response()->json([
+                    'message' => 'Không thể sửa phiếu nhập vì một phần hàng đã được xuất kho hoặc thay đổi. Nếu chắc chắn sửa, hệ thống sẽ cập nhật theo số tồn còn lại và dữ liệu mới.',
+                    'force_required' => true,
+                    'linked_issues' => [],
+                ], 409);
             }
         }
 
@@ -2830,7 +2855,7 @@ class WarehouseCountController extends Controller
         ]);
     }
 
-    public function destroyReceipt(InternalMaterialReceipt $receipt)
+    public function destroyReceipt(Request $request, InternalMaterialReceipt $receipt)
     {
         $auditPayload = [
             'receipt_code' => $receipt->receipt_code,
@@ -2838,11 +2863,41 @@ class WarehouseCountController extends Controller
             'location_code' => $receipt->location_code,
         ];
 
+        $force = $request->boolean('force');
+        $linkedIssues = InternalMaterialIssue::query()
+            ->where(function ($query) use ($receipt) {
+                $query->where('source_receipt_id', $receipt->id)
+                    ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%');
+            })
+            ->get();
+
+        if ($linkedIssues->isNotEmpty() && !$force) {
+            return response()->json([
+                'message' => 'Phiếu nhập có phiếu xuất liên quan. Nếu chắc chắn xóa, hệ thống sẽ xóa phiếu xuất liên quan trước rồi mới xóa phiếu nhập.',
+                'force_required' => true,
+                'linked_issues' => $linkedIssues->map(fn ($issue) => [
+                    'id' => $issue->id,
+                    'issue_code' => $issue->issue_code,
+                    'issue_date' => optional($issue->issue_date)->format('Y-m-d'),
+                ])->values(),
+            ], 409);
+        }
+
+        if ($linkedIssues->isNotEmpty() && $force) {
+            foreach ($linkedIssues as $issue) {
+                app(InternalMaterialIssueController::class)->destroy($issue);
+            }
+        }
+
         $receipt->load('lines');
         foreach ($receipt->lines as $line) {
             $package = $this->resolveReceiptLinePackage($line);
 
-            if (!$package || (float) $package->quantity + 0.0001 < (float) $line->quantity) {
+            if (!$package) {
+                continue;
+            }
+
+            if ((float) $package->quantity + 0.0001 < (float) ($line->base_quantity ?: $line->quantity)) {
                 return response()->json([
                     'message' => 'Không thể xóa phiếu vì một phần hàng của phiếu đã được xuất kho hoặc thay đổi. Hãy hoàn/xóa phiếu xuất liên quan trước.',
                 ], 422);

@@ -23,6 +23,7 @@ use App\Http\Controllers\InternalFinishedGoodsReceiptController;
 use App\Http\Controllers\InternalMaterialIssueController;
 use App\Http\Controllers\InternalItemCatalogController;
 use App\Http\Controllers\InternalUnitConversionController;
+use App\Http\Controllers\InternalXntController;
 use App\Http\Controllers\LocalQrCodeController;
 use Google\Service\Dfareporting\Order;
 
@@ -161,11 +162,17 @@ Route::get('/client/theo-doi-san-xuat', [InternalMaterialIssueController::class,
 Route::get('/api/theo-doi-san-xuat', [InternalMaterialIssueController::class, 'productionTracking']);
 Route::post('/api/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'store']);
 Route::post('/api/xuat-vat-tu-noi-bo/tu-phieu-nhap/{receipt}', [InternalMaterialIssueController::class, 'createFromReceipt']);
+Route::post('/api/xuat-vat-tu-noi-bo/gui-san-xuat/{receipt}', [InternalMaterialIssueController::class, 'sendReceiptToProduction']);
+Route::post('/api/xuat-vat-tu-noi-bo/{issue}/nhap-lai-thanh-pham', [InternalMaterialIssueController::class, 'receiveProductionIssue']);
 Route::get('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'show']);
 Route::put('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'update']);
 Route::delete('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'destroy']);
 Route::get('/client/xuat-vat-tu-noi-bo/{issue}/in', [InternalMaterialIssueController::class, 'print']);
 Route::get('/api/vat-tu-ke-toan/goi-y', [InternalMaterialIssueController::class, 'materialSuggestions']);
+Route::get('/client/xuat-chi-lenh-sx', [InternalXntController::class, 'index']);
+Route::get('/api/xnt', [InternalXntController::class, 'data']);
+Route::post('/api/xnt/dong-bo', [InternalXntController::class, 'sync']);
+Route::post('/api/xnt/tao-phieu-xuat', [InternalXntController::class, 'createIssue']);
 Route::view('/client/material-calculator', 'client.material-calculator');
 Route::view('/client/kho-noi-bo', 'client.warehouse-dashboard');
 Route::get('/client/don-hang-noi-bo', [InternalOrderTrackingController::class, 'index']);

@@ -128,9 +128,10 @@
                             <th class="text-end">Còn treo</th>
                             <th>Tiến độ</th>
                             <th>Tuổi phiếu</th>
+                            <th>Thao tác</th>
                         </tr>
                     </thead>
-                    <tbody id="trackingRows"><tr><td colspan="9" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
+                    <tbody id="trackingRows"><tr><td colspan="10" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
                 </table>
             </div>
         </section>
@@ -139,6 +140,11 @@
     <script>
         const trackingNum = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits: 3});
         const trackingEsc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+        const trackingLocalDate = () => {
+            const date = new Date();
+            date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+            return date.toISOString().slice(0, 10);
+        };
         let trackingTimer = null;
 
         function trackingStatus(row) {
@@ -176,7 +182,12 @@
                     document.getElementById('trackingOrders').textContent = trackingNum(summary.order_count);
                     document.getElementById('trackingOutstanding').textContent = trackingNum(summary.outstanding_quantity);
 
-                    document.getElementById('trackingRows').innerHTML = (result.data || []).map(row => `
+                    document.getElementById('trackingRows').innerHTML = (result.data || []).map(row => {
+                        const issueId = (row.issue_ids || [])[0] || '';
+                        const receiveButton = issueId
+                            ? `<button type="button" class="btn btn-sm btn-success receive-production-btn" data-issue-id="${trackingEsc(issueId)}" data-code="${trackingEsc((row.issue_codes || [])[0] || row.production_order)}">Nhập lại</button>`
+                            : '<span class="text-muted small">Chưa xuất</span>';
+                        return `
                         <tr>
                             <td>
                                 <div class="wip-order">${trackingEsc(row.production_order)}</div>
@@ -199,13 +210,14 @@
                                 <div class="wip-sub">${trackingNum(row.progress_percent)}% đã nhập</div>
                             </td>
                             <td>${trackingStatus(row)}</td>
+                            <td>${receiveButton}</td>
                         </tr>
-                    `).join('') || '<tr><td colspan="9" class="tracking-empty">Không có hàng đang treo theo bộ lọc hiện tại.</td></tr>';
+                    `}).join('') || '<tr><td colspan="10" class="tracking-empty">Không có hàng đang treo theo bộ lọc hiện tại.</td></tr>';
 
                     if (window.lucide) lucide.createIcons();
                 })
                 .catch(error => {
-                    document.getElementById('trackingRows').innerHTML = `<tr><td colspan="9" class="tracking-empty text-danger">${trackingEsc(error.message)}</td></tr>`;
+                    document.getElementById('trackingRows').innerHTML = `<tr><td colspan="10" class="tracking-empty text-danger">${trackingEsc(error.message)}</td></tr>`;
                 });
         }
 
@@ -226,6 +238,32 @@
             document.getElementById('topTrackingKeyword').value = '';
             document.getElementById('trackingAging').value = '';
             loadProductionTracking();
+        });
+        document.getElementById('trackingRows').addEventListener('click', event => {
+            const button = event.target.closest('.receive-production-btn');
+            if (!button) return;
+            if (!confirm(`Nhập lại thành phẩm từ ${button.dataset.code}? Hệ thống sẽ tạo phiếu nhập mới và đưa về CHUA-XEP.`)) return;
+            button.disabled = true;
+            fetch(`/api/xuat-vat-tu-noi-bo/${button.dataset.issueId}/nhap-lai-thanh-pham`, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'},
+                body: JSON.stringify({
+                    checked_at: trackingLocalDate(),
+                    location_code: 'CHUA-XEP'
+                })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(error => { throw new Error(error.message || 'Không nhập lại được thành phẩm'); });
+                    }
+                    return response.json();
+                })
+                .then(result => {
+                    if (result.receipt_print_url) window.open(result.receipt_print_url, '_blank');
+                    loadProductionTracking();
+                })
+                .catch(error => alert(error.message))
+                .finally(() => { button.disabled = false; });
         });
 
         loadProductionTracking();

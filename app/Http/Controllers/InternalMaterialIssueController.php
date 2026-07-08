@@ -9,6 +9,7 @@ use App\Models\InternalMaterialIssueAllocation;
 use App\Models\InternalMaterialReceiptLine;
 use App\Models\InternalMaterialReceipt;
 use App\Models\InternalProductionOrder;
+use App\Models\InternalXntRow;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
 use App\Services\InternalAudit;
@@ -87,6 +88,7 @@ class InternalMaterialIssueController extends Controller
                     'returned_quantity' => 0.0,
                     'first_issue_date' => (string) $line->issue_date,
                     'last_issue_date' => (string) $line->issue_date,
+                    'issue_ids' => [],
                     'issue_codes' => [],
                 ];
             }
@@ -94,6 +96,7 @@ class InternalMaterialIssueController extends Controller
             $groups[$key]['issued_quantity'] += (float) $line->quantity;
             $groups[$key]['first_issue_date'] = min($groups[$key]['first_issue_date'], (string) $line->issue_date);
             $groups[$key]['last_issue_date'] = max($groups[$key]['last_issue_date'], (string) $line->issue_date);
+            $groups[$key]['issue_ids'][$line->issue_id] = true;
             $groups[$key]['issue_codes'][$line->issue_code] = true;
         }
 
@@ -135,6 +138,7 @@ class InternalMaterialIssueController extends Controller
                     'returned_quantity' => 0.0,
                     'first_issue_date' => (string) $order->order_date,
                     'last_issue_date' => (string) $order->order_date,
+                    'issue_ids' => [],
                     'issue_codes' => [],
                     'btp_status' => $order->status,
                 ];
@@ -166,6 +170,7 @@ class InternalMaterialIssueController extends Controller
 
         $today = now()->startOfDay();
         $rows = collect($groups)->map(function ($row) use ($today) {
+            $row['issue_ids'] = array_map('intval', array_keys($row['issue_ids'] ?? []));
             $row['issue_codes'] = array_keys($row['issue_codes']);
             $row['btp_status'] = $row['btp_status'] ?? 'issued';
             $row['planned_quantity'] = (float) ($row['planned_quantity'] ?? $row['issued_quantity']);
@@ -425,6 +430,7 @@ class InternalMaterialIssueController extends Controller
         }
 
         $existingIssue = InternalMaterialIssue::query()
+            ->where('issue_type', 'customer')
             ->where(function ($query) use ($receipt) {
                 $query->where('source_receipt_id', $receipt->id)
                     ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%');
@@ -530,6 +536,154 @@ class InternalMaterialIssueController extends Controller
             'data' => $issue,
             'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in'),
         ]);
+    }
+
+    public function sendReceiptToProduction(Request $request, InternalMaterialReceipt $receipt)
+    {
+        $data = $request->validate([
+            'issue_date' => 'nullable|date',
+            'receiver_name' => 'nullable|string|max:150',
+            'department' => 'nullable|string|max:150',
+            'purpose' => 'nullable|string|max:255',
+            'note' => 'nullable|string|max:1000',
+        ]);
+
+        $receipt->load('lines');
+        if ($receipt->lines->isEmpty()) {
+            return response()->json(['message' => 'Phieu nhap khong co dong hang de gui san xuat.'], 422);
+        }
+
+        $existingIssue = InternalMaterialIssue::query()
+            ->where('source_receipt_id', $receipt->id)
+            ->where('issue_type', 'production')
+            ->first();
+
+        if ($existingIssue) {
+            return response()->json([
+                'message' => 'Phieu nhap nay da gui san xuat: ' . $existingIssue->issue_code,
+                'data' => $existingIssue->load('lines'),
+                'existing' => true,
+                'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $existingIssue->id . '/in'),
+            ]);
+        }
+
+        $payload = [
+            'issue_type' => 'production',
+            'issue_date' => $data['issue_date'] ?? now()->format('Y-m-d'),
+            'warehouse_code' => strtoupper(trim((string) $receipt->warehouse_code)),
+            'receiver_name' => trim($data['receiver_name'] ?? '') ?: 'San xuat',
+            'department' => trim($data['department'] ?? '') ?: 'San xuat',
+            'production_order' => '',
+            'purpose' => trim($data['purpose'] ?? '') ?: 'Gui phieu nhap sang san xuat',
+            'note' => trim($data['note'] ?? '') ?: ('Gui SX tu phieu nhap ' . $receipt->receipt_code),
+            'lines' => $receipt->lines->map(function ($line) use ($receipt) {
+                return [
+                    'production_order_id' => $line->production_order_id,
+                    'production_order' => trim((string) $line->production_order),
+                    'purchase_order' => trim((string) $line->purchase_order),
+                    'customer' => trim((string) $line->customer),
+                    'ma_hh' => strtoupper(trim((string) ($line->ma_hh ?: $line->internal_item_code))),
+                    'ten_hh' => trim((string) $line->ten_hh),
+                    'dvt' => trim((string) $line->dvt),
+                    'ordered_quantity' => $line->ordered_quantity,
+                    'quantity' => (float) $line->quantity,
+                    'location_code' => strtoupper(trim((string) ($line->location_code ?: $receipt->location_code))),
+                    'internal_item_code' => trim((string) $line->internal_item_code),
+                    'size' => trim((string) $line->size),
+                    'color' => trim((string) $line->color),
+                    'logo_color' => trim((string) ($line->logo_color ?? '')),
+                    'side' => trim((string) $line->side),
+                    'note' => trim((string) $line->note),
+                ];
+            })->values()->all(),
+        ];
+
+        $issueRequest = Request::create('/api/xuat-vat-tu-noi-bo', 'POST', $payload);
+        $issueRequest->setUserResolver($request->getUserResolver());
+
+        $response = $this->store($issueRequest);
+        if ($response->getStatusCode() >= 400) {
+            return $response;
+        }
+
+        $body = json_decode($response->getContent(), true) ?: [];
+        $issueId = $body['data']['id'] ?? null;
+        $issue = $issueId ? InternalMaterialIssue::query()->find($issueId) : null;
+        if ($issue) {
+            $issue->source_receipt_id = $receipt->id;
+            $issue->save();
+            $issue->load('lines');
+            $body['data'] = $issue;
+            $body['print_url'] = url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in');
+        }
+        $body['message'] = 'Da gui phieu nhap ' . $receipt->receipt_code . ' sang san xuat.';
+
+        return response()->json($body, $response->getStatusCode());
+    }
+
+    public function receiveProductionIssue(Request $request, InternalMaterialIssue $issue)
+    {
+        $data = $request->validate([
+            'checked_at' => 'nullable|date',
+            'location_code' => 'nullable|string|max:100',
+            'note' => 'nullable|string|max:500',
+        ]);
+
+        if ($issue->issue_type !== 'production') {
+            return response()->json(['message' => 'Chi phieu xuat sang san xuat moi duoc nhap lai thanh pham.'], 422);
+        }
+
+        $issue->load('lines');
+        if ($issue->lines->isEmpty()) {
+            return response()->json(['message' => 'Phieu xuat khong co dong hang de nhap lai.'], 422);
+        }
+
+        $existingReceipt = InternalMaterialReceipt::query()
+            ->where('source', 'Phieu nhap thanh pham')
+            ->where('note', 'like', '%' . $issue->issue_code . '%')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($existingReceipt) {
+            return response()->json([
+                'message' => 'Phieu nay da duoc nhap lai thanh pham: ' . $existingReceipt->receipt_code,
+                'data' => $existingReceipt->load('lines'),
+                'existing' => true,
+                'receipt_print_url' => url('/client/nhap-thanh-pham-noi-bo/' . $existingReceipt->id . '/in'),
+            ]);
+        }
+
+        $payload = [
+            'location_code' => strtoupper(trim($data['location_code'] ?? '')) ?: 'CHUA-XEP',
+            'ma_ko' => '',
+            'checked_at' => $data['checked_at'] ?? now()->format('Y-m-d'),
+            'note' => trim($data['note'] ?? '') ?: ('Nhap lai tu phieu xuat SX ' . $issue->issue_code),
+            'lines' => $issue->lines->map(function ($line) {
+                return [
+                    'category' => trim((string) $line->ten_hh),
+                    'ma_sp' => trim((string) $line->ma_hh),
+                    'internal_item_code' => trim((string) $line->internal_item_code),
+                    'size' => trim((string) $line->size),
+                    'color' => trim((string) $line->color),
+                    'side' => trim((string) $line->side),
+                    'dvt' => trim((string) $line->dvt),
+                    'ordered_quantity' => $line->ordered_quantity,
+                    'quantity' => (float) $line->quantity,
+                    'logo_color' => '',
+                    'location_code' => 'CHUA-XEP',
+                    'note' => trim((string) $line->note),
+                    'production_order_id' => $line->production_order_id,
+                    'production_order' => trim((string) $line->production_order),
+                    'purchase_order' => trim((string) $line->purchase_order),
+                    'customer' => trim((string) $line->customer),
+                ];
+            })->values()->all(),
+        ];
+
+        $receiptRequest = Request::create('/api/kiem-ton-kho/phieu-nhap-tp', 'POST', $payload);
+        $receiptRequest->setUserResolver($request->getUserResolver());
+
+        return app(WarehouseCountController::class)->storeReceiptBatch($receiptRequest);
     }
 
     public function productionOrderLines(Request $request)
@@ -1004,6 +1158,13 @@ class InternalMaterialIssueController extends Controller
             foreach ($issue->lines as $line) {
                 $this->restoreIssueLineStock($issue, $line);
             }
+
+            InternalXntRow::query()
+                ->where('issue_id', $issue->id)
+                ->update([
+                    'issue_id' => null,
+                    'issued_at' => null,
+                ]);
 
             $issue->delete();
         });

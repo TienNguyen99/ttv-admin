@@ -536,6 +536,7 @@
     <a class="summary-sidebar__link {{ request()->is('client/canh-bao-kho*') ? 'is-active' : '' }}" href="{{ url('/client/canh-bao-kho') }}"><i data-lucide="triangle-alert"></i>Cảnh báo kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/kiem-ton-kho*') ? 'is-active' : '' }}" href="{{ url('/client/kiem-ton-kho') }}"><i data-lucide="map-pinned"></i>Nhập kho & vị trí</a>
     <a class="summary-sidebar__link {{ request()->is('client/xuat-vat-tu-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-vat-tu-noi-bo') }}"><i data-lucide="package-minus"></i>Xuất kho</a>
+    <a class="summary-sidebar__link {{ request()->is('client/xuat-chi-lenh-sx*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-chi-lenh-sx') }}"><i data-lucide="file-spreadsheet"></i>Xuất chỉ XNT</a>
     <a class="summary-sidebar__link {{ request()->is('client/doi-chieu-ton') ? 'is-active' : '' }}" href="{{ url('/client/doi-chieu-ton') }}"><i data-lucide="scale"></i>Đối chiếu TSoft</a>
     <a class="summary-sidebar__link {{ request()->is('client/material-calculator') ? 'is-active' : '' }}" href="{{ url('/client/material-calculator') }}"><i data-lucide="ruler"></i>Tính cắt vải</a>
 

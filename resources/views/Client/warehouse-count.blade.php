@@ -717,6 +717,12 @@
             return Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
         }
 
+        function localIsoDate() {
+            const date = new Date();
+            date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+            return date.toISOString().slice(0, 10);
+        }
+
         function updateSavePackageButton() {
             refreshIcons();
         }
@@ -1691,6 +1697,7 @@
                         ${disabled}>
                         <i data-lucide="${issueButtonIcon}"></i>${issueButtonLabel}
                     </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-icon send-receipt-production-btn" data-id="${receipt.id}" data-code="${escapeHtml(receipt.receipt_code)}"><i data-lucide="factory"></i>Gửi SX</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary btn-icon assign-receipt-location-btn" data-id="${receipt.id}" data-code="${escapeHtml(receipt.receipt_code)}" data-location="${escapeHtml(receipt.location_code || '')}"><i data-lucide="map-pin"></i>Vị trí</button>
                     <button type="button" class="btn btn-sm btn-outline-danger delete-receipt-btn" data-id="${receipt.id}" data-code="${escapeHtml(receipt.receipt_code)}"><i data-lucide="trash-2"></i>Xóa</button>
                 </td>
@@ -1867,17 +1874,36 @@
             const printWindow = window.open('', '_blank');
             await warnReceiptDuplicates(validLines);
 
-            fetch(editingReceiptFormId ? `/api/kiem-ton-kho/phieu-nhap-tp/${editingReceiptFormId}` : '/api/kiem-ton-kho/phieu-nhap-tp', {
+            submitReceiptBatch(validLines, printWindow, false);
+        });
+
+        function submitReceiptBatch(validLines, printWindow, force = false) {
+            return fetch(editingReceiptFormId ? `/api/kiem-ton-kho/phieu-nhap-tp/${editingReceiptFormId}` : '/api/kiem-ton-kho/phieu-nhap-tp', {
                 method: editingReceiptFormId ? 'PUT' : 'POST', headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({
+                    force,
                     location_code: value('receiptLocationCode'),
                     ma_ko: '',
                     checked_at: value('receiptDate'),
                     note: value('receiptHeaderNote'),
                     lines: validLines
                 })
-            }).then(r => jsonOrError(r, 'Không lưu được phiếu nhập'))
+            }).then(async response => {
+                const result = await response.json().catch(() => ({}));
+                if (response.status === 409 && result.force_required) {
+                    const issues = (result.linked_issues || []).map(item => item.issue_code).join(', ');
+                    const ok = confirm(`${result.message}\n\nPhiếu xuất liên quan: ${issues || 'không có / không rõ'}\n\nChắc chắn cập nhật lại phiếu nhập này?`);
+                    if (ok) return submitReceiptBatch(validLines, printWindow, true).then(() => null);
+                    return null;
+                }
+                if (!response.ok) throw new Error(result.message || 'Không lưu được phiếu nhập');
+                return result;
+            })
               .then(result => {
+                  if (result === null) {
+                      if (printWindow) printWindow.close();
+                      return;
+                  }
                   if (result.receipt_print_url && printWindow) {
                       printWindow.location.href = result.receipt_print_url;
                   } else if (result.receipt_print_url) {
@@ -1894,7 +1920,7 @@
                   if (printWindow) printWindow.close();
                   alert(e.message);
               });
-        });
+        }
 
         document.getElementById('locationContentRows').addEventListener('click', event => {
             const button = event.target.closest('.quick-catalog-stock-btn');
@@ -1937,7 +1963,7 @@
                     method: 'POST',
                     headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                     body: JSON.stringify({
-                        issue_date: value('checkedAt') || new Date().toISOString().slice(0, 10),
+                        issue_date: value('checkedAt') || localIsoDate(),
                         receiver_name: receiver.trim() || 'Khách hàng',
                         department: 'Kinh doanh',
                         purpose: 'Xuất thành phẩm cho khách hàng'
@@ -1962,6 +1988,34 @@
                 return;
             }
 
+            const sendProductionButton = event.target.closest('.send-receipt-production-btn');
+            if (sendProductionButton) {
+                if (!confirm(`Gửi toàn bộ dòng của ${sendProductionButton.dataset.code} sang sản xuất? Phiếu này sẽ tạo PXBTP và trừ tồn nội bộ.`)) return;
+                sendProductionButton.disabled = true;
+                fetch(`/api/xuat-vat-tu-noi-bo/gui-san-xuat/${sendProductionButton.dataset.id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                    body: JSON.stringify({
+                        issue_date: value('checkedAt') || localIsoDate(),
+                        receiver_name: 'Sản xuất',
+                        department: 'Sản xuất',
+                        purpose: 'Gửi phiếu nhập sang sản xuất'
+                    })
+                }).then(r => jsonOrError(r, 'Không gửi được phiếu sang sản xuất'))
+                  .then(result => {
+                      if (result.print_url) window.open(result.print_url, '_blank');
+                      loadReceipts();
+                      loadPackages();
+                      loadLocations();
+                      loadWarehouseStats();
+                      loadWarehouseMap();
+                      loadLocationContents();
+                  })
+                  .catch(e => alert(e.message))
+                  .finally(() => { sendProductionButton.disabled = false; });
+                return;
+            }
+
             const assignButton = event.target.closest('.assign-receipt-location-btn');
             if (assignButton) {
                 editingReceiptId = assignButton.dataset.id;
@@ -1975,19 +2029,32 @@
 
             const button = event.target.closest('.delete-receipt-btn');
             if (!button || !confirm(`Xóa phiếu nhập ${button.dataset.code}? Toàn bộ kiện và số tồn nội bộ tạo từ phiếu này sẽ bị trừ lại.`)) return;
-            fetch(`/api/kiem-ton-kho/phieu-nhap-tp/${button.dataset.id}`, {
-                method: 'DELETE', headers: {'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
-            }).then(r => jsonOrError(r, 'Không xóa được phiếu nhập'))
-              .then(() => {
-                  loadReceipts();
-                  loadPackages();
-                  loadLocations();
-                  loadWarehouseStats();
-                  loadWarehouseMap();
-                  loadLocationContents();
-              })
-              .catch(e => alert(e.message));
+            deleteReceipt(button.dataset.id, button.dataset.code);
         });
+
+        function deleteReceipt(id, code, force = false) {
+            fetch(`/api/kiem-ton-kho/phieu-nhap-tp/${id}${force ? '?force=1' : ''}`, {
+                method: 'DELETE', headers: {'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
+            }).then(async response => {
+                const result = await response.json().catch(() => ({}));
+                if (response.status === 409 && result.force_required) {
+                    const issues = (result.linked_issues || []).map(item => item.issue_code).join(', ');
+                    const ok = confirm(`${result.message}\n\nPhiếu xuất liên quan: ${issues || 'không rõ'}\n\nChắc chắn xóa phiếu xuất liên quan và xóa phiếu nhập ${code}?`);
+                    if (ok) return deleteReceipt(id, code, true);
+                    return null;
+                }
+                if (!response.ok) throw new Error(result.message || 'Không xóa được phiếu nhập');
+                return result;
+            }).then(result => {
+                if (result === null) return;
+                loadReceipts();
+                loadPackages();
+                loadLocations();
+                loadWarehouseStats();
+                loadWarehouseMap();
+                loadLocationContents();
+            }).catch(e => alert(e.message));
+        }
         document.getElementById('confirmReceiptLocationBtn').addEventListener('click', () => {
             const locationId = document.getElementById('receiptTargetLocationId').value;
             const location = locations.find(item => String(item.id) === String(locationId));
