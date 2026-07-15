@@ -93,6 +93,18 @@
                 <tbody id="btpRows"><tr><td colspan="12" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
             </table>
         </div>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
+            <span id="btpPageLabel" class="text-secondary small">Trang 1 / 1</span>
+            <div class="d-flex align-items-center gap-2">
+                <select id="btpPerPage" class="form-select form-select-sm" style="width:110px">
+                    <option value="50">50 dong</option>
+                    <option value="100" selected>100 dong</option>
+                    <option value="200">200 dong</option>
+                </select>
+                <button id="btpPrevPage" class="wms-btn" type="button">Truoc</button>
+                <button id="btpNextPage" class="wms-btn" type="button">Sau</button>
+            </div>
+        </div>
     </section>
 </main>
 
@@ -177,6 +189,8 @@
     const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
     const firstLine = row => Array.isArray(row.lines) && row.lines.length ? row.lines[0] : {};
     let timer = null;
+    let btpPage = 1;
+    let btpTotalPages = 1;
 
     function ensureDeleteSelectedButton() {
         if (document.getElementById('deleteSelectedBtn')) return;
@@ -357,9 +371,13 @@
         const keyword = document.getElementById('topKeyword').value.trim();
         const status = document.getElementById('statusFilter').value;
         const customer = document.getElementById('customerFilter').value;
+        params.set('page', btpPage);
+        params.set('per_page', document.getElementById('btpPerPage').value || 100);
         if (keyword) params.set('keyword', keyword);
         if (status) params.set('status', status);
         if (customer) params.set('customer', customer);
+        document.getElementById('btpRows').innerHTML = '<tr><td colspan="12" class="wms-loading">Dang tai du lieu...</td></tr>';
+        updateIssueSelectedState();
 
         fetch('/api/lenh-btp?' + params.toString())
             .then(response => jsonOrError(response, 'Không tải được lệnh BTP.'))
@@ -370,6 +388,12 @@
                 document.getElementById('totalQuantity').textContent = fmt(summary.total_quantity);
                 document.getElementById('issuedCount').textContent = fmt(summary.issued_count);
                 renderCustomerFilter(result.customers || []);
+                const pagination = result.pagination || {};
+                btpPage = Number(pagination.page || btpPage || 1);
+                btpTotalPages = Math.max(1, Number(pagination.total_pages || 1));
+                document.getElementById('btpPageLabel').textContent = `Trang ${fmt(btpPage)} / ${fmt(btpTotalPages)} - ${fmt(pagination.total || 0)} lenh`;
+                document.getElementById('btpPrevPage').disabled = btpPage <= 1;
+                document.getElementById('btpNextPage').disabled = !pagination.has_more;
 
                 document.getElementById('btpRows').innerHTML = (result.data || []).map(row => {
                     const line = firstLine(row);
@@ -490,13 +514,32 @@
 
     ensureDeleteSelectedButton();
 
+    function resetBtpPageAndLoad() {
+        btpPage = 1;
+        loadBtpOrders();
+    }
+
     document.getElementById('topKeyword').addEventListener('input', () => {
+        btpPage = 1;
         clearTimeout(timer);
         timer = setTimeout(loadBtpOrders, 250);
     });
-    document.getElementById('statusFilter').addEventListener('change', loadBtpOrders);
-    document.getElementById('customerFilter').addEventListener('change', loadBtpOrders);
+    document.getElementById('statusFilter').addEventListener('change', resetBtpPageAndLoad);
+    document.getElementById('customerFilter').addEventListener('change', resetBtpPageAndLoad);
     document.getElementById('reloadBtn').addEventListener('click', loadBtpOrders);
+    document.getElementById('btpPerPage').addEventListener('change', resetBtpPageAndLoad);
+    document.getElementById('btpPrevPage').addEventListener('click', () => {
+        if (btpPage > 1) {
+            btpPage -= 1;
+            loadBtpOrders();
+        }
+    });
+    document.getElementById('btpNextPage').addEventListener('click', () => {
+        if (btpPage < btpTotalPages) {
+            btpPage += 1;
+            loadBtpOrders();
+        }
+    });
     document.getElementById('printSelectedLabelsBtn').addEventListener('click', printSelectedLabels);
     document.getElementById('issueSelectedBtn').addEventListener('click', createIssueFromSelectedOrders);
     document.getElementById('selectAllDraftOrders').addEventListener('change', event => {

@@ -527,14 +527,18 @@
     <div class="summary-sidebar__label">Kho nội bộ</div>
     <a class="summary-sidebar__link {{ request()->is('client/kho-noi-bo') ? 'is-active' : '' }}" href="{{ url('/client/kho-noi-bo') }}"><i data-lucide="layout-dashboard"></i>Tổng quan kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/don-hang-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/don-hang-noi-bo') }}"><i data-lucide="clipboard-list"></i>Đơn hàng A/B</a>
+    <a class="summary-sidebar__link {{ request()->is('client/lenh-san-xuat-trung-tam*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-san-xuat-trung-tam') }}"><i data-lucide="route"></i>Lệnh SX trung tâm</a>
     <a class="summary-sidebar__link {{ request()->is('client/lenh-san-xuat-sheet*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-san-xuat-sheet') }}"><i data-lucide="factory"></i>Lệnh sản xuất</a>
+    <a class="summary-sidebar__link {{ request()->is('client/lenh-det*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-det') }}"><i data-lucide="network"></i>Lệnh dệt / định mức</a>
     <a class="summary-sidebar__link {{ request()->is('client/lenh-btp*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-btp') }}"><i data-lucide="git-branch-plus"></i>Lệnh BTP</a>
     <a class="summary-sidebar__link {{ request()->is('client/danh-muc-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/danh-muc-noi-bo') }}"><i data-lucide="book-open"></i>Danh mục nội bộ</a>
     <a class="summary-sidebar__link {{ request()->is('client/quy-doi-don-vi*') ? 'is-active' : '' }}" href="{{ url('/client/quy-doi-don-vi') }}"><i data-lucide="repeat-2"></i>Quy doi DVT</a>
     <a class="summary-sidebar__link {{ request()->is('client/theo-doi-san-xuat*') ? 'is-active' : '' }}" href="{{ url('/client/theo-doi-san-xuat') }}"><i data-lucide="workflow"></i>Đang sản xuất</a>
     <a class="summary-sidebar__link {{ request()->is('client/ton-kho-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/ton-kho-noi-bo') }}"><i data-lucide="archive"></i>Tồn kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/canh-bao-kho*') ? 'is-active' : '' }}" href="{{ url('/client/canh-bao-kho') }}"><i data-lucide="triangle-alert"></i>Cảnh báo kho</a>
+    <a class="summary-sidebar__link {{ request()->is('client/nhap-thanh-pham-nhanh*') ? 'is-active' : '' }}" href="{{ url('/client/nhap-thanh-pham-nhanh') }}"><i data-lucide="clipboard-check"></i>Nhập TP nhanh</a>
     <a class="summary-sidebar__link {{ request()->is('client/kiem-ton-kho*') ? 'is-active' : '' }}" href="{{ url('/client/kiem-ton-kho') }}"><i data-lucide="map-pinned"></i>Nhập kho & vị trí</a>
+    <a class="summary-sidebar__link {{ request()->is('client/mat-ke-kho*') ? 'is-active' : '' }}" href="{{ url('/client/mat-ke-kho') }}"><i data-lucide="panel-top"></i>Mặt kệ kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/xuat-vat-tu-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-vat-tu-noi-bo') }}"><i data-lucide="package-minus"></i>Xuất kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/xuat-chi-lenh-sx*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-chi-lenh-sx') }}"><i data-lucide="file-spreadsheet"></i>Xuất chỉ XNT</a>
     <a class="summary-sidebar__link {{ request()->is('client/doi-chieu-ton') ? 'is-active' : '' }}" href="{{ url('/client/doi-chieu-ton') }}"><i data-lucide="scale"></i>Đối chiếu TSoft</a>

@@ -153,6 +153,9 @@
         }
 
         function btpFlowStatus(row) {
+            if (row.btp_status === 'completed') {
+                return '<span class="wip-status wip-status--issued">Đã SX xong</span>';
+            }
             if (row.btp_status === 'draft') {
                 return '<span class="wip-status wip-status--draft">Chưa xuất</span>';
             }
@@ -184,8 +187,10 @@
 
                     document.getElementById('trackingRows').innerHTML = (result.data || []).map(row => {
                         const issueId = (row.issue_ids || [])[0] || '';
-                        const receiveButton = issueId
-                            ? `<button type="button" class="btn btn-sm btn-success receive-production-btn" data-issue-id="${trackingEsc(issueId)}" data-code="${trackingEsc((row.issue_codes || [])[0] || row.production_order)}">Nhập lại</button>`
+                        const receiveButton = row.btp_status === 'completed'
+                            ? '<span class="badge text-bg-success">Đã xong</span>'
+                            : issueId
+                            ? `<button type="button" class="btn btn-sm btn-success receive-production-btn" data-issue-id="${trackingEsc(issueId)}" data-code="${trackingEsc((row.issue_codes || [])[0] || row.production_order)}">Hoàn tất</button>`
                             : '<span class="text-muted small">Chưa xuất</span>';
                         return `
                         <tr>
@@ -242,7 +247,7 @@
         document.getElementById('trackingRows').addEventListener('click', event => {
             const button = event.target.closest('.receive-production-btn');
             if (!button) return;
-            if (!confirm(`Nhập lại thành phẩm từ ${button.dataset.code}? Hệ thống sẽ tạo phiếu nhập mới và đưa về CHUA-XEP.`)) return;
+            if (!confirm(`Đánh dấu ${button.dataset.code} đã sản xuất xong và nhập lại về CHUA-XEP?`)) return;
             button.disabled = true;
             fetch(`/api/xuat-vat-tu-noi-bo/${button.dataset.issueId}/nhap-lai-thanh-pham`, {
                 method: 'POST',

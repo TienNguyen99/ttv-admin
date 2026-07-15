@@ -141,6 +141,7 @@ class InternalStockLedger
                 DB::raw("COALESCE(l.size, '') as size"),
                 DB::raw("COALESCE(l.color, '') as color"),
                 DB::raw("COALESCE(l.side, '') as side")
-            );
+            )
+            ->whereRaw("COALESCE(i.issue_type, 'material') <> 'production'");
     }
 }

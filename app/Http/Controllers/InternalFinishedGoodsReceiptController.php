@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\NormalizesDateInput;
 use App\Models\InternalFinishedGoodsReceipt;
 use Illuminate\Http\Request;
 
 class InternalFinishedGoodsReceiptController extends Controller
 {
+    use NormalizesDateInput;
+
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -18,6 +21,7 @@ class InternalFinishedGoodsReceiptController extends Controller
             'quantity' => 'required|numeric|min:0.001',
             'note' => 'nullable|string|max:500',
         ]);
+        $data = $this->normalizeDateFields($data, ['receipt_date']);
 
         $receipt = InternalFinishedGoodsReceipt::query()->create([
             'receipt_code' => $this->nextReceiptCode(),

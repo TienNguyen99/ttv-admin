@@ -88,6 +88,18 @@
                     <tbody id="invalidCodeRows"><tr><td colspan="13" class="wms-empty">Bam Quet ma loi de kiem tra.</td></tr></tbody>
                 </table>
             </div>
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
+                <span id="invalidCodePageLabel" class="text-secondary small">Trang 1 / 1</span>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="invalidCodePerPage" class="form-select form-select-sm" style="width:110px">
+                        <option value="50">50 dong</option>
+                        <option value="100" selected>100 dong</option>
+                        <option value="200">200 dong</option>
+                    </select>
+                    <button id="invalidCodePrevPage" class="wms-btn" type="button">Truoc</button>
+                    <button id="invalidCodeNextPage" class="wms-btn" type="button">Sau</button>
+                </div>
+            </div>
         </section>
 
         <section class="wms-panel">
@@ -97,6 +109,18 @@
                     <thead><tr><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Size</th><th>Màu</th><th>Màu in</th><th>Mặt</th><th>Kệ</th><th class="text-end">Tồn đầu</th><th>Dòng nguồn</th></tr></thead>
                     <tbody id="catalogRows"><tr><td colspan="10" class="wms-loading">Chưa có dữ liệu. Bấm Đồng bộ DANH MỤC.</td></tr></tbody>
                 </table>
+            </div>
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
+                <span id="catalogPageLabel" class="text-secondary small">Trang 1 / 1</span>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="catalogPerPage" class="form-select form-select-sm" style="width:110px">
+                        <option value="50">50 dong</option>
+                        <option value="100" selected>100 dong</option>
+                        <option value="200">200 dong</option>
+                    </select>
+                    <button id="catalogPrevPage" class="wms-btn" type="button">Truoc</button>
+                    <button id="catalogNextPage" class="wms-btn" type="button">Sau</button>
+                </div>
             </div>
         </section>
     </main>
@@ -111,6 +135,10 @@
         const invalidCodeKeywordEl = document.getElementById('invalidCodeKeyword');
         let searchTimer = null;
         let invalidCodeSearchTimer = null;
+        let catalogPage = 1;
+        let catalogTotalPages = 1;
+        let invalidCodePage = 1;
+        let invalidCodeTotalPages = 1;
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits:3});
 
@@ -120,7 +148,10 @@
         }
 
         function loadCatalog() {
-            const params = new URLSearchParams({limit:2000});
+            const params = new URLSearchParams({
+                page: catalogPage,
+                per_page: document.getElementById('catalogPerPage').value || 100,
+            });
             if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
             rowsEl.innerHTML = '<tr><td colspan="10" class="wms-loading">Đang tải dữ liệu...</td></tr>';
 
@@ -134,7 +165,13 @@
                     document.getElementById('catalogLastSync').textContent = summary.last_synced_at
                         ? new Date(summary.last_synced_at).toLocaleString('vi-VN')
                         : 'Chưa đồng bộ';
-                    document.getElementById('catalogResultLabel').textContent = `${num((result.data || []).length)} / ${num(summary.item_count)} mã`;
+                    const pagination = result.pagination || {};
+                    catalogPage = Number(pagination.page || catalogPage || 1);
+                    catalogTotalPages = Math.max(1, Number(pagination.total_pages || 1));
+                    document.getElementById('catalogResultLabel').textContent = `${num(pagination.total || summary.item_count)} mã`;
+                    document.getElementById('catalogPageLabel').textContent = `Trang ${num(catalogPage)} / ${num(catalogTotalPages)}`;
+                    document.getElementById('catalogPrevPage').disabled = catalogPage <= 1;
+                    document.getElementById('catalogNextPage').disabled = !pagination.has_more;
                     rowsEl.innerHTML = (result.data || []).map(row => {
                         const colorLabel = row.color || row.pantone_code || row.pantone_hex || '-';
                         return `<tr>
@@ -156,7 +193,8 @@
 
         function loadInvalidCodes() {
             const params = new URLSearchParams({
-                limit: 2000,
+                page: invalidCodePage,
+                per_page: document.getElementById('invalidCodePerPage').value || 100,
                 type: invalidCodeTypeEl.value || 'all',
             });
             if (invalidCodeKeywordEl.value.trim()) params.set('keyword', invalidCodeKeywordEl.value.trim());
@@ -167,8 +205,14 @@
                 .then(result => {
                     const rows = result.data || [];
                     const summary = result.summary || {};
+                    const pagination = result.pagination || {};
+                    invalidCodePage = Number(pagination.page || invalidCodePage || 1);
+                    invalidCodeTotalPages = Math.max(1, Number(pagination.total_pages || 1));
                     document.getElementById('invalidCodeResultLabel').textContent =
                         `${num(summary.total)} dong loi - ${num(summary.unique_code_count)} ma - Nhap ${num(summary.receipt_count)} / Xuat ${num(summary.issue_count)}`;
+                    document.getElementById('invalidCodePageLabel').textContent = `Trang ${num(invalidCodePage)} / ${num(invalidCodeTotalPages)}`;
+                    document.getElementById('invalidCodePrevPage').disabled = invalidCodePage <= 1;
+                    document.getElementById('invalidCodeNextPage').disabled = !pagination.has_more;
                     invalidCodeRowsEl.innerHTML = rows.map(row => `
                         <tr>
                             <td>${esc(row.document_label)}</td>
@@ -205,6 +249,7 @@
               .then(result => {
                   const data = result.data || {};
                   resultEl.textContent = `Thêm ${num(data.created)}, cập nhật ${num(data.updated)}, đang dùng ${num(data.active)} mã.`;
+                  catalogPage = 1;
                   loadCatalog();
               })
               .catch(error => resultEl.textContent = error.message)
@@ -226,8 +271,9 @@
                       return;
                   }
                   resultEl.textContent = `Auto sync xong: them ${num(data.created)}, cap nhat ${num(data.updated)}, dang dung ${num(data.active)} ma.`;
+                  catalogPage = 1;
+                  invalidCodePage = 1;
                   loadCatalog();
-                  loadInvalidCodes();
               })
               .catch(error => resultEl.textContent = error.message);
         }
@@ -253,6 +299,7 @@
         function queueSearch(source) {
             if (source === topKeywordEl) keywordEl.value = topKeywordEl.value;
             if (source === keywordEl) topKeywordEl.value = keywordEl.value;
+            catalogPage = 1;
             clearTimeout(searchTimer);
             searchTimer = setTimeout(loadCatalog, 250);
         }
@@ -262,16 +309,59 @@
         document.getElementById('clearCatalogFilter').addEventListener('click', () => {
             keywordEl.value = '';
             topKeywordEl.value = '';
+            catalogPage = 1;
             loadCatalog();
         });
-        document.getElementById('scanInvalidCodesBtn').addEventListener('click', loadInvalidCodes);
-        invalidCodeTypeEl.addEventListener('change', loadInvalidCodes);
+        document.getElementById('scanInvalidCodesBtn').addEventListener('click', () => {
+            invalidCodePage = 1;
+            loadInvalidCodes();
+        });
+        invalidCodeTypeEl.addEventListener('change', () => {
+            invalidCodePage = 1;
+            loadInvalidCodes();
+        });
         invalidCodeKeywordEl.addEventListener('input', () => {
+            invalidCodePage = 1;
             clearTimeout(invalidCodeSearchTimer);
             invalidCodeSearchTimer = setTimeout(loadInvalidCodes, 250);
         });
+        document.getElementById('catalogPerPage').addEventListener('change', () => {
+            catalogPage = 1;
+            loadCatalog();
+        });
+        document.getElementById('catalogPrevPage').addEventListener('click', () => {
+            if (catalogPage > 1) {
+                catalogPage -= 1;
+                loadCatalog();
+            }
+        });
+        document.getElementById('catalogNextPage').addEventListener('click', () => {
+            if (catalogPage < catalogTotalPages) {
+                catalogPage += 1;
+                loadCatalog();
+            }
+        });
+        document.getElementById('invalidCodePerPage').addEventListener('change', () => {
+            invalidCodePage = 1;
+            loadInvalidCodes();
+        });
+        document.getElementById('invalidCodePrevPage').addEventListener('click', () => {
+            if (invalidCodePage > 1) {
+                invalidCodePage -= 1;
+                loadInvalidCodes();
+            }
+        });
+        document.getElementById('invalidCodeNextPage').addEventListener('click', () => {
+            if (invalidCodePage < invalidCodeTotalPages) {
+                invalidCodePage += 1;
+                loadInvalidCodes();
+            }
+        });
+        document.getElementById('catalogPrevPage').disabled = true;
+        document.getElementById('catalogNextPage').disabled = true;
+        document.getElementById('invalidCodePrevPage').disabled = true;
+        document.getElementById('invalidCodeNextPage').disabled = true;
         loadCatalog();
-        loadInvalidCodes();
         autoSyncCatalog();
         setInterval(autoSyncCatalog, 30 * 60 * 1000);
     </script>

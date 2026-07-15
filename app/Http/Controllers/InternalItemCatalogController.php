@@ -24,6 +24,9 @@ class InternalItemCatalogController extends Controller
     public function data(Request $request)
     {
         $keyword = trim((string) $request->query('keyword', ''));
+        $isPaged = $request->has('page') || $request->has('per_page');
+        $page = max((int) $request->query('page', 1), 1);
+        $perPage = min(max((int) $request->query('per_page', 100), 25), 300);
         $limit = min(max((int) $request->query('limit', 500), 1), 2000);
         $tokens = $this->searchTokens($keyword);
 
@@ -52,7 +55,9 @@ class InternalItemCatalogController extends Controller
             ->filter(fn ($row) => $this->matchesTokens($this->catalogSearchText($row), $tokens))
             ->values();
 
-        $rows = $filteredRows->take($limit)->values();
+        $rows = $isPaged
+            ? $filteredRows->slice(($page - 1) * $perPage, $perPage)->values()
+            : $filteredRows->take($limit)->values();
         $matcher = app(PantoneColorMatcher::class);
 
         return response()->json([
@@ -71,6 +76,13 @@ class InternalItemCatalogController extends Controller
                 'with_unit_count' => $filteredRows->filter(fn ($row) => trim((string) $row->unit) !== '')->count(),
                 'last_synced_at' => InternalItemCatalog::query()->max('updated_at'),
             ],
+            'pagination' => [
+                'page' => $isPaged ? $page : 1,
+                'per_page' => $isPaged ? $perPage : $limit,
+                'total' => $filteredRows->count(),
+                'total_pages' => $isPaged ? (int) ceil($filteredRows->count() / $perPage) : 1,
+                'has_more' => $isPaged ? ($page * $perPage < $filteredRows->count()) : ($rows->count() < $filteredRows->count()),
+            ],
             'source' => [
                 'spreadsheet_id' => self::SPREADSHEET_ID,
                 'sheet' => self::SHEET_NAME,
@@ -83,6 +95,9 @@ class InternalItemCatalogController extends Controller
     {
         $keyword = trim((string) $request->query('keyword', ''));
         $type = trim((string) $request->query('type', 'all'));
+        $isPaged = $request->has('page') || $request->has('per_page');
+        $page = max((int) $request->query('page', 1), 1);
+        $perPage = min(max((int) $request->query('per_page', 100), 25), 300);
         $limit = min(max((int) $request->query('limit', 500), 1), 2000);
         $tokens = $this->searchTokens($keyword);
 
@@ -159,8 +174,11 @@ class InternalItemCatalogController extends Controller
             'unique_code_count' => $allRows->pluck('internal_item_code')->map(fn ($value) => mb_strtoupper(trim((string) $value)))->unique()->count(),
         ];
 
-        $rows = $allRows
-            ->take($limit)
+        $pagedRows = $isPaged
+            ? $allRows->slice(($page - 1) * $perPage, $perPage)->values()
+            : $allRows->take($limit)->values();
+
+        $rows = $pagedRows
             ->map(function ($row) {
                 return [
                     'document_type' => $row->document_type,
@@ -187,6 +205,13 @@ class InternalItemCatalogController extends Controller
         return response()->json([
             'data' => $rows,
             'summary' => $summary,
+            'pagination' => [
+                'page' => $isPaged ? $page : 1,
+                'per_page' => $isPaged ? $perPage : $limit,
+                'total' => $allRows->count(),
+                'total_pages' => $isPaged ? (int) ceil($allRows->count() / $perPage) : 1,
+                'has_more' => $isPaged ? ($page * $perPage < $allRows->count()) : ($rows->count() < $allRows->count()),
+            ],
         ]);
     }
 
@@ -402,14 +427,19 @@ class InternalItemCatalogController extends Controller
 
                 $shelf = $this->inferShelfCode($locationCode);
                 $bay = $this->inferBayCode($locationCode);
+                $tier = $this->inferTierFromLocationCode($locationCode) ?: 1;
 
                 if ($existing) {
                     $changed = false;
-                    if (!$existing->shelf_code && $shelf !== '') {
+                    if ($shelf !== '' && $existing->shelf_code !== $shelf) {
                         $existing->shelf_code = $shelf;
                         $changed = true;
                     }
-                    if (!$existing->bay_code && $bay !== '') {
+                    if ((int) $existing->tier !== (int) $tier) {
+                        $existing->tier = $tier;
+                        $changed = true;
+                    }
+                    if ($bay !== '' && (string) $existing->bay_code !== $bay) {
                         $existing->bay_code = $bay;
                         $changed = true;
                     }
@@ -430,7 +460,7 @@ class InternalItemCatalogController extends Controller
                     'location_code' => $locationCode,
                     'warehouse_code' => '',
                     'shelf_code' => $shelf,
-                    'tier' => 1,
+                    'tier' => $tier,
                     'bay_code' => $bay ?: null,
                     'grid_x' => (($index % 6) * 4) + 1,
                     'grid_y' => ((int) floor($index / 6) * 3) + 1,
@@ -571,11 +601,26 @@ class InternalItemCatalogController extends Controller
 
     private function inferShelfCode(string $locationCode): string
     {
+        if (preg_match('/^([A-Z])0*(\d{1,4})$/', $locationCode, $match)) {
+            return ltrim($match[2], '0') ?: '0';
+        }
+
         return preg_match('/^[A-Z]+/', $locationCode, $match) ? $match[0] : '';
     }
 
     private function inferBayCode(string $locationCode): string
     {
         return preg_match('/(\d+)$/', $locationCode, $match) ? ltrim($match[1], '0') ?: '0' : '';
+    }
+
+    private function inferTierFromLocationCode(string $locationCode): int
+    {
+        if (!preg_match('/^([A-Z])0*\d{1,4}$/', $locationCode, $match)) {
+            return 0;
+        }
+
+        $letterIndex = ord($match[1]) - ord('A');
+
+        return 5 - ($letterIndex % 5);
     }
 }

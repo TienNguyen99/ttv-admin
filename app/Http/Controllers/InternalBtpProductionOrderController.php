@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\NormalizesDateInput;
 use App\Models\InternalBtpProductionOrder;
 use App\Models\InternalMaterialIssue;
 use App\Services\InternalAudit;
@@ -13,6 +14,8 @@ use Illuminate\Validation\ValidationException;
 
 class InternalBtpProductionOrderController extends Controller
 {
+    use NormalizesDateInput;
+
     public function index()
     {
         return view('client.internal-btp-production-orders');
@@ -102,7 +105,14 @@ class InternalBtpProductionOrderController extends Controller
         }
 
         $summaryQuery = clone $query;
-        $rows = $query->limit(min(max((int) $request->query('limit', 200), 1), 1000))->get();
+        $isPaged = $request->has('page') || $request->has('per_page');
+        $page = max((int) $request->query('page', 1), 1);
+        $perPage = min(max((int) $request->query('per_page', 100), 25), 300);
+        $limit = min(max((int) $request->query('limit', 200), 1), 1000);
+        $rows = $isPaged
+            ? $query->skip(($page - 1) * $perPage)->take($perPage)->get()
+            : $query->limit($limit)->get();
+        $totalRows = (clone $summaryQuery)->count();
 
         return response()->json([
             'data' => $rows,
@@ -120,6 +130,13 @@ class InternalBtpProductionOrderController extends Controller
                 'total_quantity' => (float) $rows->sum('lines_sum_quantity'),
                 'draft_count' => (clone $summaryQuery)->where('status', 'draft')->count(),
                 'issued_count' => (clone $summaryQuery)->where('status', 'issued')->count(),
+            ],
+            'pagination' => [
+                'page' => $isPaged ? $page : 1,
+                'per_page' => $isPaged ? $perPage : $limit,
+                'total' => $totalRows,
+                'total_pages' => $isPaged ? (int) ceil($totalRows / $perPage) : 1,
+                'has_more' => $isPaged ? ($page * $perPage < $totalRows) : ($rows->count() < $totalRows),
             ],
         ]);
     }
@@ -376,6 +393,7 @@ class InternalBtpProductionOrderController extends Controller
             'purpose' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
         ]);
+        $data = $this->normalizeDateFields($data, ['issue_date']);
 
         $orderIds = array_values(array_unique($data['order_ids'] ?? []));
         $orderCodes = array_values(array_unique($data['order_codes'] ?? []));
@@ -515,7 +533,7 @@ class InternalBtpProductionOrderController extends Controller
 
         $request->replace($payload);
 
-        return $request->validate([
+        $data = $request->validate([
             'order_date' => 'nullable|date',
             'customer' => 'nullable|string|max:200',
             'receiver_name' => 'nullable|string|max:150',
@@ -538,6 +556,8 @@ class InternalBtpProductionOrderController extends Controller
             'lines.*.side' => 'nullable|string|max:255',
             'lines.*.note' => 'nullable|string|max:1000',
         ]);
+
+        return $this->normalizeDateFields($data, ['order_date']);
     }
 
     private function ensureLineIdentity(array $lines): void

@@ -19,6 +19,137 @@ class InternalProductionOrderController extends Controller
         return view('client.internal-production-orders');
     }
 
+    public function workflowIndex()
+    {
+        return view('client.production-order-workflow');
+    }
+
+    public function workflow(Request $request)
+    {
+        $keyword = mb_strtoupper(trim((string) $request->query('keyword', '')));
+        $status = trim((string) $request->query('status', ''));
+        $limit = min(max((int) $request->query('limit', 250), 1), 1000);
+
+        $orders = InternalProductionOrder::query()
+            ->where('is_active', true)
+            ->when($keyword !== '', function ($query) use ($keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    $like = '%' . $keyword . '%';
+                    $q->whereRaw('UPPER(production_order) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(purchase_order) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(customer) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(item_code) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(description) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(size) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(color) LIKE ?', [$like]);
+                });
+            })
+            ->orderByRaw('promised_date IS NULL')
+            ->orderBy('promised_date')
+            ->orderByDesc('updated_at')
+            ->limit($limit)
+            ->get();
+
+        $orderCodes = $orders->pluck('production_order')->filter()->unique()->values();
+
+        if ($orderCodes->isEmpty()) {
+            return response()->json([
+                'data' => [],
+                'summary' => $this->workflowSummary(collect()),
+            ]);
+        }
+
+        $receiptRows = DB::connection('internal')->table('internal_material_receipt_lines as l')
+            ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+            ->whereIn('l.production_order', $orderCodes->all())
+            ->select(
+                'l.production_order',
+                DB::raw('SUM(l.quantity) as quantity'),
+                DB::raw('COUNT(*) as line_count'),
+                DB::raw('COUNT(DISTINCT r.id) as document_count'),
+                DB::raw("GROUP_CONCAT(DISTINCT r.receipt_code ORDER BY r.receipt_date SEPARATOR ', ') as document_codes")
+            )
+            ->groupBy('l.production_order')
+            ->get()
+            ->keyBy('production_order');
+
+        $issueRows = DB::connection('internal')->table('internal_material_issue_lines as l')
+            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->whereIn('l.production_order', $orderCodes->all())
+            ->select(
+                'l.production_order',
+                DB::raw("SUM(CASE WHEN i.issue_type = 'production' THEN l.quantity ELSE 0 END) as production_quantity"),
+                DB::raw("SUM(CASE WHEN i.issue_type = 'customer' THEN l.quantity ELSE 0 END) as customer_quantity"),
+                DB::raw("COUNT(DISTINCT CASE WHEN i.issue_type = 'production' THEN i.id END) as production_document_count"),
+                DB::raw("COUNT(DISTINCT CASE WHEN i.issue_type = 'customer' THEN i.id END) as customer_document_count"),
+                DB::raw("MAX(CASE WHEN i.status = 'completed' THEN 1 ELSE 0 END) as has_completed_issue"),
+                DB::raw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'production' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as production_issue_codes"),
+                DB::raw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'customer' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as customer_issue_codes")
+            )
+            ->groupBy('l.production_order')
+            ->get()
+            ->keyBy('production_order');
+
+        $rows = $orders
+            ->groupBy('production_order')
+            ->map(function ($lines, $productionOrder) use ($receiptRows, $issueRows) {
+                $first = $lines->first();
+                $receipt = $receiptRows->get($productionOrder);
+                $issue = $issueRows->get($productionOrder);
+                $plannedQuantity = (float) $lines->sum('order_quantity');
+                $receivedQuantity = (float) ($receipt->quantity ?? 0);
+                $issuedProduction = (float) ($issue->production_quantity ?? 0);
+                $issuedCustomer = (float) ($issue->customer_quantity ?? 0);
+                $remainingAfterCustomer = $receivedQuantity - $issuedCustomer;
+                $status = $this->workflowStatus($plannedQuantity, $receivedQuantity, $issuedProduction, (bool) ($issue->has_completed_issue ?? false), $issuedCustomer);
+
+                $items = $lines->take(6)->map(function ($line) {
+                    return [
+                        'item_code' => trim((string) $line->item_code),
+                        'description' => trim((string) $line->description),
+                        'size' => trim((string) $line->size),
+                        'color' => trim((string) $line->color),
+                        'quantity' => (float) $line->order_quantity,
+                        'unit' => trim((string) $line->unit),
+                    ];
+                })->values();
+
+                return [
+                    'production_order' => $productionOrder,
+                    'customer' => trim((string) $first->customer),
+                    'purchase_order' => trim((string) $first->purchase_order),
+                    'tracking_staff' => trim((string) $first->tracking_staff),
+                    'promised_date' => optional($first->promised_date)->format('Y-m-d'),
+                    'customer_requested_date' => optional($first->customer_requested_date)->format('Y-m-d'),
+                    'delivery_place' => trim((string) $first->delivery_place),
+                    'line_count' => $lines->count(),
+                    'planned_quantity' => $plannedQuantity,
+                    'received_quantity' => $receivedQuantity,
+                    'production_issue_quantity' => $issuedProduction,
+                    'customer_issue_quantity' => $issuedCustomer,
+                    'remaining_quantity' => $remainingAfterCustomer,
+                    'production_document_count' => (int) ($issue->production_document_count ?? 0),
+                    'customer_document_count' => (int) ($issue->customer_document_count ?? 0),
+                    'receipt_document_count' => (int) ($receipt->document_count ?? 0),
+                    'receipt_codes' => $this->splitCodes($receipt->document_codes ?? ''),
+                    'production_issue_codes' => $this->splitCodes($issue->production_issue_codes ?? ''),
+                    'customer_issue_codes' => $this->splitCodes($issue->customer_issue_codes ?? ''),
+                    'status' => $status,
+                    'items' => $items,
+                ];
+            })
+            ->values()
+            ->filter(function ($row) use ($status) {
+                return $status === '' || $row['status'] === $status;
+            })
+            ->values();
+
+        return response()->json([
+            'data' => $rows,
+            'summary' => $this->workflowSummary($rows),
+        ]);
+    }
+
     public function data(Request $request)
     {
         $query = InternalProductionOrder::query()->where('is_active', true);
@@ -67,6 +198,9 @@ class InternalProductionOrderController extends Controller
         }
 
         $summaryQuery = clone $query;
+        $isPaged = $request->has('page') || $request->has('per_page');
+        $page = max((int) $request->query('page', 1), 1);
+        $perPage = min(max((int) $request->query('per_page', 100), 25), 300);
         $limit = min(max((int) $request->query('limit', 500), 1), 2000);
         if ($productionOrder !== '') {
             $query->orderBy('source_row');
@@ -76,7 +210,11 @@ class InternalProductionOrderController extends Controller
                 ->orderByDesc('production_order');
         }
 
-        $rows = $query->limit($limit)->get();
+        $rowsQuery = clone $query;
+        $rows = $isPaged
+            ? $rowsQuery->skip(($page - 1) * $perPage)->take($perPage)->get()
+            : $rowsQuery->limit($limit)->get();
+        $totalRows = (clone $summaryQuery)->count();
 
         return response()->json([
             'data' => $rows,
@@ -88,6 +226,13 @@ class InternalProductionOrderController extends Controller
                 'due_count' => (clone $summaryQuery)->where('status', 'due')->count(),
                 'customer_count' => (clone $summaryQuery)->whereNotNull('customer')->distinct('customer')->count('customer'),
                 'last_synced_at' => InternalProductionOrder::query()->max('updated_at'),
+            ],
+            'pagination' => [
+                'page' => $isPaged ? $page : 1,
+                'per_page' => $isPaged ? $perPage : $limit,
+                'total' => $totalRows,
+                'total_pages' => $isPaged ? (int) ceil($totalRows / $perPage) : 1,
+                'has_more' => $isPaged ? ($page * $perPage < $totalRows) : ($rows->count() < $totalRows),
             ],
             'source' => [
                 'spreadsheet_id' => self::SPREADSHEET_ID,
@@ -203,6 +348,55 @@ class InternalProductionOrderController extends Controller
                 'sheet' => self::SHEET_NAME,
             ],
         ]);
+    }
+
+    private function workflowStatus(float $planned, float $received, float $issuedProduction, bool $completedIssue, float $issuedCustomer): string
+    {
+        if ($issuedCustomer > 0) {
+            return 'shipped_customer';
+        }
+
+        if ($completedIssue) {
+            return 'production_done';
+        }
+
+        if ($issuedProduction > 0) {
+            return 'in_production';
+        }
+
+        if ($received > 0) {
+            return 'received';
+        }
+
+        return $planned > 0 ? 'planned' : 'empty';
+    }
+
+    private function workflowSummary($rows): array
+    {
+        $rows = collect($rows);
+
+        return [
+            'order_count' => $rows->count(),
+            'planned_quantity' => (float) $rows->sum('planned_quantity'),
+            'received_quantity' => (float) $rows->sum('received_quantity'),
+            'production_issue_quantity' => (float) $rows->sum('production_issue_quantity'),
+            'customer_issue_quantity' => (float) $rows->sum('customer_issue_quantity'),
+            'planned_count' => $rows->where('status', 'planned')->count(),
+            'received_count' => $rows->where('status', 'received')->count(),
+            'in_production_count' => $rows->where('status', 'in_production')->count(),
+            'production_done_count' => $rows->where('status', 'production_done')->count(),
+            'shipped_customer_count' => $rows->where('status', 'shipped_customer')->count(),
+        ];
+    }
+
+    private function splitCodes($value): array
+    {
+        return collect(explode(',', (string) $value))
+            ->map(fn ($code) => trim($code))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function parseCsv(string $contents): array

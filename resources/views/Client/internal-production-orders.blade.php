@@ -63,6 +63,18 @@
                     <tbody id="productionRows"><tr><td colspan="17" class="wms-loading">Chưa có dữ liệu. Bấm Đồng bộ Google Sheet.</td></tr></tbody>
                 </table>
             </div>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 p-3 border-top">
+                <span id="productionPageLabel" class="text-secondary small"></span>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="productionPerPage" class="form-select form-select-sm" style="width:110px">
+                        <option value="50">50 dòng</option>
+                        <option value="100" selected>100 dòng</option>
+                        <option value="200">200 dòng</option>
+                    </select>
+                    <button id="productionPrevPage" class="wms-btn" type="button">Trước</button>
+                    <button id="productionNextPage" class="wms-btn" type="button">Sau</button>
+                </div>
+            </div>
         </section>
     </main>
 
@@ -72,6 +84,8 @@
         const keywordEl = document.getElementById('productionKeyword');
         const topKeywordEl = document.getElementById('topProductionKeyword');
         let searchTimer = null;
+        let productionPage = 1;
+        let productionTotalPages = 1;
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits:3});
         const date = value => value ? new Date(value + 'T00:00:00').toLocaleDateString('vi-VN') : '-';
@@ -88,7 +102,7 @@
         }
 
         function loadProductionOrders() {
-            const params = new URLSearchParams({limit:1500});
+            const params = new URLSearchParams({page: productionPage, per_page: document.getElementById('productionPerPage').value});
             if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
             if (document.getElementById('productionFromDate').value) params.set('from_date', document.getElementById('productionFromDate').value);
             if (document.getElementById('productionToDate').value) params.set('to_date', document.getElementById('productionToDate').value);
@@ -104,7 +118,12 @@
                     document.getElementById('productionLate').textContent = num(summary.late_count);
                     document.getElementById('productionCustomers').textContent = num(summary.customer_count);
                     document.getElementById('productionLastSync').textContent = summary.last_synced_at ? 'Cập nhật ' + new Date(summary.last_synced_at).toLocaleString('vi-VN') : 'Chưa đồng bộ';
-                    document.getElementById('productionResultLabel').textContent = `${num((result.data || []).length)} / ${num(summary.order_count)} lệnh`;
+                    const pagination = result.pagination || {};
+                    productionTotalPages = Math.max(Number(pagination.total_pages || 1), 1);
+                    document.getElementById('productionResultLabel').textContent = `${num((result.data || []).length)} dòng đang hiển thị`;
+                    document.getElementById('productionPageLabel').textContent = `Trang ${num(pagination.page || productionPage)} / ${num(productionTotalPages)} · Tổng ${num(pagination.total || 0)} dòng`;
+                    document.getElementById('productionPrevPage').disabled = productionPage <= 1;
+                    document.getElementById('productionNextPage').disabled = !pagination.has_more;
                     rowsEl.innerHTML = (result.data || []).map(row => `<tr>
                         <td class="wms-code">${esc(row.production_order)}</td>
                         <td class="wrap">${esc(row.purchase_order || '-')}</td>
@@ -150,16 +169,20 @@
             if (source === topKeywordEl) keywordEl.value = topKeywordEl.value;
             if (source === keywordEl) topKeywordEl.value = keywordEl.value;
             clearTimeout(searchTimer);
-            searchTimer = setTimeout(loadProductionOrders, 250);
+            searchTimer = setTimeout(() => { productionPage = 1; loadProductionOrders(); }, 250);
         }
         keywordEl.addEventListener('input', () => queueSearch(keywordEl));
         topKeywordEl.addEventListener('input', () => queueSearch(topKeywordEl));
-        ['productionFromDate','productionToDate','productionStatus'].forEach(id => document.getElementById(id).addEventListener('change', loadProductionOrders));
+        ['productionFromDate','productionToDate','productionStatus'].forEach(id => document.getElementById(id).addEventListener('change', () => { productionPage = 1; loadProductionOrders(); }));
+        document.getElementById('productionPerPage').addEventListener('change', () => { productionPage = 1; loadProductionOrders(); });
+        document.getElementById('productionPrevPage').addEventListener('click', () => { if (productionPage > 1) { productionPage--; loadProductionOrders(); } });
+        document.getElementById('productionNextPage').addEventListener('click', () => { if (productionPage < productionTotalPages) { productionPage++; loadProductionOrders(); } });
         document.getElementById('clearProductionFilter').addEventListener('click', () => {
             keywordEl.value = ''; topKeywordEl.value = '';
             document.getElementById('productionFromDate').value = '';
             document.getElementById('productionToDate').value = '';
             document.getElementById('productionStatus').value = '';
+            productionPage = 1;
             loadProductionOrders();
         });
         loadProductionOrders();

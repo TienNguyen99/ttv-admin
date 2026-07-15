@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\NormalizesDateInput;
 use App\Models\InternalInventoryCount;
 use App\Models\InternalOpeningStock;
 use App\Models\InventoryPackage;
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\DB;
 
 class InventoryComparisonController extends Controller
 {
+    use NormalizesDateInput;
+
     public function index()
     {
         return view('client.inventory-comparison');
@@ -265,6 +268,7 @@ class InventoryComparisonController extends Controller
             'checked_at' => 'required|date',
             'note' => 'nullable|string|max:500',
         ]);
+        $data = $this->normalizeDateFields($data, ['checked_at']);
 
         $data['ma_ko'] = $data['ma_ko'] ?? '';
         $data['internal_item_code'] = trim($data['internal_item_code'] ?? '');

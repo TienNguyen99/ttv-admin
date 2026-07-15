@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\NormalizesDateInput;
 use App\Models\InternalInventoryCount;
 use App\Models\InternalItemCatalog;
 use App\Models\InternalMaterialIssue;
@@ -26,9 +27,18 @@ use Illuminate\Support\Str;
 
 class WarehouseCountController extends Controller
 {
+    use NormalizesDateInput;
+
     public function index()
     {
         return view('client.warehouse-count');
+    }
+
+    public function shelfMapIndex()
+    {
+        return view('client.warehouse-count', [
+            'shelfMapOnly' => true,
+        ]);
     }
 
     public function stockIndex()
@@ -221,8 +231,22 @@ class WarehouseCountController extends Controller
 
     public function locations()
     {
+        $locations = WarehouseLocation::query()
+            ->orderBy('location_code')
+            ->get()
+            ->map(function ($location) {
+                $tier = $this->inferTierFromLocationCode($location->location_code);
+                if ($tier > 0) {
+                    $location->shelf_code = $this->inferShelfCode($location->location_code);
+                    $location->tier = $tier;
+                    $location->bay_code = $this->inferBayCode($location->location_code) ?: $location->bay_code;
+                }
+
+                return $location;
+            });
+
         return response()->json([
-            'data' => WarehouseLocation::query()->orderBy('location_code')->get(),
+            'data' => $locations,
         ]);
     }
 
@@ -232,7 +256,7 @@ class WarehouseCountController extends Controller
             'location_code' => 'required|string|max:100',
             'warehouse_code' => 'nullable|string|max:50',
             'shelf_code' => 'nullable|string|max:20',
-            'tier' => 'nullable|integer|min:1|max:2',
+            'tier' => 'nullable|integer|min:1|max:5',
             'bay_code' => 'nullable|string|max:50',
             'grid_x' => 'nullable|integer|min:1|max:24',
             'grid_y' => 'nullable|integer|min:1|max:40',
@@ -245,16 +269,16 @@ class WarehouseCountController extends Controller
         $data['location_code'] = strtoupper(trim($data['location_code']));
         $data['warehouse_code'] = strtoupper(trim($data['warehouse_code'] ?? ''));
         $data['shelf_code'] = strtoupper(trim($data['shelf_code'] ?? ''));
-        $data['tier'] = (int) ($data['tier'] ?? 1);
         $data['bay_code'] = strtoupper(trim($data['bay_code'] ?? ''));
+        $inferredTier = $this->inferTierFromLocationCode($data['location_code']);
 
         $location = WarehouseLocation::query()->updateOrCreate(
             ['location_code' => $data['location_code']],
             [
                 'warehouse_code' => $data['warehouse_code'],
                 'shelf_code' => $data['shelf_code'] ?: $this->inferShelfCode($data['location_code']),
-                'tier' => in_array($data['tier'], [1, 2], true) ? $data['tier'] : 1,
-                'bay_code' => $data['bay_code'] ?: null,
+                'tier' => $inferredTier ?: max(1, min(5, (int) ($data['tier'] ?? 1))),
+                'bay_code' => $data['bay_code'] ?: ($this->inferBayCode($data['location_code']) ?: null),
                 'grid_x' => (int) ($data['grid_x'] ?? 1),
                 'grid_y' => (int) ($data['grid_y'] ?? 1),
                 'grid_w' => (int) ($data['grid_w'] ?? 4),
@@ -275,7 +299,7 @@ class WarehouseCountController extends Controller
             'number_from' => 'required|integer|min:1|max:999',
             'number_to' => 'required|integer|min:1|max:999',
             'warehouse_code' => 'nullable|string|max:50',
-            'tier' => 'nullable|integer|min:1|max:2',
+            'tier' => 'nullable|integer|min:1|max:5',
             'name_prefix' => 'nullable|string|max:100',
         ]);
 
@@ -292,7 +316,7 @@ class WarehouseCountController extends Controller
         }
 
         $warehouseCode = strtoupper(trim((string) ($data['warehouse_code'] ?? '')));
-        $tier = in_array((int) ($data['tier'] ?? 1), [1, 2], true) ? (int) ($data['tier'] ?? 1) : 1;
+        $tier = max(1, min(5, (int) ($data['tier'] ?? 1)));
         $namePrefix = trim((string) ($data['name_prefix'] ?? 'Kệ'));
         $created = 0;
         $updated = 0;
@@ -306,8 +330,27 @@ class WarehouseCountController extends Controller
                     $existing = WarehouseLocation::query()->where('location_code', $locationCode)->first();
 
                     if ($existing) {
+                        $inferredShelf = $this->inferShelfCode($locationCode);
+                        $inferredTier = $this->inferTierFromLocationCode($locationCode) ?: $tier;
+                        $inferredBay = $this->inferBayCode($locationCode);
+                        $changed = false;
                         if ($warehouseCode !== '' && !$existing->warehouse_code) {
                             $existing->warehouse_code = $warehouseCode;
+                            $changed = true;
+                        }
+                        if ($inferredShelf !== '' && $existing->shelf_code !== $inferredShelf) {
+                            $existing->shelf_code = $inferredShelf;
+                            $changed = true;
+                        }
+                        if ((int) $existing->tier !== (int) $inferredTier) {
+                            $existing->tier = $inferredTier;
+                            $changed = true;
+                        }
+                        if ($inferredBay !== '' && (string) $existing->bay_code !== $inferredBay) {
+                            $existing->bay_code = $inferredBay;
+                            $changed = true;
+                        }
+                        if ($changed) {
                             $existing->save();
                             $updated++;
                         } else {
@@ -317,12 +360,13 @@ class WarehouseCountController extends Controller
                     }
 
                     $index = $number - $fromNumber;
+                    $inferredTier = $this->inferTierFromLocationCode($locationCode) ?: $tier;
                     WarehouseLocation::query()->create([
                         'location_code' => $locationCode,
                         'warehouse_code' => $warehouseCode,
-                        'shelf_code' => $shelf,
-                        'tier' => $tier,
-                        'bay_code' => (string) $number,
+                        'shelf_code' => $this->inferShelfCode($locationCode),
+                        'tier' => $inferredTier,
+                        'bay_code' => $this->inferBayCode($locationCode) ?: (string) $number,
                         'grid_x' => (($index % 6) * 4) + 1,
                         'grid_y' => (($shelfAscii - $fromShelf) * 18) + (int) floor($index / 6) * 3 + 1,
                         'grid_w' => 4,
@@ -377,6 +421,7 @@ class WarehouseCountController extends Controller
     {
         $query = InventoryPackage::query()
             ->with('location:id,location_code')
+            ->where('quantity', '>', 0)
             ->orderByDesc('id');
 
         if ($request->filled('location_code')) {
@@ -413,12 +458,110 @@ class WarehouseCountController extends Controller
                 $package->pantone_code = $match['pantone'];
                 $package->pantone_hex = $match['hex'];
                 $package->pantone_source = $match['source'];
+                $package->catalog_name = $catalog->item_name ?? '';
                 $package->catalog_unit = $catalog->unit ?? '';
                 return $package;
             }),
             'summary' => [
                 'package_count' => $summaryQuery->count(),
                 'total_quantity' => (float) (clone $summaryQuery)->sum('quantity'),
+            ],
+        ]);
+    }
+
+    public function stockMapData(Request $request)
+    {
+        $date = $this->normalizeDateInput($request->query('checked_at')) ?? now('Asia/Ho_Chi_Minh')->format('Y-m-d');
+        $month = Carbon::parse($date)->startOfMonth();
+        $monthStart = $month->format('Y-m-d');
+        $monthEnd = Carbon::parse($date)->format('Y-m-d');
+
+        $rows = app(InternalStockLedger::class)
+            ->query($monthStart, $monthEnd)
+            ->select(
+                'warehouse_code',
+                'location_code',
+                DB::raw('ma_hh as ma_sp'),
+                'internal_item_code',
+                'size',
+                'color',
+                'side',
+                DB::raw('SUM(opening_quantity) as opening_quantity'),
+                DB::raw('SUM(receipt_quantity) as receipt_quantity'),
+                DB::raw('SUM(issue_quantity) as issue_quantity'),
+                DB::raw('SUM(opening_quantity + receipt_quantity - issue_quantity) as total_quantity')
+            )
+            ->groupBy('warehouse_code', 'location_code', 'ma_hh', 'internal_item_code', 'size', 'color', 'side')
+            ->havingRaw('SUM(opening_quantity + receipt_quantity - issue_quantity) > 0')
+            ->orderBy('location_code')
+            ->orderBy('internal_item_code')
+            ->limit(3000)
+            ->get();
+
+        $locationCodes = $rows
+            ->pluck('location_code')
+            ->map(fn ($code) => strtoupper(trim((string) $code)) ?: 'CHUA-XEP')
+            ->unique()
+            ->values();
+
+        $locations = WarehouseLocation::query()
+            ->whereIn('location_code', $locationCodes)
+            ->get(['id', 'location_code'])
+            ->keyBy(fn ($location) => strtoupper(trim((string) $location->location_code)));
+
+        $catalogsByItemCode = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereIn('item_code', $rows->pluck('internal_item_code')->filter()->unique()->values())
+            ->get()
+            ->keyBy(fn ($item) => mb_strtoupper(trim((string) $item->item_code)));
+
+        $matcher = app(PantoneColorMatcher::class);
+
+        $data = $rows->map(function ($row, $index) use ($locations, $catalogsByItemCode, $matcher) {
+            $locationCode = strtoupper(trim((string) $row->location_code)) ?: 'CHUA-XEP';
+            $location = $locations->get($locationCode);
+            $catalog = $catalogsByItemCode->get(mb_strtoupper(trim((string) $row->internal_item_code)));
+            $match = $matcher->matchValues([
+                $row->internal_item_code,
+                $row->ma_sp,
+                $row->size,
+                $row->color,
+                $row->side,
+            ], $catalog);
+
+            return [
+                'id' => 'stock-' . ($index + 1),
+                'package_code' => 'TON-' . $locationCode,
+                'warehouse_location_id' => $location ? $location->id : null,
+                'location' => [
+                    'id' => $location ? $location->id : null,
+                    'location_code' => $locationCode,
+                ],
+                'ma_ko' => $row->warehouse_code,
+                'ma_sp' => $row->ma_sp,
+                'internal_item_code' => $row->internal_item_code,
+                'size' => $row->size,
+                'color' => $row->color,
+                'side' => $row->side,
+                'quantity' => (float) $row->total_quantity,
+                'opening_quantity' => (float) $row->opening_quantity,
+                'receipt_quantity' => (float) $row->receipt_quantity,
+                'issue_quantity' => (float) $row->issue_quantity,
+                'catalog_name' => $catalog ? $catalog->item_name : '',
+                'catalog_unit' => $catalog ? $catalog->unit : '',
+                'pantone_code' => $match['pantone'],
+                'pantone_hex' => $match['hex'],
+                'pantone_source' => $match['source'],
+            ];
+        });
+
+        return response()->json([
+            'data' => $data,
+            'summary' => [
+                'location_count' => $data->pluck('location.location_code')->filter()->unique()->count(),
+                'line_count' => $data->count(),
+                'item_count' => $data->pluck('internal_item_code')->filter()->unique()->count(),
+                'total_quantity' => (float) $data->sum('quantity'),
             ],
         ]);
     }
@@ -814,6 +957,7 @@ class WarehouseCountController extends Controller
 
         $issueQuery = DB::connection('internal')->table('internal_material_issue_lines as l')
             ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->whereRaw("COALESCE(i.issue_type, 'material') <> 'production'")
             ->whereDate('i.issue_date', '<=', $monthEnd);
         $this->applyStockDetailFilter($issueQuery, $filter, [
             'warehouse_code' => 'i.warehouse_code',
@@ -1053,6 +1197,7 @@ class WarehouseCountController extends Controller
 
         $issues = DB::connection('internal')->table('internal_material_issues as i')
             ->join('internal_material_issue_lines as l', 'l.issue_id', '=', 'i.id')
+            ->whereRaw("COALESCE(i.issue_type, 'material') <> 'production'")
             ->whereBetween('i.issue_date', [$start->format('Y-m-d'), $end->format('Y-m-d')])
             ->select('i.issue_date as date', DB::raw('SUM(l.quantity) as quantity'), DB::raw('COUNT(DISTINCT i.id) as document_count'))
             ->groupBy('i.issue_date')
@@ -1371,8 +1516,8 @@ class WarehouseCountController extends Controller
             [
                 'warehouse_code' => '',
                 'shelf_code' => $this->inferShelfCode($keys['target_location_code']),
-                'tier' => 1,
-                'bay_code' => preg_replace('/[^0-9]/', '', $keys['target_location_code']) ?: null,
+                'tier' => $this->inferTierFromLocationCode($keys['target_location_code']) ?: 1,
+                'bay_code' => $this->inferBayCode($keys['target_location_code']) ?: null,
                 'grid_x' => 1,
                 'grid_y' => 1,
                 'grid_w' => 4,
@@ -1497,6 +1642,7 @@ class WarehouseCountController extends Controller
                 DB::raw('MAX(inventory_packages.checked_at) as latest_checked_at')
             )
             ->where('wl.location_code', $locationCode)
+            ->where('inventory_packages.quantity', '>', 0)
             ->when($request->filled('checked_at'), function ($query) use ($request) {
                 $query->whereDate('inventory_packages.checked_at', $request->query('checked_at'));
             })
@@ -2100,6 +2246,7 @@ class WarehouseCountController extends Controller
             'entry_type' => 'nullable|in:opening,receipt',
             'note' => 'nullable|string|max:500',
         ]);
+        $data = $this->normalizeDateFields($data, ['checked_at']);
 
         if (trim((string) ($data['internal_item_code'] ?? '')) === '') {
             return response()->json([
@@ -2121,9 +2268,9 @@ class WarehouseCountController extends Controller
             ['location_code' => $locationCode],
             [
                 'warehouse_code' => $warehouseCode,
-                'shelf_code' => 'CX',
-                'tier' => 1,
-                'bay_code' => null,
+                'shelf_code' => $this->inferShelfCode($locationCode) ?: 'CX',
+                'tier' => $this->inferTierFromLocationCode($locationCode) ?: 1,
+                'bay_code' => $this->inferBayCode($locationCode),
                 'grid_x' => 1,
                 'grid_y' => 1,
                 'grid_w' => 4,
@@ -2240,6 +2387,139 @@ class WarehouseCountController extends Controller
         ]);
     }
 
+    public function updatePackage(Request $request, InventoryPackage $inventoryPackage)
+    {
+        $data = $request->validate([
+            'location_code' => 'required|string|max:100',
+            'ma_sp' => 'nullable|string|max:100',
+            'internal_item_code' => 'required|string|max:100',
+            'size' => 'nullable|string|max:100',
+            'color' => 'nullable|string|max:100',
+            'side' => 'nullable|string|max:100',
+            'quantity' => 'required|numeric|min:0',
+            'checked_at' => 'required|date',
+            'note' => 'nullable|string|max:500',
+        ]);
+        $data = $this->normalizeDateFields($data, ['checked_at']);
+
+        $catalogValidator = app(InternalCatalogValidator::class);
+        $catalogErrors = $catalogValidator->errorsForLines(collect([
+            ['internal_item_code' => $data['internal_item_code'] ?? ''],
+        ]));
+        if (!empty($catalogErrors)) {
+            return $catalogValidator->responseForErrors($catalogErrors);
+        }
+
+        $locationCode = strtoupper(trim((string) $data['location_code'])) ?: 'CHUA-XEP';
+        $location = WarehouseLocation::query()->firstOrCreate(
+            ['location_code' => $locationCode],
+            [
+                'warehouse_code' => '',
+                'shelf_code' => $this->inferShelfCode($locationCode) ?: 'CX',
+                'tier' => $this->inferTierFromLocationCode($locationCode) ?: 1,
+                'bay_code' => $this->inferBayCode($locationCode),
+                'grid_x' => 1,
+                'grid_y' => 1,
+                'grid_w' => 4,
+                'grid_h' => 2,
+                'location_name' => $locationCode === 'CHUA-XEP' ? 'Chua xep vi tri' : 'Ke ' . $locationCode,
+            ]
+        );
+
+        $newAttributes = [
+            'ma_sp' => strtoupper(trim((string) ($data['ma_sp'] ?? ''))),
+            'ma_ko' => '',
+            'internal_item_code' => trim((string) $data['internal_item_code']),
+            'size' => trim((string) ($data['size'] ?? '')),
+            'color' => trim((string) ($data['color'] ?? '')),
+            'side' => trim((string) ($data['side'] ?? '')),
+            'checked_at' => $data['checked_at'],
+        ];
+        $newQuantity = (float) $data['quantity'];
+
+        DB::connection('internal')->transaction(function () use ($inventoryPackage, $location, $locationCode, $newAttributes, $newQuantity, $data) {
+            $oldCount = $inventoryPackage->inventory_count_id
+                ? InternalInventoryCount::query()->lockForUpdate()->find($inventoryPackage->inventory_count_id)
+                : null;
+
+            if ($oldCount) {
+                $remainingQuantity = (float) $oldCount->counted_quantity - (float) $inventoryPackage->quantity;
+                $hasOtherPackages = InventoryPackage::query()
+                    ->where('inventory_count_id', $oldCount->id)
+                    ->where('id', '!=', $inventoryPackage->id)
+                    ->exists();
+
+                if ($remainingQuantity <= 0 && !$hasOtherPackages) {
+                    $oldCount->delete();
+                } else {
+                    $oldCount->counted_quantity = max(0, $remainingQuantity);
+                    $oldCount->save();
+                }
+            }
+
+            $newCount = InternalInventoryCount::query()->firstOrCreate(
+                [
+                    'ma_sp' => $newAttributes['ma_sp'],
+                    'ma_ko' => $newAttributes['ma_ko'],
+                    'internal_item_code' => $newAttributes['internal_item_code'],
+                    'size' => $newAttributes['size'],
+                    'color' => $newAttributes['color'],
+                    'side' => $newAttributes['side'],
+                    'checked_at' => $newAttributes['checked_at'],
+                ],
+                [
+                    'counted_quantity' => 0,
+                    'note' => $data['note'] ?? null,
+                ]
+            );
+            $newCount->counted_quantity = (float) $newCount->counted_quantity + $newQuantity;
+            $newCount->note = $data['note'] ?? $newCount->note;
+            $newCount->save();
+
+            $inventoryPackage->fill(array_merge($newAttributes, [
+                'warehouse_location_id' => $location->id,
+                'inventory_count_id' => $newCount->id,
+                'quantity' => $newQuantity,
+                'note' => $data['note'] ?? null,
+            ]));
+            $inventoryPackage->save();
+
+            InternalOpeningStock::query()
+                ->where('inventory_package_id', $inventoryPackage->id)
+                ->update([
+                    'period_month' => Carbon::parse($newAttributes['checked_at'])->startOfMonth()->format('Y-m-d'),
+                    'warehouse_code' => $newAttributes['ma_ko'],
+                    'location_code' => $locationCode,
+                    'ma_hh' => $newAttributes['ma_sp'],
+                    'internal_item_code' => $newAttributes['internal_item_code'],
+                    'size' => $newAttributes['size'],
+                    'color' => $newAttributes['color'],
+                    'side' => $newAttributes['side'],
+                    'quantity' => $newQuantity,
+                    'note' => $data['note'] ?? null,
+                ]);
+
+            $inventoryPackage->receiptLines()->update([
+                'ma_hh' => $newAttributes['ma_sp'],
+                'quantity' => $newQuantity,
+                'location_code' => $locationCode,
+                'internal_item_code' => $newAttributes['internal_item_code'],
+                'size' => $newAttributes['size'],
+                'color' => $newAttributes['color'],
+                'side' => $newAttributes['side'],
+                'note' => $data['note'] ?? null,
+            ]);
+
+            $location->status = 'counting';
+            $location->save();
+        });
+
+        return response()->json([
+            'message' => 'Da cap nhat kien trong ke.',
+            'data' => $inventoryPackage->fresh()->load('location:id,location_code'),
+        ]);
+    }
+
     public function storeReceiptBatch(Request $request)
     {
         $data = $request->validate([
@@ -2265,6 +2545,7 @@ class WarehouseCountController extends Controller
             'lines.*.purchase_order' => 'nullable|string|max:1000',
             'lines.*.customer' => 'nullable|string|max:200',
         ]);
+        $data = $this->normalizeDateFields($data, ['checked_at']);
 
         $lines = collect($data['lines'])
             ->map(function ($line) {
@@ -2521,6 +2802,7 @@ class WarehouseCountController extends Controller
             'lines.*.internal_item_code' => 'nullable|string|max:100',
             'lines.*.quantity' => 'nullable|numeric|min:0',
         ]);
+        $data = $this->normalizeDateFields($data, ['checked_at']);
 
         $duplicates = collect($data['lines'])
             ->map(function ($line, $index) {
@@ -2608,6 +2890,7 @@ class WarehouseCountController extends Controller
             'lines.*.purchase_order' => 'nullable|string|max:1000',
             'lines.*.customer' => 'nullable|string|max:200',
         ]);
+        $data = $this->normalizeDateFields($data, ['checked_at']);
         $force = $request->boolean('force');
         $linkedIssues = InternalMaterialIssue::query()
             ->where(function ($query) use ($receipt) {
@@ -2766,8 +3049,8 @@ class WarehouseCountController extends Controller
                     [
                         'warehouse_code' => $warehouseCode,
                         'shelf_code' => $this->inferShelfCode($targetLocationCode) ?: 'CX',
-                        'tier' => 1,
-                        'bay_code' => preg_replace('/[^0-9]/', '', $targetLocationCode) ?: null,
+                        'tier' => $this->inferTierFromLocationCode($targetLocationCode) ?: 1,
+                        'bay_code' => $this->inferBayCode($targetLocationCode) ?: null,
                         'grid_x' => 1,
                         'grid_y' => 1,
                         'grid_w' => 4,
@@ -3120,6 +3403,9 @@ class WarehouseCountController extends Controller
 
     public function printLocation(WarehouseLocation $warehouseLocation)
     {
+        $colors = $this->locationLabelColors([$warehouseLocation->id])->get($warehouseLocation->id, collect());
+        $warehouseLocation->setAttribute('label_colors', $colors);
+
         return view('client.labels.location', ['location' => $warehouseLocation]);
     }
 
@@ -3163,10 +3449,39 @@ class WarehouseCountController extends Controller
             ->sortBy(fn ($location) => $codes->search($location->location_code))
             ->values();
 
+        $colorMap = $this->locationLabelColors($locations->pluck('id'));
+        $locations->each(function ($location) use ($colorMap) {
+            $location->setAttribute('label_colors', $colorMap->get($location->id, collect()));
+        });
+
         return view('client.labels.locations', [
             'locations' => $locations,
             'missingCodes' => $codes->diff($locations->pluck('location_code'))->values(),
         ]);
+    }
+
+    private function locationLabelColors($locationIds)
+    {
+        $ids = collect($locationIds)->filter()->unique()->values();
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return InventoryPackage::query()
+            ->whereIn('warehouse_location_id', $ids)
+            ->where('quantity', '>', 0)
+            ->whereRaw("TRIM(COALESCE(color, '')) <> ''")
+            ->select('warehouse_location_id', 'color')
+            ->get()
+            ->groupBy('warehouse_location_id')
+            ->map(function ($rows) {
+                return $rows->pluck('color')
+                    ->map(fn ($color) => trim((string) $color))
+                    ->filter()
+                    ->unique(fn ($color) => mb_strtoupper($color))
+                    ->take(3)
+                    ->values();
+            });
     }
 
     public function printMaterialReceipt(InternalMaterialReceipt $receipt)
@@ -3259,9 +3574,33 @@ class WarehouseCountController extends Controller
 
     private function inferShelfCode($locationCode)
     {
-        preg_match('/[A-Z]/', strtoupper((string) $locationCode), $matches);
+        $code = strtoupper(trim((string) $locationCode));
+        if (preg_match('/^([A-Z])0*(\d{1,4})$/', $code, $matches)) {
+            return ltrim($matches[2], '0') ?: '0';
+        }
+
+        preg_match('/[A-Z]/', $code, $matches);
 
         return $matches[0] ?? null;
+    }
+
+    private function inferBayCode($locationCode): string
+    {
+        return preg_match('/(\d+)$/', strtoupper(trim((string) $locationCode)), $matches)
+            ? (ltrim($matches[1], '0') ?: '0')
+            : '';
+    }
+
+    private function inferTierFromLocationCode($locationCode): int
+    {
+        $code = strtoupper(trim((string) $locationCode));
+        if (!preg_match('/^([A-Z])0*\d{1,4}$/', $code, $matches)) {
+            return 0;
+        }
+
+        $letterIndex = ord($matches[1]) - ord('A');
+
+        return 5 - ($letterIndex % 5);
     }
 
     private function resolveReceiptLinePackage($line, bool $lock = false): ?InventoryPackage

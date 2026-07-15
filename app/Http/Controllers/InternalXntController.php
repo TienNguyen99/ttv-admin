@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\NormalizesDateInput;
 use App\Models\InternalItemCatalog;
 use App\Models\InternalMaterialIssue;
 use App\Models\InternalXntRow;
@@ -14,6 +15,8 @@ use Illuminate\Support\Str;
 
 class InternalXntController extends Controller
 {
+    use NormalizesDateInput;
+
     private const SPREADSHEET_ID = '1nd9sOnKCq-hDf44Uo7_002qT7zoznrx7mcQoRw0oEcs';
     private const SHEET_NAME = 'XNT';
 
@@ -170,6 +173,7 @@ class InternalXntController extends Controller
             'department' => 'nullable|string|max:150',
             'note' => 'nullable|string|max:1000',
         ]);
+        $data = $this->normalizeDateFields($data, ['issue_date']);
 
         $rows = InternalXntRow::query()
             ->with('issue:id,issue_code')

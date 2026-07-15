@@ -1,14 +1,20 @@
 ﻿<!DOCTYPE html>
+@php($shelfMapOnly = (bool) ($shelfMapOnly ?? false))
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Kiểm tồn kho</title>
+    <title>{{ $shelfMapOnly ? 'Mặt kệ kho' : 'Kiểm tồn kho' }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root { --line: #e2e8f0; --muted: #64748b; --ink: #0f172a; --accent: #2563eb; }
         body { background: #f8fafc; color: var(--ink); }
+        body.shelf-map-only .shelf-map-hide { display: none !important; }
+        body.shelf-map-only [data-workspace-panel]:not(#map3dPanel) { display: none !important; }
+        body.shelf-map-only #map3dPanel { display: block !important; }
+        body.shelf-map-only .page-shell { max-width: 1800px; }
+        body.shelf-map-only .rack-front-wrap { min-height: calc(100vh - 260px); }
         .page-shell { max-width: 1680px; margin: 0 auto; padding: 22px; }
         .page-title { font-size: 24px; font-weight: 700; }
         .page-subtitle { color: var(--muted); font-size: 14px; }
@@ -186,6 +192,8 @@
         .layout-block.is-selected { border-color: #16a34a; background: #ecfdf5; color: #14532d; box-shadow: 0 0 0 3px #bbf7d0; }
         .layout-block.has-stock { border-color: #60a5fa; background: #eff6ff; }
         .layout-block.is-filter-match { border-color: #22c55e; background: #dcfce7; color: #14532d; box-shadow: 0 0 0 3px #bbf7d0, 0 8px 18px rgba(22, 163, 74, .16); }
+        .layout-block.is-tier-stack { transform: translate(calc(var(--tier-offset, 0) * 7px), calc(var(--tier-offset, 0) * -7px)); box-shadow: calc(var(--tier-offset, 0) * -1px) calc(var(--tier-offset, 0) * 1px) 0 rgba(15,23,42,.08), 0 3px 8px rgba(37, 99, 235, 0.12); }
+        .layout-block.is-tier-stack::before { content: ""; position: absolute; left: 5px; right: 5px; bottom: -5px; height: 5px; border: 1px solid #cbd5e1; border-top: 0; border-radius: 0 0 6px 6px; background: rgba(226,232,240,.75); }
         .layout-block-code { font-size: 13px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .layout-block-meta { margin-top: 2px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .layout-block-count { position: absolute; right: 6px; top: 5px; min-width: 20px; padding: 1px 5px; border-radius: 999px; background: #1d4ed8; color: #fff; font-size: 10px; font-weight: 900; text-align: center; }
@@ -201,6 +209,78 @@
         .layout-empty-note { grid-column: 2 / span 10; grid-row: 3 / span 2; align-self: start; padding: 14px; border: 1px dashed #cbd5e1; border-radius: 8px; background: rgba(255,255,255,.92); color: #64748b; font-size: 13px; font-weight: 700; }
         .layout-drag-hint { position: absolute; z-index: 10; display: none; padding: 4px 7px; border-radius: 6px; background: #0f172a; color: #fff; font-size: 11px; pointer-events: none; }
         .layout-help { color: var(--muted); font-size: 12px; }
+        .warehouse-3d-wrap { position: relative; height: min(68vh, 720px); min-height: 460px; overflow: hidden; border-top: 1px solid #e2e8f0; background: linear-gradient(180deg, #eef6ff 0%, #f8fafc 55%, #e2e8f0 100%); }
+        .warehouse-3d-canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+        .warehouse-3d-canvas:active { cursor: grabbing; }
+        .warehouse-3d-help { position: absolute; left: 14px; top: 14px; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: min(720px, calc(100% - 28px)); padding: 8px 10px; border: 1px solid rgba(148, 163, 184, .45); border-radius: 8px; background: rgba(255,255,255,.88); color: #334155; font-size: 12px; font-weight: 700; backdrop-filter: blur(6px); }
+        .warehouse-3d-badge { display: inline-flex; align-items: center; gap: 5px; }
+        .warehouse-3d-dot { width: 10px; height: 10px; border-radius: 3px; background: #60a5fa; box-shadow: inset 0 0 0 1px rgba(15,23,42,.12); }
+        .warehouse-3d-dot.is-match { background: #22c55e; }
+        .warehouse-3d-dot.is-empty { background: #cbd5e1; }
+        .warehouse-3d-tooltip { position: absolute; right: 14px; top: 14px; z-index: 3; display: none; width: min(360px, calc(100% - 28px)); max-height: calc(100% - 28px); overflow: auto; padding: 12px; border: 1px solid #bfdbfe; border-radius: 10px; background: rgba(255,255,255,.95); box-shadow: 0 18px 42px rgba(15,23,42,.18); color: #0f172a; }
+        .warehouse-3d-tooltip.is-visible { display: block; }
+        .warehouse-3d-title { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; font-weight: 900; }
+        .warehouse-3d-items { display: grid; gap: 7px; margin-top: 9px; }
+        .warehouse-3d-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; font-size: 12px; }
+        .warehouse-3d-swatch { width: 28px; height: 28px; border: 1px solid #cbd5e1; border-radius: 6px; background: var(--swatch, #f8fafc); }
+        .warehouse-3d-code { min-width: 0; overflow-wrap: anywhere; font-weight: 900; }
+        .warehouse-3d-color { color: #64748b; font-size: 11px; }
+        .warehouse-3d-qty { color: #166534; font-weight: 900; white-space: nowrap; }
+        .warehouse-3d-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; color: #64748b; font-size: 14px; font-weight: 700; text-align: center; pointer-events: none; }
+        .rack-front-wrap { position: relative; min-height: 520px; padding: 16px 16px 22px; overflow: auto; border-top: 1px solid #e2e8f0; background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%); scrollbar-gutter: stable both-edges; }
+        .rack-front-wrap::-webkit-scrollbar { width: 12px; height: 14px; }
+        .rack-front-wrap::-webkit-scrollbar-track { background: #dbeafe; border-radius: 999px; }
+        .rack-front-wrap::-webkit-scrollbar-thumb { background: #2563eb; border: 3px solid #dbeafe; border-radius: 999px; }
+        .rack-front-view { display: grid; gap: 22px; width: max-content; min-width: 100%; padding-bottom: 4px; }
+        .rack-line { display: grid; gap: 12px; width: max-content; min-width: 100%; }
+        .rack-line-header { position: sticky; left: 0; z-index: 2; display: flex; align-items: center; gap: 10px; width: min(100%, calc(100vw - 260px)); color: #0f2747; font-weight: 950; }
+        .rack-line-header::after { content: ""; flex: 1; height: 1px; background: #bfdbfe; }
+        .rack-line-title { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid #bfdbfe; border-radius: 999px; background: #eff6ff; }
+        .rack-line-grid { display: grid; grid-auto-flow: column; grid-auto-columns: 220px; grid-template-columns: none; gap: 14px; align-items: start; width: max-content; min-width: max-content; }
+        .rack-card { width: 220px; border: 2px solid #334155; border-radius: 8px; background: #f8fafc; box-shadow: 0 12px 28px rgba(15, 23, 42, .12); overflow: visible; }
+        .rack-card-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: #0f2747; color: #fff; font-weight: 900; }
+        .rack-card-title { font-size: 16px; letter-spacing: .02em; }
+        .rack-card-total { font-size: 12px; color: #bfdbfe; white-space: nowrap; }
+        .rack-shelves { display: grid; gap: 0; padding: 8px; background: #e2e8f0; }
+        .rack-tier-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+        .rack-tier-row + .rack-tier-row { margin-top: 6px; }
+        .rack-tier { position: relative; display: grid; grid-template-rows: auto 1fr auto; gap: 4px; align-items: start; min-height: 74px; padding: 6px; border: 1px solid #94a3b8; border-bottom-width: 3px; background: #fff; transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease; cursor: pointer; }
+        .rack-tier + .rack-tier { margin-top: 6px; }
+        .rack-tier.has-stock { background: #eff6ff; border-color: #60a5fa; }
+        .rack-tier.is-selected { background: #ecfdf5; border-color: #16a34a; box-shadow: inset 0 0 0 2px #86efac; }
+        .rack-tier.is-filter-match { background: #dcfce7; border-color: #22c55e; animation: rackMatchGlow 1.15s ease-in-out infinite; }
+        .rack-tier-label { display: none; }
+        .rack-tier-body { min-width: 0; display: grid; gap: 3px; }
+        .rack-tier-code { font-size: 13px; line-height: 1; font-weight: 950; color: #0f172a; }
+        .rack-tier-items { display: block; min-width: 0; }
+        .rack-color-board { display: grid; grid-template-columns: repeat(2, 30px); grid-auto-rows: 21px; gap: 3px; align-items: start; }
+        .thread-spool { width: 30px; height: 21px; display: block; filter: drop-shadow(0 1px 1px rgba(15, 23, 42, .18)); }
+        .thread-spool-body { fill: var(--swatch, #f8fafc); stroke: #334155; stroke-width: 1.2; }
+        .thread-spool-ring { fill: rgba(255,255,255,.72); stroke: rgba(15,23,42,.22); stroke-width: .8; }
+        .thread-spool-line { stroke: rgba(15,23,42,.22); stroke-width: .8; }
+        .rack-color-more { display: grid; place-items: center; width: 30px; height: 21px; border: 1px solid #cbd5e1; border-radius: 5px; background: #e2e8f0; color: #0f172a; font-size: 10px; font-weight: 950; }
+        .rack-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 6px; border: 1px solid #dbeafe; border-radius: 999px; background: #fff; color: #1e3a8a; font-size: 11px; font-weight: 800; }
+        .rack-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rack-swatch { width: 12px; height: 12px; border: 1px solid #cbd5e1; border-radius: 3px; background: var(--swatch, #f8fafc); flex: 0 0 auto; }
+        .rack-tier-qty { color: #166534; font-size: 12px; font-weight: 950; white-space: nowrap; line-height: 1; }
+        .rack-tier-empty { color: #94a3b8; font-size: 12px; font-weight: 700; }
+        .rack-tier-detail { display: none; }
+        .rack-hover-preview { position: fixed; z-index: 2500; display: none; width: min(460px, calc(100vw - 24px)); padding: 12px; border: 1px solid #bfdbfe; border-radius: 10px; background: rgba(255,255,255,.98); box-shadow: 0 22px 60px rgba(15, 23, 42, .28); pointer-events: none; }
+        .rack-hover-preview.is-visible { display: block; }
+        .rack-hover-preview-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: #0f2747; font-size: 14px; font-weight: 950; }
+        .rack-hover-preview-meta { color: #166534; font-size: 12px; font-weight: 900; white-space: nowrap; }
+        .rack-hover-preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+        .rack-crud-table { max-height: 280px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .rack-crud-table table { margin: 0; }
+        .rack-crud-location { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid #bfdbfe; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-weight: 900; }
+        .rack-crud-swatch { width: 18px; height: 18px; border: 1px solid #cbd5e1; border-radius: 5px; background: var(--swatch, #f8fafc); display: inline-block; vertical-align: middle; }
+        @keyframes rackMatchGlow {
+            0%, 100% { box-shadow: inset 0 0 0 2px rgba(34, 197, 94, .36), 0 0 0 0 rgba(34, 197, 94, .30); }
+            50% { box-shadow: inset 0 0 0 2px rgba(34, 197, 94, .72), 0 0 0 6px rgba(34, 197, 94, .16); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .rack-tier.is-filter-match { animation: none; box-shadow: inset 0 0 0 2px rgba(34, 197, 94, .65); }
+        }
         @media (max-width: 1100px) { .workspace-grid { grid-template-columns: 1fr; } }
         @media (max-width: 900px) { .shelf-row { grid-template-columns: 1fr; } .shelf-lanes { grid-template-columns: 1fr; } }
         @media (max-width: 700px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .view-tabs { overflow-x: auto; } .view-tab { white-space: nowrap; } .voice-assistant { grid-template-columns: auto minmax(0, 1fr) auto; } .voice-result { grid-column: 1 / -1; } }
@@ -219,7 +299,7 @@
         .table thead th { background: var(--wms-navy); color: #fff; }
     </style>
 </head>
-<body>
+<body class="{{ $shelfMapOnly ? 'shelf-map-only' : '' }}">
     @include('layouts.partials.sidebar')
     <div id="warehouseToastStack" class="warehouse-toast-stack" aria-live="polite"></div>
 
@@ -238,29 +318,29 @@
     <main class="page-shell">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
             <div>
-                <h1 class="page-title mb-1">Quản lý nhập kho & vị trí</h1>
-                <div class="page-subtitle">Nhập thành phẩm, bố trí vị trí, in tem QR và theo dõi kiện nội bộ.</div>
+                <h1 class="page-title mb-1">{{ $shelfMapOnly ? 'Mặt kệ kho' : 'Quản lý nhập kho & vị trí' }}</h1>
+                <div class="page-subtitle">{{ $shelfMapOnly ? 'Xem kệ theo line, tầng và ô vị trí. Click ô kệ để quản lý hàng trong vị trí.' : 'Nhập thành phẩm, bố trí vị trí, in tem QR và theo dõi kiện nội bộ.' }}</div>
             </div>
             <div class="d-flex gap-2 align-items-center">
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="openBulkLocationModal()"><i data-lucide="grid-2x2-plus"></i>Tạo nhanh vị trí</button>
-                <button type="button" class="btn btn-outline-primary btn-icon" onclick="openBulkPrintLocationModal()"><i data-lucide="qr-code"></i>In QR vị trí</button>
+                <button type="button" class="btn btn-outline-primary btn-icon" onclick="openBulkPrintLocationModal()"><i data-lucide="printer"></i>In tem vị trí</button>
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="openLocationModal()"><i data-lucide="map-pin-plus"></i>Thêm vị trí</button>
-                <select id="warehouseFlowTop" class="form-select" style="width:180px" onchange="handleWarehouseFlow(this.value)">
+                <select id="warehouseFlowTop" class="form-select shelf-map-hide" style="width:180px" onchange="handleWarehouseFlow(this.value)">
                     <option value="receipt">Nhập thành phẩm</option>
                     <option value="production">Xuất BTP sản xuất</option>
                 </select>
-                <button type="button" class="btn btn-primary btn-icon" onclick="handleWarehouseFlow(document.getElementById('warehouseFlowTop').value)"><i data-lucide="file-plus-2"></i>Mở phiếu</button>
+                <button type="button" class="btn btn-primary btn-icon shelf-map-hide" onclick="handleWarehouseFlow(document.getElementById('warehouseFlowTop').value)"><i data-lucide="file-plus-2"></i>Mở phiếu</button>
             </div>
         </div>
 
-        <section class="panel voice-assistant mb-3" aria-label="Trợ lý ging nói kho">
+        <section class="panel voice-assistant mb-3 shelf-map-hide" aria-label="Trợ lý ging nói kho">
             <button id="voiceLookupBtn" type="button" class="btn btn-outline-primary btn-icon voice-button" title="Nói mã hàng cần tìm"><i data-lucide="mic"></i></button>
             <input id="voiceLookupInput" class="form-control" placeholder="Nói hoặc nhập mã hàng, mã nội bộ">
             <button id="voiceSearchBtn" type="button" class="btn btn-outline-primary btn-icon"><i data-lucide="search"></i>Tìm</button>
             <div id="voiceLookupResult" class="voice-result">Bấm micro và nói: “Tìm mã BTPDAYHAIRB1-1.</div>
         </section>
 
-        <section class="kpi-grid">
+        <section class="kpi-grid shelf-map-hide">
             <div class="kpi-item"><div class="kpi-icon"><i data-lucide="map-pinned"></i></div><div><div id="kpiLocations" class="kpi-value">0</div><div class="kpi-label">Vị trí kho</div></div></div>
             <div class="kpi-item"><div class="kpi-icon"><i data-lucide="scan-line"></i></div><div><div id="kpiCountingLocations" class="kpi-value">0</div><div class="kpi-label">Vị trí đang kiểm</div></div></div>
             <div class="kpi-item"><div class="kpi-icon"><i data-lucide="package-check"></i></div><div><div id="kpiPackages" class="kpi-value">0</div><div class="kpi-label">Kiện trong ngày</div></div></div>
@@ -276,12 +356,13 @@
             <datalist id="locationOptions"></datalist>
         </section>
 
-        <nav class="view-tabs" aria-label="Khu vực quản lý kho">
+        <nav class="view-tabs shelf-map-hide" aria-label="Khu vực quản lý kho">
             <button type="button" class="view-tab is-active" data-workspace-view="entry" onclick="switchWorkspace('entry')"><i data-lucide="package-plus"></i>Nhập kho</button>
             <button type="button" class="view-tab" data-workspace-view="receipts" onclick="switchWorkspace('receipts')"><i data-lucide="files"></i>Danh sách phiếu</button>
             <button type="button" class="view-tab" data-workspace-view="overview" onclick="switchWorkspace('overview')"><i data-lucide="layout-dashboard"></i>Vị trí & hàng hóa</button>
             <button type="button" class="view-tab" data-workspace-view="history" onclick="switchWorkspace('history')"><i data-lucide="package-search"></i>Kiện hàng</button>
             <button type="button" class="view-tab" data-workspace-view="editor" onclick="switchWorkspace('editor')"><i data-lucide="grid-3x3"></i>Sơ đồ kho</button>
+            <button type="button" class="view-tab" data-workspace-view="map3d" onclick="switchWorkspace('map3d')"><i data-lucide="panel-top"></i>Mặt kệ</button>
         </nav>
 
         <section id="editorPanel" data-workspace-panel="editor" class="panel mb-3 d-none">
@@ -309,6 +390,23 @@
             </div>
             <div class="layout-editor-wrap"><div id="layoutEditor" class="layout-editor"><div id="layoutDragHint" class="layout-drag-hint"></div></div></div>
         </section>
+
+        <section id="map3dPanel" data-workspace-panel="map3d" class="panel mb-3 d-none">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">Mặt kệ kho</h2>
+                    <div class="layout-help mt-1">Nhìn thẳng vào kệ: line 1 A-E, line 2 F-J; kéo ngang trong khung để xem các kệ phía sau.</div>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button type="button" class="btn btn-outline-primary btn-icon" onclick="renderWarehouse3D()"><i data-lucide="refresh-cw"></i>Tải lại</button>
+                </div>
+            </div>
+            <div class="rack-front-wrap">
+                <div id="rackFrontView" class="rack-front-view"></div>
+                <div id="warehouse3dEmpty" class="warehouse-3d-empty d-none">Không có kệ nào có hàng theo bộ lọc hiện tại.</div>
+            </div>
+        </section>
+        <div id="rackHoverPreview" class="rack-hover-preview" aria-hidden="true"></div>
 
         <div id="overviewPanel" data-workspace-panel="overview" class="workspace-grid mb-3 d-none">
             <section class="panel">
@@ -469,8 +567,8 @@
                 <div class="modal-body">
                     <div class="mb-3"><label class="form-label">Vị trí kho</label><input id="editLocationCode" class="form-control" placeholder="A1"></div>
                     <div class="row g-2 mb-3">
-                        <div class="col-4"><label class="form-label">Kệ</label><select id="editShelfCode" class="form-select"><option value="">Tự nhận</option><option>A</option><option>B</option><option>C</option><option>D</option><option>F</option><option>G</option></select></div>
-                        <div class="col-4"><label class="form-label">Tầng</label><select id="editTier" class="form-select"><option value="1">Tầng 1</option><option value="2">Tầng 2</option></select></div>
+                        <div class="col-4"><label class="form-label">Kệ</label><input id="editShelfCode" class="form-control text-uppercase" placeholder="Tự nhận"></div>
+                        <div class="col-4"><label class="form-label">Tầng</label><select id="editTier" class="form-select"><option value="1">Tầng 1</option><option value="2">Tầng 2</option><option value="3">Tầng 3</option><option value="4">Tầng 4</option><option value="5">Tầng 5</option></select></div>
                         <div class="col-4"><label class="form-label">Ô</label><input id="editBayCode" class="form-control" placeholder="01"></div>
                     </div>
                     <div class="row g-2 mb-3">
@@ -484,7 +582,7 @@
                 <div class="modal-footer">
                     <button id="deleteLocationBtn" type="button" class="btn btn-outline-danger btn-icon me-auto d-none"><i data-lucide="trash-2"></i>Xóa vị trí</button>
                     <button id="useLocationBtn" type="button" class="btn btn-outline-primary btn-icon"><i data-lucide="package-plus"></i>Nhập hàng tại vị trí này</button>
-                    <button id="printLocationBtn" type="button" class="btn btn-outline-secondary btn-icon"><i data-lucide="printer"></i>In tem QR</button>
+                    <button id="printLocationBtn" type="button" class="btn btn-outline-secondary btn-icon"><i data-lucide="printer"></i>In tem</button>
                     <button id="saveLocationBtn" type="button" class="btn btn-primary btn-icon"><i data-lucide="save"></i>Lưu vị trí</button>
                 </div>
             </div>
@@ -521,7 +619,7 @@
                         <div class="col-6"><label class="form-label">Kệ đến</label><input id="bulkShelfTo" class="form-control text-uppercase" maxlength="1" value="D"></div>
                         <div class="col-6"><label class="form-label">Số từ</label><input id="bulkNumberFrom" type="number" min="1" max="999" class="form-control" value="1"></div>
                         <div class="col-6"><label class="form-label">Số đến</label><input id="bulkNumberTo" type="number" min="1" max="999" class="form-control" value="100"></div>
-                        <div class="col-12"><label class="form-label">Tầng mặc định</label><select id="bulkTier" class="form-select"><option value="1">Tầng 1</option><option value="2">Tầng 2</option></select></div>
+                        <div class="col-12"><label class="form-label">Tầng mặc định</label><select id="bulkTier" class="form-select"><option value="1">Tầng 1</option><option value="2">Tầng 2</option><option value="3">Tầng 3</option><option value="4">Tầng 4</option><option value="5">Tầng 5</option></select></div>
                         <div class="col-12"><label class="form-label">Tên tin tố</label><input id="bulkNamePrefix" class="form-control" value="Kệ"></div>
                     </div>
                     <div id="bulkLocationPreview" class="section-hint"></div>
@@ -557,6 +655,77 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="rackInventoryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title">Hàng trong kệ</h5>
+                        <div class="text-muted small">Số kệ lấy tự động từ ô vừa chọn.</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-3">
+                        <span class="rack-crud-location"><i data-lucide="map-pin"></i><span id="rackCrudLocationLabel">-</span></span>
+                        <span id="rackCrudStatus" class="small text-muted"></span>
+                    </div>
+                    <div class="rack-crud-table mb-3">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Mã hàng hóa</th>
+                                    <th>Tên hàng</th>
+                                    <th class="text-end">Số lượng</th>
+                                    <th>ĐVT</th>
+                                    <th>Size</th>
+                                    <th>Màu</th>
+                                    <th class="text-end">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rackCrudRows"><tr><td colspan="7" class="text-center text-muted py-3">Đang tải...</td></tr></tbody>
+                        </table>
+                    </div>
+                    <form id="rackCrudForm" class="row g-2">
+                        <input type="hidden" id="rackCrudPackageId">
+                        <div class="col-lg-2 col-md-4">
+                            <label class="form-label">Số kệ</label>
+                            <input id="rackCrudLocationCode" class="form-control fw-bold text-uppercase" readonly>
+                        </div>
+                        <div class="col-lg-2 col-md-4">
+                            <label class="form-label">Mã hàng hóa</label>
+                            <input id="rackCrudItemCode" class="form-control text-uppercase" list="rackCrudCatalogOptions" placeholder="Gõ mã/tên" autocomplete="off">
+                            <datalist id="rackCrudCatalogOptions"></datalist>
+                        </div>
+                        <div class="col-lg-3 col-md-4">
+                            <label class="form-label">Tên hàng</label>
+                            <input id="rackCrudItemName" class="form-control" readonly>
+                        </div>
+                        <div class="col-lg-2 col-md-4">
+                            <label class="form-label">Số lượng</label>
+                            <input id="rackCrudQuantity" type="number" step="0.001" min="0" class="form-control" placeholder="0">
+                        </div>
+                        <div class="col-lg-1 col-md-4">
+                            <label class="form-label">ĐVT</label>
+                            <input id="rackCrudUnit" class="form-control" readonly>
+                        </div>
+                        <div class="col-lg-1 col-md-4">
+                            <label class="form-label">Size</label>
+                            <input id="rackCrudSize" class="form-control">
+                        </div>
+                        <div class="col-lg-1 col-md-4">
+                            <label class="form-label">Màu</label>
+                            <input id="rackCrudColor" class="form-control">
+                        </div>
+                        <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+                            <button type="button" class="btn btn-outline-secondary" onclick="resetRackCrudForm()">Hủy sửa</button>
+                            <button type="submit" class="btn btn-primary btn-icon"><i data-lucide="save"></i>Lưu hàng</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal fade" id="receiptLocationModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -578,8 +747,10 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+        const shelfMapOnly = @json($shelfMapOnly);
         let locationContentsCache = [];
         function isoToDateVn(value) {
             const raw = String(value || '').slice(0, 10);
@@ -691,6 +862,7 @@
         const movePackageModal = new bootstrap.Modal(document.getElementById('movePackageModal'));
         const bulkLocationModal = new bootstrap.Modal(document.getElementById('bulkLocationModal'));
         const bulkPrintLocationModal = new bootstrap.Modal(document.getElementById('bulkPrintLocationModal'));
+        const rackInventoryModal = new bootstrap.Modal(document.getElementById('rackInventoryModal'));
         const receiptLocationModal = new bootstrap.Modal(document.getElementById('receiptLocationModal'));
         let editingReceiptId = null;
         let editingReceiptFormId = null;
@@ -700,6 +872,10 @@
         let draggingLayout = null;
         let editingLocationId = null;
         let selectedAccountingProduct = '';
+        let rackCrudLocationCode = '';
+        let rackCrudItems = [];
+        let rackCrudSearchTimer = null;
+        let rackHoverTarget = null;
         let receiptDuplicateTimer = null;
         let layoutBackgroundImage = localStorage.getItem('warehouseLayoutBackground') || '';
         let layoutBackgroundOpacity = Number(localStorage.getItem('warehouseLayoutBackgroundOpacity') || 36);
@@ -708,6 +884,24 @@
         let internalCatalogSearchTimer = null;
         let internalCatalogItems = [];
         let voiceRecognition = null;
+        const warehouse3d = {
+            initialized: false,
+            renderer: null,
+            scene: null,
+            camera: null,
+            root: null,
+            raycaster: null,
+            pointer: null,
+            meshes: [],
+            hovered: null,
+            dragging: false,
+            lastX: 0,
+            lastY: 0,
+            rotationX: -0.72,
+            rotationY: 0.72,
+            distance: 46,
+            animationFrame: null,
+        };
 
         function refreshIcons() {
             if (window.lucide) lucide.createIcons();
@@ -867,6 +1061,9 @@
                 loadWarehouseMap();
                 applyLayoutEditorSettings();
             }
+            if (view === 'map3d') {
+                loadWarehouseMap().then(renderWarehouse3D);
+            }
             if (view === 'entry') loadReceipts();
             if (view === 'entry') {
                 setWarehouseFlow('receipt');
@@ -879,6 +1076,29 @@
             const div = document.createElement('div');
             div.textContent = text || '';
             return div.innerHTML;
+        }
+
+        function escapeJs(text) {
+            return String(text || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        function cssColorValue(valueText, fallback = '#f8fafc') {
+            const raw = String(valueText || '').trim();
+            if (!raw) return fallback;
+            return raw.startsWith('#') ? raw : `#${raw}`;
+        }
+
+        function threadSpoolSvg(color, title) {
+            const swatch = escapeHtml(cssColorValue(color));
+            return `
+                <svg class="thread-spool" viewBox="0 0 68 48" role="img" aria-label="${escapeHtml(title)}" style="--swatch:${swatch}">
+                    <title>${escapeHtml(title)}</title>
+                    <path class="thread-spool-body" d="M16 8h36c5 0 9 4 9 9v14c0 5-4 9-9 9H16c-5 0-9-4-9-9V17c0-5 4-9 9-9Z"/>
+                    <path class="thread-spool-ring" d="M15 12h7c2 0 4 2 4 4v16c0 2-2 4-4 4h-7c-2 0-4-2-4-4V16c0-2 2-4 4-4Z"/>
+                    <path class="thread-spool-ring" d="M46 12h7c2 0 4 2 4 4v16c0 2-2 4-4 4h-7c-2 0-4-2-4-4V16c0-2 2-4 4-4Z"/>
+                    <path class="thread-spool-line" d="M29 14h10M29 20h10M29 26h10M29 32h10"/>
+                </svg>
+            `;
         }
 
         function hideProductResults() {
@@ -1373,12 +1593,55 @@
         }
 
         function normalizeLayout(location, index) {
+            if (isTierStackLocation(location)) {
+                const base = tierStackBaseLocation(location);
+                const rackNumber = physicalRackNumberForLocation(location) || index + 1;
+                return {
+                    x: Number(base?.grid_x || (((rackNumber - 1) % 6) * 4 + 1)),
+                    y: Number(base?.grid_y || (Math.floor((rackNumber - 1) / 6) * 3 + 1)),
+                    w: Number(base?.grid_w || location.grid_w || 4),
+                    h: Number(base?.grid_h || location.grid_h || 2),
+                };
+            }
+
             return {
                 x: Number(location.grid_x || ((index % 6) * 4 + 1)),
                 y: Number(location.grid_y || (Math.floor(index / 6) * 3 + 1)),
                 w: Number(location.grid_w || 4),
                 h: Number(location.grid_h || 2),
             };
+        }
+
+        function isTierStackLocation(location) {
+            return /^([A-Z])0*\d{1,4}$/.test(String(location?.location_code || '').toUpperCase().trim());
+        }
+
+        function physicalRackNumberForLocation(location) {
+            const bay = Number(bayCodeForLocation(location) || 0);
+            return bay > 0 ? Math.ceil(bay / 2) : 0;
+        }
+
+        function baySlotForLocation(location) {
+            const bay = Number(bayCodeForLocation(location) || 0);
+            return bay > 0 ? ((bay - 1) % 2) + 1 : 1;
+        }
+
+        function tierStackKey(location) {
+            return `${lineForLocation(location)}|${physicalRackNumberForLocation(location)}`;
+        }
+
+        function tierStackBaseLocation(location) {
+            if (!isTierStackLocation(location)) return location;
+            const key = tierStackKey(location);
+            return locations
+                .filter(item => isTierStackLocation(item) && tierStackKey(item) === key)
+                .sort((a, b) => Number(tierForLocationModel(a)) - Number(tierForLocationModel(b)))[0] || location;
+        }
+
+        function tierStackLocations(location) {
+            if (!isTierStackLocation(location)) return [location];
+            const key = tierStackKey(location);
+            return locations.filter(item => isTierStackLocation(item) && tierStackKey(item) === key);
         }
 
         function applyLayoutEditorSettings() {
@@ -1454,19 +1717,519 @@
                 const totalQuantity = packages.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
                 const text = `${location.location_code} ${location.location_name || ''} ${packages.map(item => `${item.package_code} ${item.ma_sp} ${item.internal_item_code} ${item.size} ${item.color} ${item.side}`).join(' ')}`.toUpperCase();
                 const isMatch = keyword && text.includes(keyword);
+                const tierOffset = isTierStackLocation(location) ? Number(tierForLocationModel(location)) - 1 : 0;
                 const hoverRows = itemSummaries.map(item => `<div class="layout-stock-row">
                     <span class="layout-swatch" style="--swatch:${escapeHtml(item.pantone_hex || '#f8fafc')}"></span>
                     <div><div class="layout-stock-code">${escapeHtml(item.code)}</div><div class="layout-stock-color">${escapeHtml(item.color || 'Chưa có màu')}</div></div>
                     <div class="layout-stock-qty">${formatNumber(item.quantity)}${item.unit ? ` ${escapeHtml(item.unit)}` : ''}</div>
                 </div>`).join('');
-                return `<div class="layout-block ${packages.length ? 'has-stock' : ''} ${isMatch ? 'is-filter-match' : ''} ${location.location_code === selectedCode ? 'is-selected' : ''}" data-location-id="${location.id}" style="grid-column:${layout.x} / span ${layout.w}; grid-row:${layout.y} / span ${layout.h};">
+                return `<div class="layout-block ${isTierStackLocation(location) ? 'is-tier-stack' : ''} ${packages.length ? 'has-stock' : ''} ${isMatch ? 'is-filter-match' : ''} ${location.location_code === selectedCode ? 'is-selected' : ''}" data-location-id="${location.id}" style="grid-column:${layout.x} / span ${layout.w}; grid-row:${layout.y} / span ${layout.h}; --tier-offset:${tierOffset}; z-index:${10 + tierOffset};">
                     <div class="layout-block-code">${escapeHtml(location.location_code)}</div>
-                    <div class="layout-block-meta">Kệ ${escapeHtml(location.shelf_code || shelfCodeForLocation(location.location_code))} - Tầng ${escapeHtml(location.tier || 1)}${location.bay_code ? ` - Ô ${escapeHtml(location.bay_code)}` : ''}</div>
+                    <div class="layout-block-meta">Line ${escapeHtml(lineForLocation(location))} - Kệ ${escapeHtml(shelfForLocation(location))} - Tầng ${escapeHtml(tierForLocationModel(location))}${bayCodeForLocation(location) ? ` - Ô ${escapeHtml(bayCodeForLocation(location))}` : ''}</div>
                     ${packages.length ? `<div class="layout-block-count">${packages.length}</div><div class="layout-block-stock">SL ${formatNumber(totalQuantity)}</div><div class="layout-stock-hover"><div class="layout-stock-title"><span>${escapeHtml(location.location_code)}</span><span>${formatNumber(totalQuantity)}</span></div>${hoverRows}</div>` : ''}
                 </div>`;
             }).join('') || '<div class="layout-empty-note">Không có vị trí nào có hàng theo bộ lc hiện tại.</div>';
             applyLayoutEditorSettings();
         }
+
+        function warehouse3DVisibleLocations() {
+            const keyword = value('mapSearch').toUpperCase();
+            const showEmpty = Boolean(document.getElementById('showEmptyLocations')?.checked);
+            const packagesByLocation = packagesByLocationMap();
+            return locations.filter(location => {
+                const packages = packagesByLocation[location.location_code] || [];
+                const text = `${location.location_code} ${location.location_name || ''} ${packages.map(item => `${item.package_code} ${item.ma_sp} ${item.internal_item_code} ${item.size} ${item.color} ${item.side}`).join(' ')}`.toUpperCase();
+                return packages.length > 0 || showEmpty || (keyword && text.includes(keyword));
+            });
+        }
+
+        function colorFromHex(hex, fallback = 0x60a5fa) {
+            const raw = String(hex || '').trim();
+            if (!/^#[0-9a-f]{6}$/i.test(raw)) return fallback;
+            return Number.parseInt(raw.slice(1), 16);
+        }
+
+        function makeTextSprite(text, options = {}) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const fontSize = options.fontSize || 34;
+            const label = String(text || '');
+            context.font = `900 ${fontSize}px Arial`;
+            const width = Math.ceil(context.measureText(label).width) + 28;
+            canvas.width = Math.max(128, width);
+            canvas.height = 64;
+            context.font = `900 ${fontSize}px Arial`;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillStyle = 'rgba(255,255,255,.92)';
+            context.strokeStyle = 'rgba(15,23,42,.22)';
+            context.lineWidth = 3;
+            roundCanvasRect(context, 3, 8, canvas.width - 6, canvas.height - 16, 10);
+            context.fill();
+            context.stroke();
+            context.fillStyle = options.color || '#0f172a';
+            context.fillText(label, canvas.width / 2, canvas.height / 2);
+            const texture = new THREE.CanvasTexture(canvas);
+            if (THREE.SRGBColorSpace) texture.colorSpace = THREE.SRGBColorSpace;
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(canvas.width / 44, canvas.height / 44, 1);
+            return sprite;
+        }
+
+        function roundCanvasRect(context, x, y, width, height, radius) {
+            context.beginPath();
+            context.moveTo(x + radius, y);
+            context.arcTo(x + width, y, x + width, y + height, radius);
+            context.arcTo(x + width, y + height, x, y + height, radius);
+            context.arcTo(x, y + height, x, y, radius);
+            context.arcTo(x, y, x + width, y, radius);
+            context.closePath();
+        }
+
+        function initWarehouse3D() {
+            if (warehouse3d.initialized || !window.THREE) return Boolean(window.THREE);
+            const canvas = document.getElementById('warehouse3dCanvas');
+            if (!canvas) return false;
+
+            warehouse3d.scene = new THREE.Scene();
+            warehouse3d.scene.background = new THREE.Color(0xeef6ff);
+            warehouse3d.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+            warehouse3d.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            warehouse3d.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            warehouse3d.raycaster = new THREE.Raycaster();
+            warehouse3d.pointer = new THREE.Vector2();
+            warehouse3d.root = new THREE.Group();
+            warehouse3d.scene.add(warehouse3d.root);
+
+            const ambient = new THREE.HemisphereLight(0xffffff, 0x94a3b8, 1.65);
+            warehouse3d.scene.add(ambient);
+            const light = new THREE.DirectionalLight(0xffffff, 2.2);
+            light.position.set(18, 32, 24);
+            warehouse3d.scene.add(light);
+
+            const grid = new THREE.GridHelper(48, 24, 0x94a3b8, 0xcbd5e1);
+            grid.position.y = -0.02;
+            warehouse3d.scene.add(grid);
+
+            canvas.addEventListener('pointerdown', event => {
+                warehouse3d.dragging = true;
+                warehouse3d.lastX = event.clientX;
+                warehouse3d.lastY = event.clientY;
+                canvas.setPointerCapture(event.pointerId);
+            });
+            canvas.addEventListener('pointermove', event => {
+                if (warehouse3d.dragging) {
+                    const dx = event.clientX - warehouse3d.lastX;
+                    const dy = event.clientY - warehouse3d.lastY;
+                    warehouse3d.lastX = event.clientX;
+                    warehouse3d.lastY = event.clientY;
+                    warehouse3d.rotationY += dx * 0.008;
+                    warehouse3d.rotationX = Math.max(-1.25, Math.min(-0.25, warehouse3d.rotationX + dy * 0.006));
+                    updateWarehouse3DCamera();
+                    return;
+                }
+                updateWarehouse3DHover(event);
+            });
+            canvas.addEventListener('pointerup', event => {
+                warehouse3d.dragging = false;
+                try { canvas.releasePointerCapture(event.pointerId); } catch (e) {}
+            });
+            canvas.addEventListener('pointerleave', () => {
+                warehouse3d.dragging = false;
+                setWarehouse3DHover(null);
+            });
+            canvas.addEventListener('wheel', event => {
+                event.preventDefault();
+                warehouse3d.distance = Math.max(16, Math.min(92, warehouse3d.distance + event.deltaY * 0.035));
+                updateWarehouse3DCamera();
+            }, { passive: false });
+            canvas.addEventListener('click', () => {
+                const location = warehouse3d.hovered?.userData?.location;
+                if (location?.location_code) selectLocation(location.location_code);
+            });
+            window.addEventListener('resize', resizeWarehouse3D);
+
+            warehouse3d.initialized = true;
+            resizeWarehouse3D();
+            updateWarehouse3DCamera();
+            animateWarehouse3D();
+            return true;
+        }
+
+        function resetWarehouse3DView() {
+            warehouse3d.rotationX = -0.72;
+            warehouse3d.rotationY = 0.72;
+            warehouse3d.distance = 46;
+            updateWarehouse3DCamera();
+        }
+
+        function updateWarehouse3DCamera() {
+            if (!warehouse3d.camera) return;
+            const radius = warehouse3d.distance;
+            const cosX = Math.cos(warehouse3d.rotationX);
+            warehouse3d.camera.position.set(
+                Math.sin(warehouse3d.rotationY) * radius * cosX,
+                Math.max(10, Math.abs(Math.sin(warehouse3d.rotationX)) * radius),
+                Math.cos(warehouse3d.rotationY) * radius * cosX
+            );
+            warehouse3d.camera.lookAt(0, 0, 0);
+        }
+
+        function resizeWarehouse3D() {
+            const wrap = document.getElementById('warehouse3dWrap');
+            if (!wrap || !warehouse3d.renderer || !warehouse3d.camera) return;
+            const width = Math.max(320, wrap.clientWidth);
+            const height = Math.max(320, wrap.clientHeight);
+            warehouse3d.renderer.setSize(width, height, false);
+            warehouse3d.camera.aspect = width / height;
+            warehouse3d.camera.updateProjectionMatrix();
+        }
+
+        function clearWarehouse3DScene() {
+            if (!warehouse3d.root) return;
+            warehouse3d.meshes = [];
+            while (warehouse3d.root.children.length) {
+                const child = warehouse3d.root.children[0];
+                warehouse3d.root.remove(child);
+                child.traverse?.(node => {
+                    node.geometry?.dispose?.();
+                    if (Array.isArray(node.material)) {
+                        node.material.forEach(material => {
+                            material.map?.dispose?.();
+                            material.dispose?.();
+                        });
+                    } else {
+                        node.material?.map?.dispose?.();
+                        node.material?.dispose?.();
+                    }
+                });
+            }
+            setWarehouse3DHover(null);
+        }
+
+        function renderWarehouse3D() {
+            renderRackFrontView();
+            return;
+        }
+
+        function rackFrontGroups() {
+            const keyword = value('mapSearch').toUpperCase();
+            const showEmpty = Boolean(document.getElementById('showEmptyLocations')?.checked);
+            const selectedCode = value('locationCode').toUpperCase();
+            const packagesByLocation = packagesByLocationMap();
+            const groupMap = new Map();
+
+            locations.forEach((location, index) => {
+                if (!isTierStackLocation(location)) return;
+                const packages = packagesByLocation[location.location_code] || [];
+                const itemText = packages.map(item => `${item.package_code} ${item.ma_sp} ${item.internal_item_code} ${item.size} ${item.color} ${item.side}`).join(' ');
+                const text = `${location.location_code} ${location.location_name || ''} ${itemText}`.toUpperCase();
+                if (!(packages.length > 0 || showEmpty || (keyword && text.includes(keyword)))) return;
+
+                const line = lineForLocation(location);
+                const rackNumber = physicalRackNumberForLocation(location);
+                const slot = baySlotForLocation(location);
+                const rackKey = `${line}|${rackNumber}`;
+                if (!groupMap.has(rackKey)) {
+                    const layout = normalizeLayout(tierStackBaseLocation(location), index);
+                    groupMap.set(rackKey, {
+                        rackKey,
+                        line,
+                        shelf: rackNumber,
+                        layout,
+                        tiers: new Map(),
+                        totalQuantity: 0,
+                        rowIndex: index,
+                    });
+                }
+
+                const group = groupMap.get(rackKey);
+                const tier = Number(tierForLocationModel(location) || 1);
+                const itemSummaries = stockSummaryForPackages(packages);
+                const totalQuantity = packages.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+                group.totalQuantity += totalQuantity;
+                if (!group.tiers.has(tier)) group.tiers.set(tier, new Map());
+                group.tiers.get(tier).set(slot, {
+                    location,
+                    slot,
+                    packages,
+                    itemSummaries,
+                    totalQuantity,
+                    isMatch: Boolean(keyword && text.includes(keyword)),
+                    isSelected: location.location_code === selectedCode,
+                });
+            });
+
+            return Array.from(groupMap.values()).sort((a, b) => {
+                const lineDiff = Number(a.line) - Number(b.line);
+                if (lineDiff !== 0) return lineDiff;
+                const shelfDiff = Number(a.shelf || 0) - Number(b.shelf || 0);
+                if (shelfDiff !== 0) return shelfDiff;
+                return String(a.rackKey).localeCompare(String(b.rackKey), undefined, { numeric: true });
+            });
+        }
+
+        function renderRackFrontView() {
+            const view = document.getElementById('rackFrontView');
+            const empty = document.getElementById('warehouse3dEmpty');
+            if (!view) return;
+            const groups = rackFrontGroups();
+            if (empty) empty.classList.toggle('d-none', groups.length > 0);
+
+            const lines = groups.reduce((map, group) => {
+                if (!map[group.line]) map[group.line] = [];
+                map[group.line].push(group);
+                return map;
+            }, {});
+
+            view.innerHTML = Object.keys(lines).sort((a, b) => Number(a) - Number(b)).map(line => {
+                const cards = lines[line].map(group => {
+                const tiers = [5, 4, 3, 2, 1].map(tier => {
+                    const tierLetter = tierLetterForLine(group.line, tier);
+                    const slots = [1, 2].map(slot => {
+                        const tierData = group.tiers.get(tier)?.get(slot);
+                        const bayNumber = ((Number(group.shelf) - 1) * 2) + slot;
+                        const locationCode = tierData?.location?.location_code || `${tierLetter}${bayNumber}`;
+                        const summaries = tierData?.itemSummaries || [];
+                        const visibleColors = summaries.slice(0, 3).map(item => {
+                            const title = `${item.code} - ${item.color || 'Chưa có màu'} - ${formatNumber(item.quantity)}${item.unit ? ` ${item.unit}` : ''}`;
+                            return threadSpoolSvg(item.pantone_hex || item.color_hex || '#f8fafc', title);
+                        }).join('');
+                        const moreColors = summaries.length > 3
+                            ? `<span class="rack-color-more" title="Còn ${summaries.length - 3} màu">+${summaries.length - 3}</span>`
+                            : '';
+                        const colorBoard = summaries.length
+                            ? `<span class="rack-color-board">${visibleColors}${moreColors}</span>`
+                            : '<span class="rack-tier-empty">Trống</span>';
+                        const detailRows = (tierData?.itemSummaries || []).map(item => `
+                            <div class="layout-stock-row">
+                                <span class="layout-swatch" style="--swatch:${escapeHtml(cssColorValue(item.pantone_hex || item.color_hex || '#f8fafc'))}"></span>
+                                <div><div class="layout-stock-code">${escapeHtml(item.code)}</div><div class="layout-stock-color">${escapeHtml(item.color || 'Chưa có màu')}</div></div>
+                                <div class="layout-stock-qty">${formatNumber(item.quantity)}${item.unit ? ` ${escapeHtml(item.unit)}` : ''}</div>
+                            </div>
+                        `).join('');
+                        const hoverTitle = `${locationCode} - ${summaries.length} mã hàng`;
+                        const hoverMeta = tierData ? `Tổng ${formatNumber(tierData.totalQuantity)}` : '';
+                        return `
+                            <button type="button" class="rack-tier ${tierData?.packages?.length ? 'has-stock' : ''} ${tierData?.isSelected ? 'is-selected' : ''} ${tierData?.isMatch ? 'is-filter-match' : ''}"
+                                data-rack-location="${escapeHtml(locationCode)}"
+                                data-rack-hover-title="${escapeHtml(hoverTitle)}"
+                                data-rack-hover-meta="${escapeHtml(hoverMeta)}"
+                                data-rack-hover-detail="${escapeHtml(encodeURIComponent(detailRows))}"
+                                onclick="openRackInventoryModal('${escapeJs(locationCode)}')">
+                                <span class="rack-tier-body">
+                                    <span class="rack-tier-code">${escapeHtml(locationCode)}</span>
+                                    <span class="rack-tier-items">${colorBoard}</span>
+                                </span>
+                                <span class="rack-tier-qty">${tierData ? formatNumber(tierData.totalQuantity) : '-'}</span>
+                                ${detailRows ? `<span class="rack-tier-detail">${detailRows}</span>` : ''}
+                            </button>
+                        `;
+                    }).join('');
+                    return `<div class="rack-tier-row">${slots}</div>`;
+                }).join('');
+                return `
+                    <section class="rack-card">
+                        <div class="rack-card-header">
+                            <span class="rack-card-title">Line ${escapeHtml(group.line)} - Kệ ${escapeHtml(group.shelf)}</span>
+                            <span class="rack-card-total">Tổng ${formatNumber(group.totalQuantity)}</span>
+                        </div>
+                        <div class="rack-shelves">${tiers}</div>
+                    </section>
+                `;
+                }).join('');
+                return `
+                    <section class="rack-line">
+                        <div class="rack-line-header"><span class="rack-line-title">Line ${escapeHtml(line)}</span></div>
+                        <div class="rack-line-grid">${cards}</div>
+                    </section>
+                `;
+            }).join('');
+        }
+
+        function scrollRackSearchIntoView() {
+            const keyword = value('mapSearch').trim();
+            if (!keyword) return;
+            const wrap = document.querySelector('.rack-front-wrap');
+            const target = document.querySelector('#rackFrontView .rack-tier.is-filter-match');
+            if (!wrap || !target) return;
+
+            requestAnimationFrame(() => {
+                const wrapRect = wrap.getBoundingClientRect();
+                const targetRect = target.getBoundingClientRect();
+                const nextLeft = wrap.scrollLeft + (targetRect.left - wrapRect.left) - (wrap.clientWidth / 2) + (targetRect.width / 2);
+                const nextTop = wrap.scrollTop + (targetRect.top - wrapRect.top) - 80;
+                wrap.scrollTo({
+                    left: Math.max(0, nextLeft),
+                    top: Math.max(0, nextTop),
+                    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+                });
+                target.focus({ preventScroll: true });
+            });
+        }
+
+        function moveRackHoverPreview(event) {
+            const preview = document.getElementById('rackHoverPreview');
+            if (!preview || !preview.classList.contains('is-visible')) return;
+            const margin = 14;
+            const rect = preview.getBoundingClientRect();
+            let left = event.clientX + 18;
+            let top = event.clientY + 18;
+            if (left + rect.width + margin > window.innerWidth) left = event.clientX - rect.width - 18;
+            if (top + rect.height + margin > window.innerHeight) top = window.innerHeight - rect.height - margin;
+            preview.style.left = `${Math.max(margin, left)}px`;
+            preview.style.top = `${Math.max(margin, top)}px`;
+        }
+
+        function showRackHoverPreview(button, event) {
+            const preview = document.getElementById('rackHoverPreview');
+            if (!preview) return;
+            const detail = button.dataset.rackHoverDetail ? decodeURIComponent(button.dataset.rackHoverDetail) : '';
+            if (!detail.trim()) return hideRackHoverPreview();
+            preview.innerHTML = `
+                <div class="rack-hover-preview-title">
+                    <span>${escapeHtml(button.dataset.rackHoverTitle || 'Chi tiết kệ')}</span>
+                    <span class="rack-hover-preview-meta">${escapeHtml(button.dataset.rackHoverMeta || '')}</span>
+                </div>
+                <div class="rack-hover-preview-grid">${detail}</div>
+            `;
+            preview.classList.add('is-visible');
+            preview.setAttribute('aria-hidden', 'false');
+            moveRackHoverPreview(event);
+        }
+
+        function hideRackHoverPreview() {
+            const preview = document.getElementById('rackHoverPreview');
+            if (!preview) return;
+            preview.classList.remove('is-visible');
+            preview.setAttribute('aria-hidden', 'true');
+            rackHoverTarget = null;
+        }
+
+        function applyMapSearch(keyword) {
+            const mapSearchInput = document.getElementById('mapSearch');
+            if (!mapSearchInput) return;
+            mapSearchInput.value = keyword || '';
+            renderLayoutEditor();
+            if (!document.getElementById('map3dPanel')?.classList.contains('d-none')) {
+                renderWarehouse3D();
+                scrollRackSearchIntoView();
+            }
+        }
+
+        function renderWarehouse3DScene() {
+            const empty = document.getElementById('warehouse3dEmpty');
+            if (!initWarehouse3D()) {
+                if (empty) {
+                    empty.classList.remove('d-none');
+                    empty.textContent = 'Không tải được Three.js. Kiểm tra kết nối CDN hoặc dùng tab Sơ đồ kho 2D.';
+                }
+                return;
+            }
+            resizeWarehouse3D();
+            clearWarehouse3DScene();
+            const keyword = value('mapSearch').toUpperCase();
+            const selectedCode = value('locationCode').toUpperCase();
+            const packagesByLocation = packagesByLocationMap();
+            const visibleLocations = warehouse3DVisibleLocations();
+            if (empty) {
+                empty.classList.toggle('d-none', visibleLocations.length > 0);
+                empty.textContent = 'Không có kệ nào có hàng theo bộ lọc hiện tại.';
+            }
+
+            visibleLocations.forEach((location, index) => {
+                const layout = normalizeLayout(location, index);
+                const packages = packagesByLocation[location.location_code] || [];
+                const itemSummaries = stockSummaryForPackages(packages);
+                const totalQuantity = packages.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+                const text = `${location.location_code} ${location.location_name || ''} ${packages.map(item => `${item.package_code} ${item.ma_sp} ${item.internal_item_code} ${item.size} ${item.color} ${item.side}`).join(' ')}`.toUpperCase();
+                const isMatch = keyword && text.includes(keyword);
+                const isSelected = location.location_code === selectedCode;
+                const width = Math.max(1.2, layout.w * 1.05);
+                const depth = Math.max(1.0, layout.h * 0.9);
+                const isTierStack = isTierStackLocation(location);
+                const tierIndex = isTierStack ? Number(tierForLocationModel(location)) - 1 : 0;
+                const height = isTierStack
+                    ? (packages.length ? 0.82 : 0.28)
+                    : (packages.length ? Math.max(0.8, Math.min(5.6, 0.75 + Math.log10(totalQuantity + 1) * 1.35 + packages.length * 0.08)) : 0.35);
+                const x = (layout.x - 12) * 1.42 + width / 2;
+                const z = (layout.y - 20) * 1.1 + depth / 2;
+                const color = isMatch ? 0x22c55e : (packages.length ? 0x60a5fa : 0xcbd5e1);
+                const material = new THREE.MeshStandardMaterial({
+                    color,
+                    roughness: 0.62,
+                    metalness: 0.08,
+                    transparent: true,
+                    opacity: packages.length ? 0.92 : 0.55,
+                });
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+                mesh.position.set(x, (isTierStack ? tierIndex * 0.9 : 0) + height / 2, z);
+                mesh.userData = { location, packages, itemSummaries, totalQuantity, isMatch, isSelected };
+
+                const edge = new THREE.LineSegments(
+                    new THREE.EdgesGeometry(mesh.geometry),
+                    new THREE.LineBasicMaterial({ color: isSelected ? 0x0f172a : 0xffffff, transparent: true, opacity: isSelected ? 0.95 : 0.55 })
+                );
+                mesh.add(edge);
+
+                const label = makeTextSprite(location.location_code, { fontSize: 30, color: isSelected ? '#14532d' : '#0f172a' });
+                label.position.set(0, height / 2 + 0.85, 0);
+                mesh.add(label);
+
+                warehouse3d.root.add(mesh);
+                warehouse3d.meshes.push(mesh);
+            });
+            updateWarehouse3DCamera();
+        }
+
+        function updateWarehouse3DHover(event) {
+            if (!warehouse3d.raycaster || !warehouse3d.camera || !warehouse3d.renderer) return;
+            const rect = warehouse3d.renderer.domElement.getBoundingClientRect();
+            warehouse3d.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            warehouse3d.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            warehouse3d.raycaster.setFromCamera(warehouse3d.pointer, warehouse3d.camera);
+            const hit = warehouse3d.raycaster.intersectObjects(warehouse3d.meshes, false)[0]?.object || null;
+            setWarehouse3DHover(hit);
+        }
+
+        function setWarehouse3DHover(mesh) {
+            if (warehouse3d.hovered === mesh) return;
+            if (warehouse3d.hovered) warehouse3d.hovered.scale.set(1, 1, 1);
+            warehouse3d.hovered = mesh;
+            if (mesh) mesh.scale.set(1.04, 1.04, 1.04);
+            renderWarehouse3DTooltip(mesh);
+        }
+
+        function renderWarehouse3DTooltip(mesh) {
+            const tooltip = document.getElementById('warehouse3dTooltip');
+            if (!tooltip) return;
+            if (!mesh) {
+                tooltip.classList.remove('is-visible');
+                tooltip.innerHTML = '';
+                return;
+            }
+            const { location, itemSummaries, totalQuantity, packages } = mesh.userData;
+            const rows = itemSummaries.map(item => `
+                <div class="warehouse-3d-item">
+                    <span class="warehouse-3d-swatch" style="--swatch:${escapeHtml(item.pantone_hex || '#f8fafc')}"></span>
+                    <div><div class="warehouse-3d-code">${escapeHtml(item.code)}</div><div class="warehouse-3d-color">${escapeHtml(item.color || 'Chưa có màu')}</div></div>
+                    <div class="warehouse-3d-qty">${formatNumber(item.quantity)}${item.unit ? ` ${escapeHtml(item.unit)}` : ''}</div>
+                </div>`).join('');
+            tooltip.innerHTML = `
+                <div class="warehouse-3d-title"><span>${escapeHtml(location.location_code)}</span><span>${formatNumber(totalQuantity)}</span></div>
+                <div class="small text-secondary mt-2">Kệ ${escapeHtml(shelfForLocation(location))} · Tầng ${escapeHtml(tierForLocationModel(location))} · ${packages.length} dòng tồn</div>
+                <div class="warehouse-3d-items">${rows || '<div class="text-secondary small">Kệ trống.</div>'}</div>
+            `;
+            tooltip.classList.add('is-visible');
+        }
+
+        function animateWarehouse3D() {
+            if (!warehouse3d.renderer || !warehouse3d.scene || !warehouse3d.camera) return;
+            warehouse3d.animationFrame = requestAnimationFrame(animateWarehouse3D);
+            warehouse3d.renderer.render(warehouse3d.scene, warehouse3d.camera);
+        }
+
         function saveLocationLayout(locationId, gridX, gridY, gridW, gridH) {
             return fetch(`/api/kiem-ton-kho/vi-tri/${locationId}/layout`, {
                 method: 'PATCH',
@@ -1493,28 +2256,59 @@
         ];
 
         function shelfCodeForLocation(locationCode) {
-            const match = String(locationCode || '').toUpperCase().match(/[A-Z]/);
+            const code = String(locationCode || '').toUpperCase().trim();
+            const tierRack = code.match(/^([A-Z])0*(\d{1,4})$/);
+            if (tierRack) return String(Number(tierRack[2]));
+            const match = code.match(/[A-Z]/);
             return match ? match[0] : 'KHAC';
         }
 
         function shelfForLocation(location) {
-            return location?.shelf_code || shelfCodeForLocation(location?.location_code);
+            if (isTierStackLocation(location)) return String(physicalRackNumberForLocation(location) || '');
+            return shelfCodeForLocation(location?.location_code) || location?.shelf_code || 'KHAC';
         }
 
         function tierForLocationModel(location) {
-            return String(location?.tier || tierForLocation(location?.location_code));
+            return String(tierForLocation(location?.location_code) || location?.tier || 1);
         }
 
         function tierForLocation(locationCode) {
             const code = String(locationCode || '').toUpperCase();
+            const tierRack = code.match(/^([A-Z])0*\d{1,4}$/);
+            if (tierRack) {
+                const letterIndex = tierRack[1].charCodeAt(0) - 65;
+                return String(5 - (letterIndex % 5));
+            }
             return /(^|[-_\s])T?2($|[-_\s])|TANG\s*2|TẦNG\s*2/.test(code) ? '2' : '1';
         }
 
+        function lineForLocation(location) {
+            const code = String(location?.location_code || '').toUpperCase().trim();
+            const match = code.match(/^([A-Z])0*\d{1,4}$/);
+            if (!match) return '1';
+            return String(Math.floor((match[1].charCodeAt(0) - 65) / 5) + 1);
+        }
+
+        function tierLetterForLine(line, tier) {
+            const index = (Number(line || 1) - 1) * 5 + (5 - Number(tier || 1));
+            return index >= 0 && index < 26 ? String.fromCharCode(65 + index) : '';
+        }
+
+        function bayCodeForLocation(location) {
+            const code = String(location?.location_code || '').toUpperCase().trim();
+            const match = code.match(/(\d+)$/);
+            return match ? String(Number(match[1])) : (location?.bay_code || '');
+        }
+
         function loadWarehouseMap() {
-            const params = new URLSearchParams({ checked_at: value('checkedAt'), limit: 1000 });
-            return fetch(`/api/kiem-ton-kho/kien?${params}`).then(r => r.json()).then(result => {
+            const params = new URLSearchParams({ checked_at: value('checkedAt') });
+            return fetch(`/api/kiem-ton-kho/so-do-ton?${params}`).then(r => r.json()).then(result => {
                 mapPackages = result.data || [];
                 renderLayoutEditor();
+                if (!document.getElementById('map3dPanel')?.classList.contains('d-none')) {
+                    renderWarehouse3D();
+                    scrollRackSearchIntoView();
+                }
             });
         }
 
@@ -1526,7 +2320,7 @@
                 <div class="location-item ${x.location_code === selectedCode ? 'is-active' : ''}">
                     <button type="button" class="btn p-0 border-0 text-start flex-grow-1" onclick="selectLocation('${x.location_code}')">
                         <div class="location-code">${x.location_code}</div>
-                    <div class="location-meta">${x.warehouse_code || 'Chưa có mã kho'}${x.location_name ? ` · ${x.location_name}` : ''}</div>
+                        <div class="location-meta">Line ${escapeHtml(lineForLocation(x))} · Kệ ${escapeHtml(shelfForLocation(x))} · Tầng ${escapeHtml(tierForLocationModel(x))}${x.location_name ? ` · ${escapeHtml(x.location_name)}` : ''}</div>
                     </button>
                     <div class="location-actions">
                         <a class="btn btn-outline-primary" title="Xem chi tiết vị trí" href="/client/kiem-ton-kho/vi-tri/${x.id}" target="_blank"><i data-lucide="eye"></i></a>
@@ -1542,6 +2336,10 @@
             fillSelectedLocation();
             renderLocations();
             renderLayoutEditor();
+            if (!document.getElementById('map3dPanel')?.classList.contains('d-none')) {
+                renderWarehouse3D();
+                scrollRackSearchIntoView();
+            }
             loadPackages();
             loadLocationContents();
         }
@@ -1551,9 +2349,9 @@
             editingLocationId = location?.id || null;
             document.getElementById('locationModalTitle').textContent = location ? 'Chỉnh sửa vị trí kho' : 'Thêm vị trí kho';
             document.getElementById('editLocationCode').value = location?.location_code || '';
-            document.getElementById('editShelfCode').value = location?.shelf_code || '';
-            document.getElementById('editTier').value = location?.tier || 1;
-            document.getElementById('editBayCode').value = location?.bay_code || '';
+            document.getElementById('editShelfCode').value = location ? shelfForLocation(location) : '';
+            document.getElementById('editTier').value = location ? tierForLocationModel(location) : 1;
+            document.getElementById('editBayCode').value = location ? bayCodeForLocation(location) : '';
             document.getElementById('editGridW').value = Number(location?.grid_w || 4);
             document.getElementById('editGridH').value = Number(location?.grid_h || 2);
             document.getElementById('editGridPreset').value = `${Number(location?.grid_w || 4)}x${Number(location?.grid_h || 2)}`;
@@ -1634,7 +2432,7 @@
             const item = mapPackages.find(packageItem => String(packageItem.id) === String(packageId));
             movingPackageId = packageId;
             document.getElementById('movePackageTitle').textContent = item ? `${item.package_code} · ${item.internal_item_code || item.ma_sp}` : '';
-            document.getElementById('moveTargetLocationId').innerHTML = locations.map(location => `<option value="${location.id}" ${item?.warehouse_location_id === location.id ? 'selected' : ''}>${escapeHtml(location.location_code)} · Kệ ${escapeHtml(location.shelf_code || shelfCodeForLocation(location.location_code))} · Tầng ${escapeHtml(location.tier || tierForLocation(location.location_code))}</option>`).join('');
+            document.getElementById('moveTargetLocationId').innerHTML = locations.map(location => `<option value="${location.id}" ${item?.warehouse_location_id === location.id ? 'selected' : ''}>${escapeHtml(location.location_code)} · Line ${escapeHtml(lineForLocation(location))} · Kệ ${escapeHtml(shelfForLocation(location))} · Tầng ${escapeHtml(tierForLocationModel(location))}</option>`).join('');
             movePackageModal.show();
         }
 
@@ -1644,6 +2442,247 @@
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({ warehouse_location_id: locationId })
             }).then(r => jsonOrError(r, 'Không chuyển được kiện'));
+        }
+
+        function openRackInventoryModal(locationCode) {
+            rackCrudLocationCode = String(locationCode || '').toUpperCase();
+            if (!rackCrudLocationCode) return;
+            selectLocation(rackCrudLocationCode);
+            resetRackCrudForm();
+            document.getElementById('rackCrudLocationLabel').textContent = `Kệ ${rackCrudLocationCode}`;
+            document.getElementById('rackCrudLocationCode').value = rackCrudLocationCode;
+            document.getElementById('rackCrudStatus').textContent = 'Đang tải hàng trong kệ...';
+            document.getElementById('rackCrudRows').innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Đang tải...</td></tr>';
+            rackInventoryModal.show();
+            refreshIcons();
+            loadRackInventoryRows();
+        }
+
+        function rackCatalogOptionLabel(item) {
+            return [
+                item.name,
+                item.unit,
+                item.size ? `Size ${item.size}` : '',
+                item.color ? `Màu ${item.color}` : '',
+                item.shelf ? `Kệ ${item.shelf}` : ''
+            ].filter(Boolean).join(' · ');
+        }
+
+        function renderRackCatalogOptions(rows = internalCatalogItems) {
+            const options = document.getElementById('rackCrudCatalogOptions');
+            if (!options) return;
+            options.innerHTML = (rows || []).map(item => {
+                const valueText = item.value || item.code || item.name || '';
+                return `<option value="${escapeHtml(valueText)}" label="${escapeHtml(rackCatalogOptionLabel(item))}"></option>`;
+            }).join('');
+        }
+
+        function findRackCatalogItem(code) {
+            const normalized = String(code || '').trim().toUpperCase();
+            return internalCatalogItems.find(item => {
+                return [item.code, item.value, item.name].some(valueText => String(valueText || '').trim().toUpperCase() === normalized);
+            });
+        }
+
+        function searchRackCatalog() {
+            const keyword = value('rackCrudItemCode').trim();
+            clearTimeout(rackCrudSearchTimer);
+            if (!keyword) return;
+            rackCrudSearchTimer = setTimeout(() => {
+                fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(keyword)}&limit=50`)
+                    .then(r => jsonOrError(r, 'Không tải được DANH MỤC'))
+                    .then(result => {
+                        internalCatalogItems = [...(result.data || []), ...internalCatalogItems];
+                        renderRackCatalogOptions(result.data || []);
+                        applyRackCatalogSelection();
+                    })
+                    .catch(() => {});
+            }, 180);
+        }
+
+        function applyRackCatalogSelection() {
+            const item = findRackCatalogItem(value('rackCrudItemCode'));
+            if (!item) {
+                document.getElementById('rackCrudItemName').value = '';
+                document.getElementById('rackCrudUnit').value = '';
+                return;
+            }
+            document.getElementById('rackCrudItemCode').value = item.code || item.value || '';
+            document.getElementById('rackCrudItemName').value = item.name || '';
+            document.getElementById('rackCrudUnit').value = item.unit || '';
+            if (!value('rackCrudSize')) document.getElementById('rackCrudSize').value = item.size || '';
+            if (!value('rackCrudColor')) document.getElementById('rackCrudColor').value = item.color || '';
+        }
+
+        function resetRackCrudForm() {
+            const keepLocation = rackCrudLocationCode || value('rackCrudLocationCode');
+            ['rackCrudPackageId', 'rackCrudItemCode', 'rackCrudItemName', 'rackCrudQuantity', 'rackCrudUnit', 'rackCrudSize', 'rackCrudColor'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            document.getElementById('rackCrudLocationCode').value = keepLocation || '';
+            document.getElementById('rackCrudStatus').textContent = '';
+        }
+
+        function loadRackInventoryRows() {
+            if (!rackCrudLocationCode) return;
+            const packageParams = new URLSearchParams({ location_code: rackCrudLocationCode, limit: 1000 });
+            const stockParams = new URLSearchParams({ checked_at: value('checkedAt') || localIsoDate() });
+            Promise.all([
+                fetch(`/api/kiem-ton-kho/kien?${packageParams}`).then(r => jsonOrError(r, 'Không tải được kiện trong kệ')),
+                fetch(`/api/kiem-ton-kho/so-do-ton?${stockParams}`).then(r => jsonOrError(r, 'Không tải được tồn tổng hợp trong kệ'))
+            ])
+                .then(([packageResult, stockResult]) => {
+                    const packages = packageResult.data || [];
+                    const stockRows = (stockResult.data || []).filter(item => String(item.location?.location_code || item.location_code || '').toUpperCase() === rackCrudLocationCode);
+                    const packageByKey = packages.reduce((map, item) => {
+                        const key = rackInventoryKey(item);
+                        if (!map[key]) map[key] = item;
+                        return map;
+                    }, {});
+                    const seenPackageIds = new Set();
+
+                    rackCrudItems = stockRows.map(item => {
+                        const key = rackInventoryKey(item);
+                        const packageItem = packageByKey[key];
+                        if (packageItem?.id) seenPackageIds.add(String(packageItem.id));
+                        return {
+                            ...item,
+                            id: packageItem?.id || item.id,
+                            package_id: packageItem?.id || null,
+                            package_code: packageItem?.package_code || 'Tồn tổng hợp',
+                            note: packageItem?.note || item.catalog_name || '',
+                            source_type: packageItem?.id ? 'package' : 'ledger',
+                        };
+                    });
+
+                    packages.forEach(item => {
+                        if (!seenPackageIds.has(String(item.id))) {
+                            rackCrudItems.push({ ...item, package_id: item.id, source_type: 'package' });
+                        }
+                    });
+
+                    const totalQuantity = rackCrudItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+                    document.getElementById('rackCrudStatus').textContent = `${formatNumber(rackCrudItems.length)} dòng · Tổng ${formatNumber(totalQuantity)}`;
+                    document.getElementById('rackCrudRows').innerHTML = rackCrudItems.map((item, index) => {
+                        const swatch = item.pantone_hex ? `<span class="rack-crud-swatch" style="--swatch:${escapeHtml(cssColorValue(item.pantone_hex))}"></span>` : '';
+                        const actions = item.package_id
+                            ? `<button type="button" class="btn btn-sm btn-outline-secondary" onclick="editRackInventoryItem(${item.package_id})">Sửa</button>
+                               <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteRackInventoryItem(${item.package_id})">Xóa</button>`
+                            : `<button type="button" class="btn btn-sm btn-outline-primary" onclick="copyRackInventoryLedgerItem(${index})">Tạo điều chỉnh</button>`;
+                        return `<tr>
+                            <td><strong>${escapeHtml(item.internal_item_code || item.ma_sp || '')}</strong></td>
+                            <td>${escapeHtml(item.catalog_name || item.note || '')}</td>
+                            <td class="text-end fw-bold">${formatNumber(item.quantity || 0)}</td>
+                            <td>${escapeHtml(item.catalog_unit || '')}</td>
+                            <td>${escapeHtml(item.size || '')}</td>
+                            <td>${swatch} ${escapeHtml(item.color || '')}</td>
+                            <td class="text-end text-nowrap">${actions}</td>
+                        </tr>`;
+                    }).join('') || '<tr><td colspan="7" class="text-center text-muted py-3">Kệ này chưa có hàng.</td></tr>';
+                    refreshIcons();
+                })
+                .catch(error => {
+                    document.getElementById('rackCrudStatus').textContent = error.message;
+                    document.getElementById('rackCrudRows').innerHTML = `<tr><td colspan="7" class="text-center text-danger py-3">${escapeHtml(error.message)}</td></tr>`;
+                });
+        }
+
+        function rackInventoryKey(item) {
+            return [
+                item.internal_item_code || item.ma_sp || '',
+                item.size || '',
+                item.color || '',
+                item.side || ''
+            ].map(valueText => String(valueText || '').trim().toUpperCase()).join('|');
+        }
+
+        function editRackInventoryItem(packageId) {
+            const item = rackCrudItems.find(row => Number(row.package_id || row.id) === Number(packageId));
+            if (!item) return;
+            document.getElementById('rackCrudPackageId').value = item.package_id || item.id;
+            document.getElementById('rackCrudLocationCode').value = rackCrudLocationCode;
+            document.getElementById('rackCrudItemCode').value = item.internal_item_code || item.ma_sp || '';
+            document.getElementById('rackCrudItemName').value = item.catalog_name || item.note || '';
+            document.getElementById('rackCrudQuantity').value = item.quantity || 0;
+            document.getElementById('rackCrudUnit').value = item.catalog_unit || '';
+            document.getElementById('rackCrudSize').value = item.size || '';
+            document.getElementById('rackCrudColor').value = item.color || '';
+            document.getElementById('rackCrudStatus').textContent = `Đang sửa ${item.package_code || ''}`;
+        }
+
+        function copyRackInventoryLedgerItem(index) {
+            const item = rackCrudItems[index];
+            if (!item) return;
+            document.getElementById('rackCrudPackageId').value = '';
+            document.getElementById('rackCrudLocationCode').value = rackCrudLocationCode;
+            document.getElementById('rackCrudItemCode').value = item.internal_item_code || item.ma_sp || '';
+            document.getElementById('rackCrudItemName').value = item.catalog_name || item.note || '';
+            document.getElementById('rackCrudQuantity').value = item.quantity || 0;
+            document.getElementById('rackCrudUnit').value = item.catalog_unit || '';
+            document.getElementById('rackCrudSize').value = item.size || '';
+            document.getElementById('rackCrudColor').value = item.color || '';
+            document.getElementById('rackCrudStatus').textContent = 'Đang tạo dòng điều chỉnh từ tồn tổng hợp.';
+        }
+
+        function rackCrudPayload() {
+            const item = findRackCatalogItem(value('rackCrudItemCode'));
+            const code = (item?.code || value('rackCrudItemCode')).trim();
+            return {
+                location_code: rackCrudLocationCode,
+                ma_sp: '',
+                internal_item_code: code,
+                size: value('rackCrudSize'),
+                color: value('rackCrudColor'),
+                side: '',
+                quantity: Number(value('rackCrudQuantity') || 0),
+                checked_at: value('checkedAt') || new Date().toISOString().slice(0, 10),
+                entry_type: 'opening',
+                note: item?.name || value('rackCrudItemName') || ''
+            };
+        }
+
+        function saveRackInventoryItem(event) {
+            event.preventDefault();
+            applyRackCatalogSelection();
+            const payload = rackCrudPayload();
+            if (!payload.internal_item_code) return alert('Nhập mã hàng hóa từ DANH MỤC.');
+            if (!(payload.quantity > 0)) return alert('Nhập số lượng lớn hơn 0.');
+            const packageId = value('rackCrudPackageId');
+            fetch(packageId ? `/api/kiem-ton-kho/kien/${packageId}` : '/api/kiem-ton-kho/kien', {
+                method: packageId ? 'PATCH' : 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify(payload)
+            }).then(r => jsonOrError(r, packageId ? 'Không cập nhật được hàng trong kệ' : 'Không thêm được hàng vào kệ'))
+              .then(() => {
+                  resetRackCrudForm();
+                  loadRackInventoryRows();
+                  loadPackages();
+                  loadLocations();
+                  loadWarehouseStats();
+                  loadWarehouseMap();
+                  loadLocationContents();
+              })
+              .catch(error => alert(error.message));
+        }
+
+        function deleteRackInventoryItem(packageId) {
+            const item = rackCrudItems.find(row => Number(row.id) === Number(packageId));
+            if (!confirm(`Xóa ${item?.internal_item_code || item?.package_code || 'dòng này'} khỏi kệ ${rackCrudLocationCode}?`)) return;
+            fetch(`/api/kiem-ton-kho/kien/${packageId}`, {
+                method: 'DELETE',
+                headers: {'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
+            }).then(r => jsonOrError(r, 'Không xóa được hàng trong kệ'))
+              .then(() => {
+                  resetRackCrudForm();
+                  loadRackInventoryRows();
+                  loadPackages();
+                  loadLocations();
+                  loadWarehouseStats();
+                  loadWarehouseMap();
+                  loadLocationContents();
+              })
+              .catch(error => alert(error.message));
         }
 
         function loadPackages() {
@@ -2091,6 +3130,9 @@
             locationModal.hide();
             switchWorkspace('entry');
         });
+        document.getElementById('rackCrudItemCode').addEventListener('input', searchRackCatalog);
+        document.getElementById('rackCrudItemCode').addEventListener('change', applyRackCatalogSelection);
+        document.getElementById('rackCrudForm').addEventListener('submit', saveRackInventoryItem);
         document.getElementById('locationCode').addEventListener('change', () => {
             fillSelectedLocation();
             document.getElementById('receiptLocationCode').value = value('locationCode').toUpperCase();
@@ -2104,8 +3146,17 @@
             const location = locations.find(item => item.location_code === event.target.value);
         });
         document.getElementById('locationSearch').addEventListener('input', renderLocations);
-        document.getElementById('mapSearch').addEventListener('input', renderLayoutEditor);
-        document.getElementById('showEmptyLocations')?.addEventListener('change', renderLayoutEditor);
+        document.getElementById('mapSearch').addEventListener('input', () => {
+            renderLayoutEditor();
+            if (!document.getElementById('map3dPanel')?.classList.contains('d-none')) {
+                renderWarehouse3D();
+                scrollRackSearchIntoView();
+            }
+        });
+        document.getElementById('showEmptyLocations')?.addEventListener('change', () => {
+            renderLayoutEditor();
+            if (!document.getElementById('map3dPanel')?.classList.contains('d-none')) renderWarehouse3D();
+        });
         document.getElementById('uploadLayoutBackgroundBtn')?.addEventListener('click', () => {
             document.getElementById('layoutBackgroundInput')?.click();
         });
@@ -2191,14 +3242,17 @@
             draggingLayout = null;
             const hint = document.getElementById('layoutDragHint');
             if (hint) hint.style.display = 'none';
-            setLayoutSaveStatus(`ang lưu ${currentDrag.location.location_code}...`, 'primary');
-            saveLocationLayout(currentDrag.location.id, nextX, nextY, currentDrag.gridW, currentDrag.gridH)
-                .then(result => {
-                    const index = locations.findIndex(item => item.id === result.data.id);
-                    if (index >= 0) locations[index] = result.data;
+            const stack = tierStackLocations(currentDrag.location);
+            setLayoutSaveStatus(`ang lưu ${isTierStackLocation(currentDrag.location) ? `cụm kệ ${shelfForLocation(currentDrag.location)}` : currentDrag.location.location_code}...`, 'primary');
+            Promise.all(stack.map(location => saveLocationLayout(location.id, nextX, nextY, currentDrag.gridW, currentDrag.gridH)))
+                .then(results => {
+                    results.forEach(result => {
+                        const index = locations.findIndex(item => item.id === result.data.id);
+                        if (index >= 0) locations[index] = result.data;
+                    });
                     renderLayoutEditor();
                     applyLayoutEditorSettings();
-                    setLayoutSaveStatus(`ã lưu ${result.data.location_code}.`, 'success');
+                    setLayoutSaveStatus(`Đã lưu ${stack.length > 1 ? `${stack.length} tầng cùng kệ` : results[0].data.location_code}.`, 'success');
                 })
                 .catch(error => {
                     alert(error.message);
@@ -2249,6 +3303,8 @@
         });
         document.getElementById('warehouseTopSearch').addEventListener('input', event => {
             document.getElementById('voiceLookupInput').value = event.target.value;
+            const activeView = document.querySelector('[data-workspace-panel]:not(.d-none)')?.dataset.workspacePanel;
+            if (['editor', 'map3d'].includes(activeView)) applyMapSearch(event.target.value);
         });
         document.getElementById('warehouseTopSearch').addEventListener('keydown', event => {
             if (event.key === 'Enter') {
@@ -2268,6 +3324,17 @@
         document.addEventListener('click', event => {
             if (!event.target.closest('.product-search')) hideProductResults();
         });
+        document.getElementById('rackFrontView')?.addEventListener('mouseover', event => {
+            const button = event.target.closest('.rack-tier');
+            if (!button || button === rackHoverTarget) return;
+            rackHoverTarget = button;
+            showRackHoverPreview(button, event);
+        });
+        document.getElementById('rackFrontView')?.addEventListener('mousemove', event => {
+            if (rackHoverTarget) moveRackHoverPreview(event);
+        });
+        document.getElementById('rackFrontView')?.addEventListener('mouseleave', hideRackHoverPreview);
+        document.getElementById('rackFrontView')?.addEventListener('click', hideRackHoverPreview);
         document.getElementById('checkedAt').addEventListener('change', () => { loadPackages(); loadReceipts(); loadWarehouseStats(); loadWarehouseMap(); loadLocationContents(); });
         document.getElementById('checkedAt').addEventListener('change', event => {
             setDateValue('receiptDate', value('checkedAt'));
@@ -2295,7 +3362,7 @@
         const requestedIssue = pageParams.get('from_issue');
         const requestedKeyword = pageParams.get('keyword');
         if (requestedKeyword) document.getElementById('receiptKeyword').value = requestedKeyword;
-        switchWorkspace(requestedView === 'map' ? 'editor' : (['entry', 'receipts', 'history', 'overview', 'editor'].includes(requestedView) ? requestedView : 'entry'));
+        switchWorkspace(shelfMapOnly ? 'map3d' : (requestedView === 'map' ? 'editor' : (['entry', 'receipts', 'history', 'overview', 'editor', 'map3d'].includes(requestedView) ? requestedView : 'entry')));
         const requestedLocation = pageParams.get('location_code');
         if (requestedLocation) document.getElementById('locationCode').value = requestedLocation.toUpperCase();
         loadLocations().then(() => {

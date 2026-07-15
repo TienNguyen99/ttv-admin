@@ -4,35 +4,36 @@
     <meta charset="UTF-8">
     <title>{{ $location->location_code }}</title>
     <style>
-        @page { size: 40mm 58mm; margin: 0; }
+        @page { size: 58mm 40mm; margin: 0; }
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: Arial, sans-serif; color: #111827; text-align: center; }
+        body { margin: 0; font-family: Arial, sans-serif; color: #111827; }
         .label {
+            width: 58mm;
+            height: 40mm;
             display: flex;
             flex-direction: column;
-            align-items: center;
             justify-content: center;
-            gap: 2mm;
-            width: 40mm;
-            height: 58mm;
+            align-items: center;
             padding: 3mm;
+            overflow: hidden;
         }
-        img { width: 24mm; height: 24mm; display: block; }
-        .code { font-size: 26px; font-weight: 900; line-height: 1; }
-        .name { max-width: 34mm; font-size: 10px; font-weight: 700; color: #374151; line-height: 1.15; }
-        .hint { max-width: 34mm; font-size: 8px; color: #6b7280; line-height: 1.2; }
+        .code { font-size: 32px; font-weight: 900; line-height: .95; letter-spacing: 0; text-align: center; overflow-wrap: anywhere; }
+        .code.has-color { font-size: 22px; line-height: 1.08; }
         @media screen {
-            body { padding: 10px; background: #f3f4f6; }
-            .label { border: 1px dashed #9ca3af; background: #fff; }
+            body { padding: 12px; background: #e5e7eb; }
+            .label { background: #fff; border: 1px dashed #94a3b8; }
         }
     </style>
 </head>
 <body onload="window.print()">
+    @php
+        $colors = collect($location->label_colors ?? [])->filter()->values();
+        $label = $colors->isNotEmpty()
+            ? $location->location_code . ' - ' . $colors->join(', ')
+            : 'Kệ ' . $location->location_code;
+    @endphp
     <div class="label">
-        <div class="code">{{ $location->location_code }}</div>
-        <img src="{{ url('/qr-code') }}?size=180&text={{ urlencode(request()->root() . '/client/kiem-ton-kho/vi-tri/' . $location->id) }}" alt="QR {{ $location->location_code }}">
-        <div class="name">{{ $location->location_name ?: 'Vị trí kho' }}</div>
-        <div class="hint">Quét để xem mã hàng tại vị trí</div>
+        <div class="code {{ $colors->isNotEmpty() ? 'has-color' : '' }}">{{ $label }}</div>
     </div>
 </body>
 </html>

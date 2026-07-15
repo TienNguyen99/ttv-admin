@@ -322,6 +322,7 @@
         </div>
     </dialog>
 
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const lineRows = document.getElementById('lineRows');
@@ -369,6 +370,56 @@
         };
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+        const nativeAlert = window.alert.bind(window);
+        const swalToast = (message, icon = 'info') => {
+            if (!window.Swal) return nativeAlert(message);
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon,
+                title: String(message || ''),
+                showConfirmButton: false,
+                timer: 2800,
+                timerProgressBar: true
+            });
+        };
+        window.alert = message => swalToast(message, 'info');
+
+        function showIssueError(error) {
+            const stockErrors = Array.isArray(error?.errors?.stock) ? error.errors.stock : [];
+            if (window.Swal && stockErrors.length) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Chưa đủ tồn để xuất',
+                    html: `
+                        <div style="text-align:left">
+                            <p style="margin:0 0 10px;color:#475569">Phiếu vẫn giữ nguyên để bạn kiểm tra và sửa số lượng. Các dòng thiếu tồn:</p>
+                            <div style="display:grid;gap:8px;max-height:260px;overflow:auto">
+                                ${stockErrors.map(item => `<div style="padding:10px 12px;border:1px solid #fecaca;border-radius:10px;background:#fff7ed;color:#7f1d1d">${esc(item)}</div>`).join('')}
+                            </div>
+                        </div>
+                    `,
+                    confirmButtonText: 'Sửa phiếu',
+                    showDenyButton: true,
+                    denyButtonText: 'Xem tồn kho',
+                    customClass: {
+                        popup: 'text-start'
+                    }
+                }).then(result => {
+                    if (result.isDenied) window.open('/client/ton-kho-noi-bo', '_blank');
+                });
+                return;
+            }
+
+            const message = error?.message || 'Không lưu được phiếu.';
+            if (!window.Swal) return nativeAlert(message);
+            Swal.fire({
+                icon: 'error',
+                title: 'Không lưu được phiếu',
+                text: message,
+                confirmButtonText: 'Đóng'
+            });
+        }
         function isoToDateVn(value) {
             const raw = String(value || '').slice(0, 10);
             const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -416,11 +467,15 @@
 
         function jsonOrError(response, fallback) {
             if (response.ok) return response.json();
-            return response.json().then(result => {
-                const errors = result.errors
-                    ? Object.values(result.errors).flat().filter(Boolean).join('\n')
-                    : '';
-                throw new Error(errors || result.message || fallback);
+            return response.json().catch(() => ({})).then(result => {
+                const flatErrors = result.errors
+                    ? Object.values(result.errors).flat().filter(Boolean)
+                    : [];
+                const error = new Error(flatErrors.join('\n') || result.message || fallback);
+                error.status = response.status;
+                error.errors = result.errors || {};
+                error.payload = result;
+                throw error;
             });
         }
 
@@ -1215,12 +1270,12 @@
                   window.open(result.print_url, '_blank');
                   const autoCodes = Array.isArray(result.btp_order_codes) ? result.btp_order_codes : [];
                   if (autoCodes.length) {
-                      alert(`Da tu tao ${autoCodes.length} lenh BTP: ${autoCodes.join(', ')}`);
+                      alert(`Đã tự tạo ${autoCodes.length} lệnh BTP: ${autoCodes.join(', ')}`);
                   }
                   resetIssueForm();
                   loadIssues();
               })
-              .catch(error => alert(error.message));
+              .catch(showIssueError);
         }
 
         function applyBtpOrderCodesToRows(orders) {
