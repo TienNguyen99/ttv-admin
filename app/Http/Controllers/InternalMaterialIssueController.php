@@ -257,7 +257,7 @@ class InternalMaterialIssueController extends Controller
             ->with('lines:id,issue_id,production_order')
             ->withCount('lines')
             ->withSum('lines', 'quantity')
-            ->orderByDesc('issue_date')
+            ->orderByDesc('created_at')
             ->orderByDesc('id');
 
         if ($request->filled('from_date')) {

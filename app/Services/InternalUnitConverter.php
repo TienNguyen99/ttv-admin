@@ -62,7 +62,16 @@ class InternalUnitConverter
         }
 
         $row = $query->first();
-        return $row ? (float) $row->factor : null;
+        if ($row) {
+            return (float) $row->factor;
+        }
+
+        $defaults = [
+            'G>KG' => 0.001,
+            'KG>G' => 1000,
+        ];
+
+        return $defaults[$from . '>' . $to] ?? null;
     }
 
     public function baseUnit(?string $itemCode, ?string $fallbackUnit = null): string
@@ -110,6 +119,11 @@ class InternalUnitConverter
             'kilogram' => 'KG',
             'kilograms' => 'KG',
             'kgs' => 'KG',
+            'g' => 'G',
+            'gr' => 'G',
+            'gam' => 'G',
+            'gram' => 'G',
+            'grams' => 'G',
             'pcs' => 'PCS',
             'pc' => 'PCS',
             'cai' => 'PCS',

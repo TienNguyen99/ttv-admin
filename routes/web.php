@@ -181,6 +181,9 @@ Route::post('/api/lenh-det/items/import', [InternalWeavingController::class, 'im
 Route::get('/api/lenh-det/boms', [InternalWeavingController::class, 'boms']);
 Route::post('/api/lenh-det/boms', [InternalWeavingController::class, 'replaceBoms']);
 Route::post('/api/lenh-det/boms/import', [InternalWeavingController::class, 'importBoms']);
+Route::post('/api/lenh-det/design-sheet/import', [InternalWeavingController::class, 'importDesignSheet']);
+Route::post('/api/lenh-det/design-workbook/import', [InternalWeavingController::class, 'importDesignWorkbook']);
+Route::post('/api/lenh-det/design-workbook/chunk', [InternalWeavingController::class, 'importDesignWorkbookChunk']);
 Route::get('/api/lenh-det/orders', [InternalWeavingController::class, 'orders']);
 Route::post('/api/lenh-det/orders', [InternalWeavingController::class, 'storeOrder']);
 Route::post('/api/lenh-det/orders/import', [InternalWeavingController::class, 'importOrders']);
@@ -216,6 +219,7 @@ Route::get('/api/danh-muc-noi-bo/loi-ma-phieu', [InternalItemCatalogController::
 Route::post('/api/danh-muc-noi-bo/dong-bo', [InternalItemCatalogController::class, 'sync']);
 Route::post('/api/danh-muc-noi-bo/tu-dong-dong-bo', [InternalItemCatalogController::class, 'autoSync']);
 Route::post('/api/danh-muc-noi-bo/dong-bo-vi-tri', [InternalItemCatalogController::class, 'syncShelvesToLocations']);
+Route::post('/api/danh-muc-noi-bo/{catalog}/anh', [InternalItemCatalogController::class, 'uploadImage']);
 Route::get('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'index']);
 Route::post('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'store']);
 Route::delete('/api/quy-doi-don-vi/{unitConversion}', [InternalUnitConversionController::class, 'destroy']);
@@ -249,6 +253,7 @@ Route::get('/api/kiem-ton-kho/phieu-nhap-tp', [WarehouseCountController::class, 
 Route::post('/api/kiem-ton-kho/phieu-nhap-tp', [WarehouseCountController::class, 'storeReceiptBatch']);
 Route::post('/api/kiem-ton-kho/phieu-nhap-tp/kiem-tra-trung', [WarehouseCountController::class, 'checkReceiptDuplicates']);
 Route::get('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}', [WarehouseCountController::class, 'showReceipt']);
+Route::get('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}/lien-ket', [WarehouseCountController::class, 'receiptLinks']);
 Route::put('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}', [WarehouseCountController::class, 'updateReceiptBatch']);
 Route::patch('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}/vi-tri', [WarehouseCountController::class, 'updateReceiptLocation']);
 Route::delete('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}', [WarehouseCountController::class, 'destroyReceipt']);

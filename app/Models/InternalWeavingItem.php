@@ -13,9 +13,11 @@ class InternalWeavingItem extends Model
     protected $fillable = [
         'item_code',
         'item_name',
+        'design_code',
         'customer',
         'unit',
         'note',
+        'metadata_json',
     ];
 
     public function boms()

@@ -15,12 +15,15 @@ class InternalWeavingOrder extends Model
         'weaving_item_id',
         'item_code',
         'customer',
+        'po_number',
+        'design_code',
         'order_quantity',
         'unit',
         'order_date',
         'due_date',
         'status',
         'note',
+        'metadata_json',
     ];
 
     protected $casts = [

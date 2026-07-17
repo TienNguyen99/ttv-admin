@@ -13,11 +13,13 @@ class InternalWeavingBom extends Model
     protected $fillable = [
         'weaving_item_id',
         'material_code',
+        'line_role',
         'material_name',
         'unit',
         'consumption_per_unit',
         'waste_percent',
         'note',
+        'metadata_json',
     ];
 
     protected $casts = [

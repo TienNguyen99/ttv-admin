@@ -2,17 +2,17 @@
     :root { 
         --summary-sidebar-width: 240px; 
         --wms-transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        --radius-sm: 6px;
-        --radius-md: 10px;
-        --radius-lg: 16px;
-        --wms-blue: #2563eb;
-        --wms-blue-hover: #1d4ed8;
-        --wms-blue-soft: #eff6ff;
-        --wms-blue-soft-border: rgba(37, 99, 235, 0.15);
-        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-        --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.06);
+        --radius-sm: 10px;
+        --radius-md: 14px;
+        --radius-lg: 20px;
+        --wms-blue: #4f8df7;
+        --wms-blue-hover: #2f6fe8;
+        --wms-blue-soft: #eef6ff;
+        --wms-blue-soft-border: rgba(79, 141, 247, 0.24);
+        --shadow-sm: 0 8px 18px rgba(64, 111, 170, 0.07);
+        --shadow-md: 0 14px 34px rgba(64, 111, 170, 0.10);
+        --shadow-lg: 0 22px 48px rgba(64, 111, 170, 0.13);
+        --shadow-xl: 0 30px 70px rgba(64, 111, 170, 0.16);
     }
     
     @keyframes fadeInUp {
@@ -45,9 +45,13 @@
         flex-direction: column;
         width: var(--summary-sidebar-width);
         overflow-y: auto;
-        background: linear-gradient(180deg, #0a2540 0%, #031429 100%);
-        color: #d7e4f3;
-        box-shadow: 4px 0 24px rgba(15, 23, 42, 0.08);
+        background:
+            radial-gradient(circle at 18% 4%, rgba(137, 197, 255, .36), transparent 18rem),
+            linear-gradient(180deg, rgba(246, 251, 255, .96) 0%, rgba(231, 242, 255, .96) 100%);
+        color: #31506f;
+        border-right: 1px solid rgba(191, 216, 246, .9);
+        box-shadow: 12px 0 44px rgba(64, 111, 170, .12);
+        backdrop-filter: blur(18px) saturate(1.16);
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         font-family: "Plus Jakarta Sans", "Inter", sans-serif;
     }
@@ -58,8 +62,8 @@
         gap: 12px;
         min-height: 78px;
         padding: 16px 20px;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
-        color: #fff;
+        border-bottom: 1px solid rgba(120,168,230,.18);
+        color: #123c69;
         text-decoration: none;
     }
     
@@ -69,10 +73,10 @@
         height: 40px;
         flex: 0 0 40px;
         place-items: center;
-        border: 1px solid rgba(255,255,255,0.15);
-        border-radius: var(--radius-md);
-        background: linear-gradient(135deg, #2563eb, #1d4ed8);
-        box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+        border: 1px solid rgba(79,141,247,.24);
+        border-radius: 16px;
+        background: linear-gradient(135deg, #77b7ff, #4f8df7);
+        box-shadow: 0 14px 28px rgba(79,141,247,.24);
     }
     
     .summary-sidebar__mark svg { 
@@ -90,7 +94,7 @@
     
     .summary-sidebar__brand-subtitle { 
         margin-top: 3px; 
-        color: #9eb5cf; 
+        color: #6b7f99; 
         font-size: 10px; 
         font-weight: 700; 
         text-transform: uppercase; 
@@ -99,7 +103,7 @@
     
     .summary-sidebar__label {
         padding: 20px 18px 8px;
-        color: #7994b2;
+        color: #7b91aa;
         font-size: 10.5px;
         font-weight: 800;
         text-transform: uppercase;
@@ -113,11 +117,11 @@
         align-items: center;
         gap: 10px;
         min-height: 42px;
-        margin: 3px 12px;
+        margin: 4px 12px;
         padding: 9px 12px;
-        border-left: 3px solid transparent;
-        border-radius: var(--radius-sm);
-        color: #9eb5cf;
+        border-left: 0;
+        border-radius: 16px;
+        color: #5c7592;
         font-size: 13.5px;
         font-weight: 600;
         text-decoration: none;
@@ -133,7 +137,7 @@
         position: absolute;
         inset: 0 auto 0 0;
         width: 0;
-        background: linear-gradient(90deg, rgba(96, 165, 250, 0.18), transparent);
+        background: linear-gradient(90deg, rgba(117, 181, 255, 0.18), transparent);
         transition: width 0.24s cubic-bezier(0.16, 1, 0.3, 1);
     }
     
@@ -148,9 +152,10 @@
     
     .summary-sidebar__link:hover,
     .summary-sidebar__summary:hover {
-        background: rgba(255, 255, 255, 0.06);
-        color: #ffffff;
-        transform: translateX(4px);
+        background: rgba(255, 255, 255, 0.72);
+        color: #174679;
+        transform: translateX(3px);
+        box-shadow: 0 10px 22px rgba(64, 111, 170, 0.10);
     }
 
     .summary-sidebar__link:hover::before,
@@ -166,10 +171,9 @@
     
     .summary-sidebar__link.is-active,
     .summary-sidebar__group[open] > .summary-sidebar__summary {
-        border-left-color: #60a5fa;
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        background: linear-gradient(135deg, #77b7ff 0%, #4f8df7 55%, #6c7ff4 100%);
         color: #ffffff;
-        box-shadow: 0 10px 22px rgba(37, 99, 235, 0.32);
+        box-shadow: 0 18px 34px rgba(79, 141, 247, 0.28);
     }
 
     .summary-sidebar__link.is-active::before,
@@ -187,7 +191,7 @@
     .summary-sidebar__summary::after {
         content: "›";
         margin-left: auto;
-        color: #7994b2;
+        color: #7b91aa;
         font-size: 18px;
         font-family: sans-serif;
         line-height: 1;
@@ -210,7 +214,7 @@
     .summary-sidebar__footer { 
         margin-top: auto; 
         padding: 12px 0 16px; 
-        border-top: 1px solid rgba(255,255,255,0.06); 
+        border-top: 1px solid rgba(120,168,230,.18); 
     }
     
     .summary-sidebar-toggle {
@@ -222,9 +226,9 @@
         width: 44px;
         height: 44px;
         border: 1px solid #cbd5e1;
-        border-radius: var(--radius-md);
-        background: #ffffff;
-        color: #0a2540;
+        border-radius: 16px;
+        background: rgba(255,255,255,.9);
+        color: #174679;
         font-size: 22px;
         box-shadow: var(--shadow-md);
         cursor: pointer;
@@ -258,19 +262,19 @@
         height: 52px;
         place-items: center;
         border: none;
-        border-radius: 50%;
-        background: var(--wms-blue);
+        border-radius: 18px;
+        background: linear-gradient(135deg, #77b7ff, #4f8df7);
         color: #ffffff;
-        box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3);
+        box-shadow: 0 18px 38px rgba(79, 141, 247, 0.30);
         cursor: pointer;
         animation: fabPulse 2.4s infinite;
         transition: var(--wms-transition-smooth);
     }
     
     .warehouse-assistant-fab:hover {
-        background: var(--wms-blue-hover);
-        transform: scale(1.1) rotate(5deg);
-        box-shadow: 0 12px 28px rgba(37, 99, 235, 0.45);
+        background: linear-gradient(135deg, #64aaff, #367cf0);
+        transform: translateY(-2px) scale(1.04);
+        box-shadow: 0 24px 48px rgba(79, 141, 247, 0.38);
     }
     
     .warehouse-assistant-fab svg { 
@@ -288,11 +292,12 @@
         width: min(380px, calc(100vw - 48px));
         height: 480px;
         overflow: hidden;
-        border: 1px solid rgba(226,232,240,0.8);
-        border-radius: var(--radius-lg);
-        background: #ffffff;
+        border: 1px solid rgba(198, 220, 247, 0.9);
+        border-radius: 24px;
+        background: rgba(255,255,255,.94);
         color: #0f172a;
         box-shadow: var(--shadow-xl);
+        backdrop-filter: blur(18px) saturate(1.12);
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
@@ -315,22 +320,22 @@
         justify-content: space-between;
         gap: 12px;
         padding: 16px 20px;
-        border-bottom: 1px solid #e2e8f0;
-        background: linear-gradient(135deg, #0a2540 0%, #031429 100%);
-        color: #ffffff;
+        border-bottom: 1px solid rgba(198, 220, 247, 0.86);
+        background: linear-gradient(135deg, #f7fbff 0%, #e8f4ff 100%);
+        color: #123c69;
     }
     
     .warehouse-assistant__title { 
         margin: 0; 
         font-size: 15px; 
         font-weight: 800; 
-        color: #ffffff; 
+        color: #123c69; 
         letter-spacing: 0;
     }
     
     .warehouse-assistant__sub { 
         margin-top: 3px; 
-        color: #9eb5cf; 
+        color: #6b7f99; 
         font-size: 11px; 
         font-weight: 500;
     }
@@ -340,16 +345,16 @@
         width: 30px;
         height: 30px;
         place-items: center;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: var(--radius-sm);
-        background: rgba(255, 255, 255, 0.08);
-        color: #ffffff;
+        border: 1px solid rgba(198, 220, 247, 0.9);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.76);
+        color: #174679;
         cursor: pointer;
         transition: var(--wms-transition-smooth);
     }
     
     .warehouse-assistant__close:hover {
-        background: rgba(255, 255, 255, 0.2);
+        background: #ffffff;
         transform: scale(1.05);
     }
     
@@ -361,15 +366,15 @@
         height: auto;
         padding: 16px;
         overflow-y: auto;
-        background: #f8fafc;
+        background: #f3f8ff;
         scroll-behavior: smooth;
     }
     
     .warehouse-assistant__msg {
         max-width: 85%;
         padding: 10px 14px;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px 12px 12px 2px;
+        border: 1px solid #d8e8fb;
+        border-radius: 18px 18px 18px 6px;
         background: #ffffff;
         color: #0f172a;
         font-size: 13px;
@@ -383,8 +388,8 @@
     .warehouse-assistant__msg--user {
         align-self: flex-end;
         border: none;
-        border-radius: 12px 12px 2px 12px;
-        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        border-radius: 18px 18px 6px 18px;
+        background: linear-gradient(135deg, #77b7ff, #4f8df7);
         color: #ffffff;
         box-shadow: 0 4px 10px rgba(37, 99, 235, 0.15);
     }
@@ -394,7 +399,7 @@
         flex-wrap: wrap;
         gap: 6px;
         padding: 0 16px 12px;
-        background: #f8fafc;
+        background: #f3f8ff;
     }
     
     .warehouse-assistant__chip {
@@ -430,7 +435,7 @@
         flex: 1;
         height: 38px;
         border: 1px solid #cbd5e1;
-        border-radius: var(--radius-sm);
+        border-radius: 14px;
         padding: 0 12px;
         color: #0f172a;
         font-size: 13px;
@@ -450,8 +455,8 @@
         height: 38px;
         place-items: center;
         border: none;
-        border-radius: var(--radius-sm);
-        background: var(--wms-blue);
+        border-radius: 14px;
+        background: linear-gradient(135deg, #77b7ff, #4f8df7);
         color: #ffffff;
         cursor: pointer;
         transition: var(--wms-transition-smooth);

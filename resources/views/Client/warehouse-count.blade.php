@@ -463,7 +463,12 @@
                         <input id="receiptLocationCode" list="locationOptions" class="form-control" placeholder="ể trống: CHUA-XEP">
                     </div>
                     <div class="col-md-4"><label class="form-label">Ghi chú phiếu</label><input id="receiptHeaderNote" class="form-control" placeholder="Ví dụ: KCS giao kho, ca sáng"></div>
-                    <div class="col-md-3 d-flex align-items-end justify-content-md-end"><span class="section-hint">Mã nội bộ + Số lượng là bắt buộc. Mã kế toán có thể thêm sau.</span></div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <label class="form-check mb-2">
+                            <input id="receiptSendToProduction" class="form-check-input" type="checkbox">
+                            <span class="form-check-label">BTP đi sản xuất sau khi lưu</span>
+                        </label>
+                    </div>
                 </div>
                 <datalist id="receiptProductOptions"></datalist>
                 <datalist id="productionOrderOptions"></datalist>
@@ -1436,11 +1441,14 @@
                 delete input.dataset.customer;
             });
             document.getElementById('receiptHeaderNote').value = '';
+            document.getElementById('receiptSendToProduction').checked = false;
         }
 
         function setReceiptEditMode(receipt = null) {
             editingReceiptFormId = receipt?.id || null;
             document.getElementById('cancelReceiptEditBtn').classList.toggle('d-none', !editingReceiptFormId);
+            document.getElementById('receiptSendToProduction').disabled = !!editingReceiptFormId;
+            if (editingReceiptFormId) document.getElementById('receiptSendToProduction').checked = false;
             document.getElementById('saveReceiptBatchBtn').innerHTML = editingReceiptFormId
                 ? '<i data-lucide="save"></i>Cập nhật + in'
                 : '<i data-lucide="printer"></i>Lưu + in';
@@ -2925,6 +2933,7 @@
                     ma_ko: '',
                     checked_at: value('receiptDate'),
                     note: value('receiptHeaderNote'),
+                    send_to_production: !editingReceiptFormId && document.getElementById('receiptSendToProduction').checked,
                     lines: validLines
                 })
             }).then(async response => {
@@ -2947,6 +2956,15 @@
                       printWindow.location.href = result.receipt_print_url;
                   } else if (result.receipt_print_url) {
                       window.location.href = result.receipt_print_url;
+                  }
+                  if (result.production_issue_print_url) {
+                      window.open(result.production_issue_print_url, '_blank');
+                  }
+                  if (result.production_message) {
+                      showWarehouseToast(result.production_message, 'Đã tạo phiếu xuất BTP sang sản xuất.');
+                  }
+                  if (result.production_failed) {
+                      showWarehouseToast(result.message || 'Đã lưu phiếu nhập nhưng chưa gửi sản xuất được.', result.production_error?.message || '', 9000);
                   }
                   cancelReceiptEdit();
                   loadPackages();
@@ -3067,18 +3085,52 @@
             }
 
             const button = event.target.closest('.delete-receipt-btn');
-            if (!button || !confirm(`Xóa phiếu nhập ${button.dataset.code}? Toàn bộ kiện và số tồn nội bộ tạo từ phiếu này sẽ bị trừ lại.`)) return;
-            deleteReceipt(button.dataset.id, button.dataset.code);
+            if (!button) return;
+            confirmAndDeleteReceipt(button.dataset.id, button.dataset.code);
         });
 
-        function deleteReceipt(id, code, force = false) {
-            fetch(`/api/kiem-ton-kho/phieu-nhap-tp/${id}${force ? '?force=1' : ''}`, {
+        function receiptLinkText(links) {
+            const issues = (links?.issues || []).map(item => `${item.issue_code} (${item.issue_type || '-'})`).join(', ');
+            const btp = (links?.btp_orders || []).map(item => `${item.btp_order_code} (${item.status || '-'})`).join(', ');
+            return [
+                issues ? `Phiếu xuất liên quan: ${issues}` : '',
+                btp ? `Lệnh BTP liên quan: ${btp}` : '',
+                links?.block_reason ? `Khóa xóa: ${links.block_reason}` : '',
+            ].filter(Boolean).join('\n');
+        }
+
+        function confirmAndDeleteReceipt(id, code) {
+            fetch(`/api/kiem-ton-kho/phieu-nhap-tp/${id}/lien-ket`, {
+                headers: {'Accept':'application/json'}
+            }).then(r => jsonOrError(r, 'Không kiểm tra được liên kết phiếu'))
+              .then(result => {
+                  const links = result.data || {};
+                  const detail = receiptLinkText(links);
+                  if (links.has_links) {
+                      if (!links.can_cascade_delete) {
+                          alert(`Không thể xóa phiếu nhập ${code}.\n\n${detail}`);
+                          return;
+                      }
+                      const ok = confirm(`Phiếu nhập ${code} đang có liên kết.\n\n${detail}\n\nXóa cả liên kết sẽ hoàn tồn/xóa phiếu xuất liên quan, đưa lệnh BTP về nháp, rồi xóa phiếu nhập.\n\nChắc chắn xóa cả liên kết?`);
+                      if (ok) deleteReceipt(id, code, true);
+                      return;
+                  }
+
+                  if (confirm(`Xóa phiếu nhập ${code}? Toàn bộ kiện và số tồn nội bộ tạo từ phiếu này sẽ bị trừ lại.`)) {
+                      deleteReceipt(id, code, false);
+                  }
+              })
+              .catch(e => alert(e.message));
+        }
+
+        function deleteReceipt(id, code, cascade = false) {
+            fetch(`/api/kiem-ton-kho/phieu-nhap-tp/${id}${cascade ? '?cascade=1' : ''}`, {
                 method: 'DELETE', headers: {'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
             }).then(async response => {
                 const result = await response.json().catch(() => ({}));
                 if (response.status === 409 && result.force_required) {
-                    const issues = (result.linked_issues || []).map(item => item.issue_code).join(', ');
-                    const ok = confirm(`${result.message}\n\nPhiếu xuất liên quan: ${issues || 'không rõ'}\n\nChắc chắn xóa phiếu xuất liên quan và xóa phiếu nhập ${code}?`);
+                    const detail = receiptLinkText(result.links || {});
+                    const ok = confirm(`${result.message}\n\n${detail || 'Có liên kết nhưng không đọc được chi tiết.'}\n\nChắc chắn xóa cả liên kết và xóa phiếu nhập ${code}?`);
                     if (ok) return deleteReceipt(id, code, true);
                     return null;
                 }

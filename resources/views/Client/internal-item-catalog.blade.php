@@ -16,6 +16,11 @@
         .color-swatch { width:14px; height:14px; border:1px solid #cbd5e1; border-radius:3px; background:var(--swatch, transparent); box-shadow:inset 0 0 0 1px rgba(255,255,255,.35); }
         .invalid-code { color:#b91c1c; font-weight:800; }
         .compact-note { max-width:280px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .catalog-image-drop { width:92px; min-height:64px; border:1px dashed #9db7d6; border-radius:10px; background:#f8fbff; color:#45617f; display:flex; align-items:center; justify-content:center; text-align:center; font-size:11px; font-weight:800; cursor:pointer; overflow:hidden; padding:4px; }
+        .catalog-image-drop:focus, .catalog-image-drop.is-active { outline:2px solid #2563eb; outline-offset:2px; border-color:#2563eb; background:#eff6ff; }
+        .catalog-image-drop.is-uploading { opacity:.65; pointer-events:none; }
+        .catalog-image-drop img { width:100%; height:58px; object-fit:cover; border-radius:7px; display:block; }
+        .catalog-image-help { font-size:10px; line-height:1.2; }
     </style>
 </head>
 <body>
@@ -34,6 +39,7 @@
     </header>
 
     <main class="wms-page">
+        <input id="catalogImageInput" type="file" accept="image/*" hidden>
         <div class="wms-heading">
             <div>
                 <h1>Danh mục mã nội bộ</h1>
@@ -139,12 +145,69 @@
         let catalogTotalPages = 1;
         let invalidCodePage = 1;
         let invalidCodeTotalPages = 1;
+        let activeImageCatalogId = null;
+        const catalogImageInput = document.getElementById('catalogImageInput');
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits:3});
 
         function jsonOrError(response, fallback) {
             if (response.ok) return response.json();
             return response.json().then(result => { throw new Error(result.message || fallback); });
+        }
+
+        function catalogImageDropHtml(row) {
+            const image = imageUrl(row.image_url || '');
+            return `<button type="button" class="catalog-image-drop" data-catalog-image-id="${esc(row.id)}" title="Click để chọn ảnh, kéo thả hoặc Ctrl+V ảnh">
+                ${image ? `<img src="${esc(image)}" alt="${esc(row.item_code || row.item_name || 'Ảnh danh mục')}">` : '<span class="catalog-image-help">Kéo / paste<br>ảnh</span>'}
+            </button>`;
+        }
+
+        function imageUrl(value) {
+            const url = String(value || '').trim();
+            if (!url) return '';
+            if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:')) return url;
+            return url.startsWith('/') ? url : '/' + url;
+        }
+
+        function catalogImageDrop(catalogId) {
+            return Array.from(document.querySelectorAll('[data-catalog-image-id]'))
+                .find(drop => String(drop.dataset.catalogImageId) === String(catalogId));
+        }
+
+        function setImageDropState(catalogId, state) {
+            const drop = catalogImageDrop(catalogId);
+            if (!drop) return;
+            drop.classList.toggle('is-uploading', state === 'uploading');
+            drop.classList.toggle('is-active', state === 'active');
+            if (state === 'uploading') drop.innerHTML = '<span class="catalog-image-help">Đang lưu...</span>';
+        }
+
+        function uploadCatalogImage(catalogId, file) {
+            if (!catalogId || !file) return;
+            if (!String(file.type || '').startsWith('image/')) {
+                alert('Chọn đúng file ảnh.');
+                return;
+            }
+            const form = new FormData();
+            form.append('image', file);
+            setImageDropState(catalogId, 'uploading');
+            fetch(`/api/danh-muc-noi-bo/${encodeURIComponent(catalogId)}/anh`, {
+                method: 'POST',
+                headers: {'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken},
+                body: form,
+            }).then(response => jsonOrError(response, 'Không lưu được ảnh danh mục.'))
+              .then(result => {
+                  const drop = catalogImageDrop(catalogId);
+                  const url = imageUrl(result.data?.image_url || '');
+                  if (drop && url) {
+                      drop.classList.remove('is-uploading');
+                      drop.innerHTML = `<img src="${esc(url)}" alt="Ảnh danh mục">`;
+                  }
+              })
+              .catch(error => {
+                  alert(error.message);
+                  loadCatalog();
+              });
         }
 
         function loadCatalog() {
@@ -176,7 +239,12 @@
                         const colorLabel = row.color || row.pantone_code || row.pantone_hex || '-';
                         return `<tr>
                         <td class="wms-code">${esc(row.item_code)}</td>
-                        <td class="name-cell">${esc(row.item_name || '-')}</td>
+                        <td class="name-cell">
+                            <div class="d-flex align-items-center gap-2">
+                                ${catalogImageDropHtml(row)}
+                                <div>${esc(row.item_name || '-')}</div>
+                            </div>
+                        </td>
                         <td>${esc(row.unit || '-')}</td>
                         <td>${esc(row.size || '-')}</td>
                         <td>${colorLabel !== '-' ? `<span class="color-chip">${row.pantone_hex ? `<span class="color-swatch" style="--swatch:${esc(row.pantone_hex)}"></span>` : ''}<span>${esc(colorLabel)}${row.pantone_code ? ` · ${esc(row.pantone_code)}` : ''}</span></span>` : '-'}</td>
@@ -340,6 +408,44 @@
                 catalogPage += 1;
                 loadCatalog();
             }
+        });
+        rowsEl.addEventListener('click', event => {
+            const drop = event.target.closest('[data-catalog-image-id]');
+            if (!drop) return;
+            activeImageCatalogId = drop.dataset.catalogImageId;
+            document.querySelectorAll('.catalog-image-drop').forEach(item => item.classList.remove('is-active'));
+            drop.classList.add('is-active');
+            catalogImageInput.click();
+        });
+        rowsEl.addEventListener('dragover', event => {
+            const drop = event.target.closest('[data-catalog-image-id]');
+            if (!drop) return;
+            event.preventDefault();
+            drop.classList.add('is-active');
+        });
+        rowsEl.addEventListener('dragleave', event => {
+            const drop = event.target.closest('[data-catalog-image-id]');
+            if (drop) drop.classList.remove('is-active');
+        });
+        rowsEl.addEventListener('drop', event => {
+            const drop = event.target.closest('[data-catalog-image-id]');
+            if (!drop) return;
+            event.preventDefault();
+            activeImageCatalogId = drop.dataset.catalogImageId;
+            const file = Array.from(event.dataTransfer?.files || []).find(item => String(item.type || '').startsWith('image/'));
+            if (file) uploadCatalogImage(activeImageCatalogId, file);
+        });
+        catalogImageInput.addEventListener('change', event => {
+            const file = event.target.files?.[0];
+            if (activeImageCatalogId && file) uploadCatalogImage(activeImageCatalogId, file);
+            event.target.value = '';
+        });
+        document.addEventListener('paste', event => {
+            if (!activeImageCatalogId) return;
+            const file = Array.from(event.clipboardData?.items || [])
+                .find(item => String(item.type || '').startsWith('image/'))
+                ?.getAsFile();
+            if (file) uploadCatalogImage(activeImageCatalogId, file);
         });
         document.getElementById('invalidCodePerPage').addEventListener('change', () => {
             invalidCodePage = 1;

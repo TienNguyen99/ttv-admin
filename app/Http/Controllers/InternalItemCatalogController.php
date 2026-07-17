@@ -337,7 +337,9 @@ class InternalItemCatalogController extends Controller
 
                 $sourceRow = $index + 2;
                 $code = trim($this->pick($row, ['ma hang', 'mahang']));
-                $existing = InternalItemCatalog::query()->where('source_row', $sourceRow)->exists();
+                $existingCatalog = InternalItemCatalog::query()->where('source_row', $sourceRow)->first();
+                $existing = (bool) $existingCatalog;
+                $sheetImage = $this->pick($row, ['anh']);
 
                 InternalItemCatalog::query()->updateOrCreate(
                     ['source_row' => $sourceRow],
@@ -351,7 +353,7 @@ class InternalItemCatalogController extends Controller
                         'side' => $this->pick($row, ['mat', 'vi tri', 'side', 'position']),
                         'shelf_code' => $this->pick($row, ['ke']),
                         'opening_quantity' => $this->number($this->pick($row, ['ton dau'])),
-                        'image_url' => $this->pick($row, ['anh']),
+                        'image_url' => $sheetImage !== '' ? $sheetImage : ($existingCatalog->image_url ?? null),
                         'raw_data' => $row,
                         'sync_batch' => $batch,
                         'is_active' => true,
@@ -481,6 +483,41 @@ class InternalItemCatalogController extends Controller
                 'updated' => $updated,
                 'skipped' => $skipped,
                 'total_valid_shelves' => $shelves->count(),
+            ],
+        ]);
+    }
+
+    public function uploadImage(Request $request, InternalItemCatalog $catalog)
+    {
+        $data = $request->validate([
+            'image' => 'required|image|mimes:jpg,jpeg,png,webp,gif|max:8192',
+        ]);
+
+        $file = $data['image'];
+        $code = trim((string) ($catalog->item_code ?: ('catalog-' . $catalog->id)));
+        $safeCode = Str::slug(Str::ascii($code), '-');
+        if ($safeCode === '') {
+            $safeCode = 'catalog-' . $catalog->id;
+        }
+
+        $dir = public_path('uploads/catalog-images');
+        if (!is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg');
+        $filename = $safeCode . '-' . now('Asia/Ho_Chi_Minh')->format('YmdHis') . '-' . Str::random(6) . '.' . $extension;
+        $file->move($dir, $filename);
+
+        $catalog->image_url = '/uploads/catalog-images/' . $filename;
+        $catalog->save();
+
+        return response()->json([
+            'message' => 'Đã lưu ảnh danh mục.',
+            'data' => [
+                'id' => $catalog->id,
+                'item_code' => $catalog->item_code,
+                'image_url' => $catalog->image_url,
             ],
         ]);
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\NormalizesDateInput;
+use App\Models\InternalBtpProductionOrder;
 use App\Models\InternalInventoryCount;
 use App\Models\InternalItemCatalog;
 use App\Models\InternalMaterialIssue;
@@ -575,7 +576,7 @@ class WarehouseCountController extends Controller
                 $query->where('source', 'Phieu nhap thanh pham')
                     ->orWhere('receipt_code', 'like', 'PNTP-%');
             })
-            ->orderByDesc('receipt_date')
+            ->orderByDesc('created_at')
             ->orderByDesc('id');
 
         if ($request->filled('receipt_date')) {
@@ -2527,6 +2528,7 @@ class WarehouseCountController extends Controller
             'ma_ko' => 'nullable|string|max:50',
             'checked_at' => 'required|date',
             'note' => 'nullable|string|max:500',
+            'send_to_production' => 'nullable|boolean',
             'lines' => 'required|array|min:1|max:500',
             'lines.*.category' => 'nullable|string|max:255',
             'lines.*.ma_sp' => 'nullable|string|max:100',
@@ -2771,7 +2773,7 @@ class WarehouseCountController extends Controller
             return [$receipt, $packages];
         });
 
-        $response = response()->json([
+        $responseBody = [
             'message' => 'Đã lưu phiếu nhập thành phẩm nội bộ.',
             'data' => $receipt->load('lines'),
             'packages' => $packages->map(function ($package) {
@@ -2782,7 +2784,33 @@ class WarehouseCountController extends Controller
                 ];
             })->values(),
             'receipt_print_url' => url('/client/nhap-thanh-pham-noi-bo/' . $receipt->id . '/in'),
-        ]);
+        ];
+
+        if (!empty($data['send_to_production'])) {
+            $issueRequest = Request::create('/api/xuat-vat-tu-noi-bo/gui-san-xuat/' . $receipt->id, 'POST', [
+                'issue_date' => $data['checked_at'],
+                'receiver_name' => 'San xuat',
+                'department' => 'San xuat',
+                'purpose' => 'Xuat BTP di san xuat',
+                'note' => 'Tu dong gui san xuat tu phieu nhap ' . $receipt->receipt_code,
+            ]);
+            $issueRequest->setUserResolver($request->getUserResolver());
+
+            $issueResponse = app(InternalMaterialIssueController::class)->sendReceiptToProduction($issueRequest, $receipt);
+            $issueBody = json_decode($issueResponse->getContent(), true) ?: [];
+            if ($issueResponse->getStatusCode() >= 400) {
+                $responseBody['message'] = 'Da luu phieu nhap nhung khong gui san xuat duoc: ' . ($issueBody['message'] ?? 'Loi khong ro.');
+                $responseBody['production_failed'] = true;
+                $responseBody['production_error'] = $issueBody;
+            } else {
+                $responseBody['message'] = 'Da luu phieu nhap va gui BTP sang san xuat.';
+                $responseBody['production_issue'] = $issueBody['data'] ?? null;
+                $responseBody['production_issue_print_url'] = $issueBody['print_url'] ?? null;
+                $responseBody['production_message'] = $issueBody['message'] ?? null;
+            }
+        }
+
+        $response = response()->json($responseBody);
 
         app(InternalAudit::class)->model('receipt.created', $receipt, [
             'line_count' => $receipt->lines->count(),
@@ -2891,27 +2919,31 @@ class WarehouseCountController extends Controller
             'lines.*.customer' => 'nullable|string|max:200',
         ]);
         $data = $this->normalizeDateFields($data, ['checked_at']);
-        $force = $request->boolean('force');
+        $force = $request->boolean('force') || $request->boolean('cascade');
+        $linkSummary = $this->receiptLinkSummary($receipt);
         $linkedIssues = InternalMaterialIssue::query()
-            ->where(function ($query) use ($receipt) {
-                $query->where('source_receipt_id', $receipt->id)
-                    ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%');
-            })
+            ->whereIn('id', collect($linkSummary['issues'])->pluck('id')->filter()->values())
             ->get();
 
         if ($linkedIssues->isNotEmpty() && !$force) {
             return response()->json([
                 'message' => 'Phiếu nhập có phiếu xuất liên quan. Nếu chắc chắn sửa, hệ thống sẽ xóa phiếu xuất liên quan trước rồi cập nhật lại phiếu nhập.',
                 'force_required' => true,
-                'linked_issues' => $linkedIssues->map(fn ($issue) => [
-                    'id' => $issue->id,
-                    'issue_code' => $issue->issue_code,
-                    'issue_date' => optional($issue->issue_date)->format('Y-m-d'),
-                ])->values(),
+                'cascade_required' => true,
+                'links' => $linkSummary,
+                'linked_issues' => collect($linkSummary['issues'])->values(),
             ], 409);
         }
 
+        if ($force && !($linkSummary['can_cascade_delete'] ?? true)) {
+            return response()->json([
+                'message' => $linkSummary['block_reason'] ?: 'Khong the xoa day chuyen phieu nay.',
+                'links' => $linkSummary,
+            ], 422);
+        }
+
         if ($linkedIssues->isNotEmpty() && $force) {
+            $this->resetBtpOrdersForIssues($linkedIssues);
             foreach ($linkedIssues as $issue) {
                 app(InternalMaterialIssueController::class)->destroy($issue);
             }
@@ -3244,6 +3276,13 @@ class WarehouseCountController extends Controller
 
         return response()->json([
             'message' => 'Đã xóa phiếu nhập kho nội bộ.',
+        ]);
+    }
+
+    public function receiptLinks(Request $request, InternalMaterialReceipt $receipt)
+    {
+        return response()->json([
+            'data' => $this->receiptLinkSummary($receipt),
         ]);
     }
 
@@ -3642,6 +3681,70 @@ class WarehouseCountController extends Controller
         }
 
         return $package;
+    }
+
+    private function receiptLinkSummary(InternalMaterialReceipt $receipt): array
+    {
+        $issues = InternalMaterialIssue::query()
+            ->where(function ($query) use ($receipt) {
+                $query->where('source_receipt_id', $receipt->id)
+                    ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%');
+            })
+            ->withCount('lines')
+            ->get();
+
+        $issueIds = $issues->pluck('id')->filter()->values();
+        $btpOrders = $issueIds->isEmpty()
+            ? collect()
+            : InternalBtpProductionOrder::query()
+                ->withCount('lines')
+                ->whereIn('issue_id', $issueIds)
+                ->get();
+
+        $hasCompletedBtp = $btpOrders->contains(fn ($order) => trim((string) $order->status) === 'completed');
+
+        return [
+            'receipt' => [
+                'id' => $receipt->id,
+                'receipt_code' => $receipt->receipt_code,
+                'receipt_date' => optional($receipt->receipt_date)->format('Y-m-d'),
+            ],
+            'has_links' => $issues->isNotEmpty() || $btpOrders->isNotEmpty(),
+            'can_cascade_delete' => !$hasCompletedBtp,
+            'block_reason' => $hasCompletedBtp ? 'Co lenh BTP da hoan thanh san xuat. Hay tao phieu dieu chinh thay vi xoa day chuyen.' : '',
+            'issues' => $issues->map(fn ($issue) => [
+                'id' => $issue->id,
+                'issue_code' => $issue->issue_code,
+                'issue_type' => $issue->issue_type,
+                'issue_date' => optional($issue->issue_date)->format('Y-m-d'),
+                'status' => $issue->status,
+                'line_count' => (int) ($issue->lines_count ?? 0),
+            ])->values(),
+            'btp_orders' => $btpOrders->map(fn ($order) => [
+                'id' => $order->id,
+                'btp_order_code' => $order->btp_order_code,
+                'status' => $order->status,
+                'issue_code' => $order->issue_code,
+                'line_count' => (int) ($order->lines_count ?? 0),
+            ])->values(),
+        ];
+    }
+
+    private function resetBtpOrdersForIssues($issues): void
+    {
+        $issueIds = collect($issues)->pluck('id')->filter()->unique()->values();
+        if ($issueIds->isEmpty()) {
+            return;
+        }
+
+        InternalBtpProductionOrder::query()
+            ->whereIn('issue_id', $issueIds)
+            ->update([
+                'status' => 'draft',
+                'issue_id' => null,
+                'issue_code' => null,
+                'issued_at' => null,
+            ]);
     }
 
     private function stockRowKey($row): string
