@@ -129,7 +129,7 @@
                         <td class="wrap">${esc(row.purchase_order || '-')}</td>
                         <td>${esc(row.tracking_staff || '-')}</td>
                         <td>${esc(row.customer || '-')}</td>
-                        <td class="wms-code">${esc(row.item_code || '-')}</td>
+                        <td class="wms-code">${esc(row.source_item_code || row.item_code || '-')}</td>
                         <td class="wrap">${esc(row.specification || '-')}</td>
                         <td class="wrap">${esc(row.description || '-')}</td>
                         <td class="wrap">${esc(row.size || '-')}</td>

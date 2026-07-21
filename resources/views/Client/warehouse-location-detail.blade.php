@@ -121,7 +121,7 @@
 
         function renderItems() {
             const keyword = document.getElementById('itemSearch').value.trim().toLowerCase();
-            const filtered = items.filter(item => `${item.internal_item_code || ''} ${item.ma_sp || ''} ${item.size || ''} ${item.color || ''} ${item.pantone_code || ''} ${item.side || ''}`.toLowerCase().includes(keyword));
+            const filtered = items.filter(item => `${item.internal_item_code || ''} ${item.ma_sp || ''} ${item.size || ''} ${item.color_name || ''} ${item.color || ''} ${item.pantone_code || ''} ${item.side || ''}`.toLowerCase().includes(keyword));
             document.getElementById('itemList').innerHTML = filtered.map(item => `
                 <article class="item-card">
                     <div class="item-head">
@@ -132,7 +132,7 @@
                     <div class="item-meta">
                         ${item.catalog_only ? '<span class="meta-chip">Danh muc</span>' : `<span class="meta-chip">${formatNumber(item.package_count)} kien</span>`}
                         ${item.size ? `<span class="meta-chip">Size ${escapeHtml(item.size)}</span>` : ''}
-                        ${(item.color || item.pantone_hex) ? `<span class="meta-chip color-chip">${item.pantone_hex ? `<span class="color-swatch" style="--swatch:${escapeHtml(item.pantone_hex)}"></span>` : ''}Mau ${escapeHtml(item.color || item.pantone_code || item.pantone_hex)}${item.pantone_code ? ` - ${escapeHtml(item.pantone_code)}` : ''}</span>` : ''}
+                        ${(item.color_name || item.color || item.pantone_hex) ? `<span class="meta-chip color-chip">${item.pantone_hex ? `<span class="color-swatch" style="--swatch:${escapeHtml(item.pantone_hex)}"></span>` : ''}Màu ${escapeHtml(item.color_name || item.color || item.pantone_code || item.pantone_hex)}${item.pantone_code ? ` - ${escapeHtml(item.pantone_code)}` : ''}</span>` : ''}
                         ${item.catalog_unit ? `<span class="meta-chip">DVT ${escapeHtml(item.catalog_unit)}</span>` : ''}
                         ${item.side ? `<span class="meta-chip">Side ${escapeHtml(item.side)}</span>` : ''}
                     </div>

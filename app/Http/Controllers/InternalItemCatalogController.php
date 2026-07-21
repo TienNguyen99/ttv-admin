@@ -6,6 +6,7 @@ use App\Models\InternalItemCatalog;
 use App\Models\WarehouseLocation;
 use App\Services\PantoneColorMatcher;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -45,6 +46,9 @@ class InternalItemCatalogController extends Controller
                 'shelf_code',
                 'opening_quantity',
                 'image_url',
+                'image_public_id',
+                'image_source',
+                'image_uploaded_at',
                 'raw_data',
                 'updated_at',
             ])
@@ -67,6 +71,7 @@ class InternalItemCatalogController extends Controller
                 unset($data['raw_data']);
                 $data['pantone_code'] = $match['pantone'];
                 $data['pantone_hex'] = $match['hex'];
+                $data['color_name'] = $match['name'] ?? '';
                 $data['pantone_source'] = $match['source'];
                 return $data;
             }),
@@ -219,41 +224,50 @@ class InternalItemCatalogController extends Controller
     {
         $keyword = trim((string) $request->query('keyword', ''));
         $limit = min(max((int) $request->query('limit', 30), 1), 100);
+        $withColor = $request->boolean('with_color', true);
         $normalizedKeyword = $this->normalizeSearchText($keyword);
         $tokens = collect(explode(' ', $normalizedKeyword))->filter()->values();
+        $searchColumns = [
+            'item_code',
+            'item_name',
+            'unit',
+            'shelf_code',
+            'size',
+            'color',
+            'logo_color',
+            'side',
+        ];
 
-        return response()->json([
-            'data' => InternalItemCatalog::query()
-                ->where('is_active', true)
+        $query = InternalItemCatalog::query()
+            ->where('is_active', true);
+
+        $tokens->each(function ($token) use ($query, $searchColumns) {
+            $like = '%' . addcslashes((string) $token, '\\%_') . '%';
+            $query->where(function ($inner) use ($searchColumns, $like) {
+                foreach ($searchColumns as $column) {
+                    $inner->orWhere($column, 'like', $like);
+                }
+            });
+        });
+
+        $colorVersion = Cache::get('internal_color_mapping_version', '1');
+        $cacheKey = 'internal_catalog_suggestions:v6:' . md5($normalizedKeyword . '|' . $limit . '|' . (int) $withColor . '|' . $colorVersion);
+        $data = Cache::remember($cacheKey, now()->addMinutes(10), function () use ($query, $keyword, $limit, $withColor) {
+            return $query
                 ->orderByRaw("CASE WHEN item_code IS NULL OR item_code = '' THEN 1 ELSE 0 END")
+                ->orderByRaw("CASE WHEN item_code = ? THEN 0 WHEN item_code LIKE ? THEN 1 ELSE 2 END", [
+                    $keyword,
+                    $keyword . '%',
+                ])
                 ->orderBy('item_code')
                 ->orderBy('item_name')
+                ->limit($limit * 3)
                 ->get()
-                ->filter(function ($row) use ($tokens) {
-                    if ($tokens->isEmpty()) {
-                        return true;
-                    }
-
-                    $haystack = $this->normalizeSearchText(implode(' ', [
-                        $row->item_code,
-                        $row->item_name,
-                        $row->unit,
-                        $row->shelf_code,
-                        $row->size,
-                        $row->color,
-                        $row->logo_color,
-                        $row->side,
-                    ]));
-
-                    return $tokens->every(function ($token) use ($haystack) {
-                        return strpos($haystack, $token) !== false;
-                    });
-                })
-                ->take($limit)
-                ->values()
-                ->map(function ($row) {
+                ->map(function ($row) use ($withColor) {
                     $code = trim((string) $row->item_code);
-                    $match = app(PantoneColorMatcher::class)->matchCatalog($row);
+                    $match = $withColor
+                        ? app(PantoneColorMatcher::class)->matchCatalog($row)
+                        : ['pantone' => '', 'hex' => '', 'source' => ''];
 
                     return [
                         'code' => $code,
@@ -266,8 +280,10 @@ class InternalItemCatalogController extends Controller
                         'color' => $row->color,
                         'logo_color' => $row->logo_color,
                         'side' => $row->side,
+                        'image_url' => $row->image_url,
                         'pantone_code' => $match['pantone'],
                         'pantone_hex' => $match['hex'],
+                        'color_name' => $match['name'] ?? '',
                         'pantone_source' => $match['source'],
                     ];
                 })
@@ -281,7 +297,12 @@ class InternalItemCatalogController extends Controller
                         $row['side'],
                     ]));
                 })
-                ->values(),
+                ->take($limit)
+                ->values();
+        });
+
+        return response()->json([
+            'data' => $data,
             'source' => ['sheet' => self::SHEET_NAME, 'mode' => 'internal_cache'],
         ]);
     }
@@ -494,30 +515,69 @@ class InternalItemCatalogController extends Controller
         ]);
 
         $file = $data['image'];
+        $cloudName = trim((string) env('CLOUDINARY_CLOUD_NAME', ''));
+        $apiKey = trim((string) env('CLOUDINARY_API_KEY', ''));
+        $apiSecret = trim((string) env('CLOUDINARY_API_SECRET', ''));
+
+        if ($cloudName === '' || $apiKey === '' || $apiSecret === '') {
+            return response()->json([
+                'message' => 'Chưa cấu hình Cloudinary. Thêm CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET vào .env.',
+            ], 422);
+        }
+
         $code = trim((string) ($catalog->item_code ?: ('catalog-' . $catalog->id)));
         $safeCode = Str::slug(Str::ascii($code), '-');
         if ($safeCode === '') {
             $safeCode = 'catalog-' . $catalog->id;
         }
 
-        $dir = public_path('uploads/catalog-images');
-        if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
+        $timestamp = time();
+        $folder = trim((string) env('CLOUDINARY_CATALOG_FOLDER', 'ttv-admin/catalog'));
+        $publicId = $safeCode . '-' . now('Asia/Ho_Chi_Minh')->format('YmdHis') . '-' . Str::random(6);
+        $paramsToSign = [
+            'folder' => $folder,
+            'public_id' => $publicId,
+            'timestamp' => $timestamp,
+        ];
+        ksort($paramsToSign);
+        $signatureBase = collect($paramsToSign)
+            ->map(fn ($value, $key) => $key . '=' . $value)
+            ->implode('&') . $apiSecret;
+        $signature = sha1($signatureBase);
+
+        $response = Http::timeout(60)
+            ->attach('file', file_get_contents($file->getRealPath()), $file->getClientOriginalName())
+            ->post("https://api.cloudinary.com/v1_1/{$cloudName}/image/upload", [
+                'api_key' => $apiKey,
+                'timestamp' => $timestamp,
+                'folder' => $folder,
+                'public_id' => $publicId,
+                'signature' => $signature,
+            ]);
+
+        if (!$response->successful()) {
+            return response()->json([
+                'message' => 'Upload ảnh lên Cloudinary thất bại.',
+                'debug' => $response->json() ?: $response->body(),
+            ], 502);
         }
 
-        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg');
-        $filename = $safeCode . '-' . now('Asia/Ho_Chi_Minh')->format('YmdHis') . '-' . Str::random(6) . '.' . $extension;
-        $file->move($dir, $filename);
+        $payload = $response->json();
 
-        $catalog->image_url = '/uploads/catalog-images/' . $filename;
+        $catalog->image_url = $payload['secure_url'] ?? $payload['url'] ?? '';
+        $catalog->image_public_id = $payload['public_id'] ?? $publicId;
+        $catalog->image_source = 'cloudinary';
+        $catalog->image_uploaded_at = now('Asia/Ho_Chi_Minh');
         $catalog->save();
 
         return response()->json([
-            'message' => 'Đã lưu ảnh danh mục.',
+            'message' => 'Đã upload ảnh lên Cloudinary.',
             'data' => [
                 'id' => $catalog->id,
                 'item_code' => $catalog->item_code,
                 'image_url' => $catalog->image_url,
+                'image_public_id' => $catalog->image_public_id,
+                'image_source' => $catalog->image_source,
             ],
         ]);
     }

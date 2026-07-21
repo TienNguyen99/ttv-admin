@@ -12,6 +12,9 @@ class InternalMaterialIssueLine extends Model
 
     protected $fillable = [
         'issue_id',
+        'completion_receipt_id',
+        'customer_issue_id',
+        'completed_at',
         'production_order_id',
         'production_order',
         'purchase_order',
@@ -33,6 +36,7 @@ class InternalMaterialIssueLine extends Model
     ];
 
     protected $casts = [
+        'completed_at' => 'datetime:Y-m-d H:i:s',
         'ordered_quantity' => 'float',
         'quantity' => 'float',
         'base_quantity' => 'float',

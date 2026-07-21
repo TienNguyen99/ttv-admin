@@ -249,6 +249,8 @@
         .rack-tier.has-stock { background: #eff6ff; border-color: #60a5fa; }
         .rack-tier.is-selected { background: #ecfdf5; border-color: #16a34a; box-shadow: inset 0 0 0 2px #86efac; }
         .rack-tier.is-filter-match { background: #dcfce7; border-color: #22c55e; animation: rackMatchGlow 1.15s ease-in-out infinite; }
+        .rack-tier.is-order-match { background: #dbeafe; border-color: #2563eb; animation: rackOrderGlow 1.2s ease-in-out infinite; }
+        .rack-tier.is-order-match .rack-tier-code { color: #1d4ed8; }
         .rack-tier-label { display: none; }
         .rack-tier-body { min-width: 0; display: grid; gap: 3px; }
         .rack-tier-code { font-size: 13px; line-height: 1; font-weight: 950; color: #0f172a; }
@@ -278,12 +280,37 @@
             0%, 100% { box-shadow: inset 0 0 0 2px rgba(34, 197, 94, .36), 0 0 0 0 rgba(34, 197, 94, .30); }
             50% { box-shadow: inset 0 0 0 2px rgba(34, 197, 94, .72), 0 0 0 6px rgba(34, 197, 94, .16); }
         }
+        @keyframes rackOrderGlow {
+            0%, 100% { box-shadow: inset 0 0 0 2px rgba(37, 99, 235, .34), 0 0 0 0 rgba(37, 99, 235, .28); }
+            50% { box-shadow: inset 0 0 0 2px rgba(37, 99, 235, .72), 0 0 0 7px rgba(37, 99, 235, .14); }
+        }
+        .rack-order-tools { display: grid; grid-template-columns: minmax(250px, 460px) auto minmax(0, 1fr); gap: 10px; align-items: center; width: 100%; padding: 12px 14px; border-bottom: 1px solid #bfdbfe; background: #f0f7ff; }
+        .rack-order-search { position: relative; }
+        .rack-order-search svg { position: absolute; left: 12px; top: 50%; width: 17px; height: 17px; color: #2563eb; transform: translateY(-50%); pointer-events: none; }
+        .rack-order-search .form-control { padding-left: 38px; border-color: #93c5fd; background: #fff; font-weight: 800; text-transform: uppercase; }
+        .rack-order-status { min-width: 0; color: #475569; font-size: 12px; }
+        .rack-order-result { border-bottom: 1px solid #bfdbfe; background: #fff; }
+        .rack-order-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; }
+        .rack-order-summary strong { color: #0f2747; }
+        .rack-order-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 4px 8px; border: 1px solid #bfdbfe; border-radius: 6px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 800; }
+        .rack-order-chip.is-warn { border-color: #fed7aa; background: #fff7ed; color: #c2410c; }
+        .rack-order-lines { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; padding: 10px 14px 12px; }
+        .rack-order-line { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; align-items: center; min-width: 0; padding: 9px 10px; border: 1px solid #dbeafe; border-radius: 7px; background: #f8fbff; }
+        .rack-order-line-swatch { width: 34px; height: 34px; border: 1px solid #cbd5e1; border-radius: 7px; background: var(--swatch, #f8fafc); }
+        .rack-order-line-code { color: #0f2747; font-size: 13px; font-weight: 900; overflow-wrap: anywhere; }
+        .rack-order-line-name { color: #64748b; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rack-order-line-qty { color: #166534; font-size: 12px; font-weight: 900; white-space: nowrap; }
+        .rack-order-locations { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+        .rack-order-location { padding: 2px 7px; border: 1px solid #93c5fd; border-radius: 5px; background: #fff; color: #1d4ed8; font-size: 11px; font-weight: 900; cursor: pointer; }
+        .rack-order-location:hover, .rack-order-location:focus { background: #2563eb; color: #fff; outline: 0; }
+        .rack-order-missing { color: #c2410c; font-size: 11px; font-weight: 800; }
         @media (prefers-reduced-motion: reduce) {
             .rack-tier.is-filter-match { animation: none; box-shadow: inset 0 0 0 2px rgba(34, 197, 94, .65); }
+            .rack-tier.is-order-match { animation: none; box-shadow: inset 0 0 0 2px rgba(37, 99, 235, .65); }
         }
         @media (max-width: 1100px) { .workspace-grid { grid-template-columns: 1fr; } }
         @media (max-width: 900px) { .shelf-row { grid-template-columns: 1fr; } .shelf-lanes { grid-template-columns: 1fr; } }
-        @media (max-width: 700px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .view-tabs { overflow-x: auto; } .view-tab { white-space: nowrap; } .voice-assistant { grid-template-columns: auto minmax(0, 1fr) auto; } .voice-result { grid-column: 1 / -1; } }
+        @media (max-width: 700px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .view-tabs { overflow-x: auto; } .view-tab { white-space: nowrap; } .voice-assistant { grid-template-columns: auto minmax(0, 1fr) auto; } .voice-result { grid-column: 1 / -1; } .rack-order-tools { grid-template-columns: 1fr auto; } .rack-order-status { grid-column: 1 / -1; } .rack-order-lines { grid-template-columns: 1fr; } }
         @media (max-width: 991.98px) { .page-shell { padding: 62px 12px 16px; } }
     </style>
     <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
@@ -401,6 +428,16 @@
                     <button type="button" class="btn btn-outline-primary btn-icon" onclick="renderWarehouse3D()"><i data-lucide="refresh-cw"></i>Tải lại</button>
                 </div>
             </div>
+            <form id="rackProductionOrderForm" class="rack-order-tools" autocomplete="off">
+                <div class="rack-order-search">
+                    <i data-lucide="factory"></i>
+                    <input id="rackProductionOrderInput" class="form-control" list="rackProductionOrderOptions" placeholder="Nhập lệnh SX rồi nhấn Enter" aria-label="Lệnh sản xuất cần tìm vị trí sợi">
+                    <datalist id="rackProductionOrderOptions"></datalist>
+                </div>
+                <button id="rackProductionOrderClear" type="button" class="btn btn-outline-secondary btn-icon d-none" title="Bỏ lệnh đang xem"><i data-lucide="x"></i>Xóa</button>
+                <div id="rackProductionOrderStatus" class="rack-order-status">Nhập lệnh để hiện toàn bộ kệ sợi cần lấy.</div>
+            </form>
+            <div id="rackProductionOrderResult" class="rack-order-result d-none" aria-live="polite"></div>
             <div class="rack-front-wrap">
                 <div id="rackFrontView" class="rack-front-view"></div>
                 <div id="warehouse3dEmpty" class="warehouse-3d-empty d-none">Không có kệ nào có hàng theo bộ lọc hiện tại.</div>
@@ -881,6 +918,10 @@
         let rackCrudItems = [];
         let rackCrudSearchTimer = null;
         let rackHoverTarget = null;
+        let rackProductionOrderTimer = null;
+        let rackProductionOrderRequest = 0;
+        let activeRackProductionPlan = null;
+        let activeRackLocationCodes = new Set();
         let receiptDuplicateTimer = null;
         let layoutBackgroundImage = localStorage.getItem('warehouseLayoutBackground') || '';
         let layoutBackgroundOpacity = Number(localStorage.getItem('warehouseLayoutBackgroundOpacity') || 36);
@@ -1689,7 +1730,7 @@
                 if (!map[code]) {
                     map[code] = {
                         code,
-                        color: item.color || '',
+                        color: item.color_name || item.color || '',
                         pantone_hex: item.pantone_hex || '',
                         unit: item.catalog_unit || '',
                         quantity: 0,
@@ -1698,7 +1739,7 @@
                 }
                 map[code].quantity += Number(item.quantity || 0);
                 map[code].package_count += 1;
-                if (!map[code].color && item.color) map[code].color = item.color;
+                if (!map[code].color && (item.color_name || item.color)) map[code].color = item.color_name || item.color;
                 if (!map[code].pantone_hex && item.pantone_hex) map[code].pantone_hex = item.pantone_hex;
                 if (!map[code].unit && item.catalog_unit) map[code].unit = item.catalog_unit;
                 return map;
@@ -1933,7 +1974,9 @@
                 const packages = packagesByLocation[location.location_code] || [];
                 const itemText = packages.map(item => `${item.package_code} ${item.ma_sp} ${item.internal_item_code} ${item.size} ${item.color} ${item.side}`).join(' ');
                 const text = `${location.location_code} ${location.location_name || ''} ${itemText}`.toUpperCase();
-                if (!(packages.length > 0 || showEmpty || (keyword && text.includes(keyword)))) return;
+                const isOrderMatch = activeRackLocationCodes.has(normalizeRackLocationCode(location.location_code));
+                const isSelectedLocation = normalizeRackLocationCode(location.location_code) === normalizeRackLocationCode(selectedCode);
+                if (!(packages.length > 0 || showEmpty || isOrderMatch || isSelectedLocation || (keyword && text.includes(keyword)))) return;
 
                 const line = lineForLocation(location);
                 const rackNumber = physicalRackNumberForLocation(location);
@@ -1965,7 +2008,8 @@
                     itemSummaries,
                     totalQuantity,
                     isMatch: Boolean(keyword && text.includes(keyword)),
-                    isSelected: location.location_code === selectedCode,
+                    isOrderMatch,
+                    isSelected: isSelectedLocation,
                 });
             });
 
@@ -2020,7 +2064,7 @@
                         const hoverTitle = `${locationCode} - ${summaries.length} mã hàng`;
                         const hoverMeta = tierData ? `Tổng ${formatNumber(tierData.totalQuantity)}` : '';
                         return `
-                            <button type="button" class="rack-tier ${tierData?.packages?.length ? 'has-stock' : ''} ${tierData?.isSelected ? 'is-selected' : ''} ${tierData?.isMatch ? 'is-filter-match' : ''}"
+                            <button type="button" class="rack-tier ${tierData?.packages?.length ? 'has-stock' : ''} ${tierData?.isSelected ? 'is-selected' : ''} ${tierData?.isMatch ? 'is-filter-match' : ''} ${tierData?.isOrderMatch ? 'is-order-match' : ''}"
                                 data-rack-location="${escapeHtml(locationCode)}"
                                 data-rack-hover-title="${escapeHtml(hoverTitle)}"
                                 data-rack-hover-meta="${escapeHtml(hoverMeta)}"
@@ -2124,6 +2168,172 @@
                 renderWarehouse3D();
                 scrollRackSearchIntoView();
             }
+        }
+
+        function normalizeRackLocationCode(code) {
+            const value = String(code || '').trim().toUpperCase();
+            const simple = value.match(/^([A-Z])0*(\d+)$/);
+            return simple ? `${simple[1]}${Number(simple[2])}` : value;
+        }
+
+        function planLineLocations(line) {
+            const raw = [];
+            (Array.isArray(line?.locations) ? line.locations : []).forEach(location => {
+                const code = typeof location === 'string' ? location : location?.location_code;
+                if (code) raw.push({
+                    location_code: String(code).trim().toUpperCase(),
+                    quantity: Number(location?.quantity || 0),
+                    color: String(location?.color || ''),
+                    pantone_hex: String(location?.pantone_hex || '')
+                });
+            });
+            if (!raw.length && line?.first_location) raw.push({ location_code: String(line.first_location).trim().toUpperCase(), quantity: 0, color: '', pantone_hex: '' });
+            if (!raw.length && line?.catalog_shelf_code) raw.push({ location_code: String(line.catalog_shelf_code).trim().toUpperCase(), quantity: Number(line.stock_quantity || 0), color: '', pantone_hex: '' });
+            return Array.from(new Map(raw.filter(row => row.location_code).map(row => [normalizeRackLocationCode(row.location_code), row])).values());
+        }
+
+        function renderRackProductionPlan(result) {
+            const box = document.getElementById('rackProductionOrderResult');
+            const status = document.getElementById('rackProductionOrderStatus');
+            const clearButton = document.getElementById('rackProductionOrderClear');
+            const order = result?.order || {};
+            const lines = Array.isArray(result?.data) ? result.data : [];
+            const summary = result?.summary || {};
+            const missingBom = Array.isArray(summary.missing_bom_items) ? summary.missing_bom_items : [];
+
+            activeRackProductionPlan = result;
+            activeRackLocationCodes = new Set(lines.flatMap(line => planLineLocations(line).map(location => normalizeRackLocationCode(location.location_code))));
+            clearButton?.classList.remove('d-none');
+            if (status) status.textContent = activeRackLocationCodes.size
+                ? `${activeRackLocationCodes.size} vị trí đang được làm sáng.`
+                : 'Lệnh chưa có sợi được gán vị trí.';
+
+            const lineHtml = lines.map(line => {
+                const lineLocations = planLineLocations(line);
+                const color = lineLocations.find(location => location.pantone_hex)?.pantone_hex || '#e2e8f0';
+                const locationHtml = lineLocations.length
+                    ? lineLocations.map(location => `<button type="button" class="rack-order-location" data-order-location="${escapeHtml(location.location_code)}">${escapeHtml(location.location_code)}${location.quantity > 0 ? ` · ${formatNumber(location.quantity)}` : ''}</button>`).join('')
+                    : '<span class="rack-order-missing">Chưa có kệ</span>';
+                const shortage = Number(line.shortage_quantity || 0);
+                return `<article class="rack-order-line">
+                    <span class="rack-order-line-swatch" style="--swatch:${escapeHtml(cssColorValue(color))}"></span>
+                    <div class="min-width-0">
+                        <div class="rack-order-line-code">${escapeHtml(line.material_code || '-')}</div>
+                        <div class="rack-order-line-name" title="${escapeHtml(line.material_name || '')}">${escapeHtml(line.material_name || 'Chưa có tên danh mục')}</div>
+                        <div class="rack-order-locations">${locationHtml}</div>
+                    </div>
+                    <div class="text-end">
+                        <div class="rack-order-line-qty">Cần ${formatNumber(line.required_quantity || 0)} ${escapeHtml(line.unit || '')}</div>
+                        <div class="${shortage > 0 ? 'rack-order-missing' : 'text-success small fw-bold'}">${shortage > 0 ? `Thiếu ${formatNumber(shortage)}` : 'Đủ tồn'}</div>
+                    </div>
+                </article>`;
+            }).join('');
+
+            const missingHtml = missingBom.length
+                ? `<span class="rack-order-chip is-warn">Thiếu BOM: ${escapeHtml(missingBom.join(', '))}</span>`
+                : '';
+            box.innerHTML = `<div class="rack-order-summary">
+                    <strong>${escapeHtml(order.production_order || order.order_code || '')}</strong>
+                    ${order.customer ? `<span class="rack-order-chip">${escapeHtml(order.customer)}</span>` : ''}
+                    <span class="rack-order-chip">${Number(summary.line_count || lines.length)} mã sợi</span>
+                    <span class="rack-order-chip">${activeRackLocationCodes.size} vị trí</span>
+                    ${missingHtml}
+                </div>
+                <div class="rack-order-lines">${lineHtml || `<div class="rack-order-missing">${missingBom.length ? 'Lệnh chưa có định mức sợi. Hãy khai báo BOM cho mã hàng trước.' : 'Không có dữ liệu sợi cho lệnh này.'}</div>`}</div>`;
+            box.classList.remove('d-none');
+            renderWarehouse3D();
+            scrollFirstRackOrderLocationIntoView();
+            refreshIcons();
+        }
+
+        function clearRackProductionPlan() {
+            activeRackProductionPlan = null;
+            activeRackLocationCodes = new Set();
+            document.getElementById('rackProductionOrderInput').value = '';
+            document.getElementById('rackProductionOrderResult').classList.add('d-none');
+            document.getElementById('rackProductionOrderResult').innerHTML = '';
+            document.getElementById('rackProductionOrderClear').classList.add('d-none');
+            document.getElementById('rackProductionOrderStatus').textContent = 'Nhập lệnh để hiện toàn bộ kệ sợi cần lấy.';
+            renderWarehouse3D();
+            document.getElementById('rackProductionOrderInput').focus();
+        }
+
+        function scrollRackLocationIntoView(locationCode) {
+            const normalized = normalizeRackLocationCode(locationCode);
+            const target = Array.from(document.querySelectorAll('#rackFrontView [data-rack-location]'))
+                .find(element => normalizeRackLocationCode(element.dataset.rackLocation) === normalized);
+            const wrap = document.querySelector('.rack-front-wrap');
+            if (!target || !wrap) {
+                showWarehouseToast('Chưa thấy vị trí trên sơ đồ', `${locationCode} chưa có trong danh sách vị trí kho.`);
+                return;
+            }
+            const wrapRect = wrap.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            wrap.scrollTo({
+                left: Math.max(0, wrap.scrollLeft + targetRect.left - wrapRect.left - wrap.clientWidth / 2 + targetRect.width / 2),
+                top: Math.max(0, wrap.scrollTop + targetRect.top - wrapRect.top - 90),
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+            });
+            target.focus({ preventScroll: true });
+        }
+
+        function scrollFirstRackOrderLocationIntoView() {
+            const first = activeRackLocationCodes.values().next().value;
+            if (first) requestAnimationFrame(() => scrollRackLocationIntoView(first));
+        }
+
+        async function loadRackProductionPlan() {
+            const input = document.getElementById('rackProductionOrderInput');
+            const status = document.getElementById('rackProductionOrderStatus');
+            const orderCode = String(input?.value || '').trim().toUpperCase();
+            if (!orderCode) return clearRackProductionPlan();
+            const requestId = ++rackProductionOrderRequest;
+            if (status) status.textContent = 'Đang tìm BOM và vị trí sợi...';
+            try {
+                const response = await fetch(`/api/lenh-det/production-order-plan?production_order=${encodeURIComponent(orderCode)}`, { headers: { Accept: 'application/json' } });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || 'Không tìm thấy lệnh sản xuất.');
+                if (requestId !== rackProductionOrderRequest) return;
+                input.value = result?.order?.production_order || result?.order?.order_code || orderCode;
+                renderRackProductionPlan(result);
+            } catch (error) {
+                if (requestId !== rackProductionOrderRequest) return;
+                activeRackProductionPlan = null;
+                activeRackLocationCodes = new Set();
+                document.getElementById('rackProductionOrderResult').classList.add('d-none');
+                document.getElementById('rackProductionOrderClear').classList.add('d-none');
+                if (status) status.textContent = error.message;
+                renderWarehouse3D();
+                showWarehouseToast('Không tải được lệnh', error.message);
+            }
+        }
+
+        function suggestRackProductionOrders(keyword) {
+            clearTimeout(rackProductionOrderTimer);
+            const query = String(keyword || '').trim();
+            if (query.length < 2) return;
+            rackProductionOrderTimer = setTimeout(async () => {
+                try {
+                    const [mainResponse, weavingResponse] = await Promise.all([
+                        fetch(`/api/lenh-det/production-orders?keyword=${encodeURIComponent(query)}&per_page=25`, { headers: { Accept: 'application/json' } }),
+                        fetch(`/api/lenh-det/orders?keyword=${encodeURIComponent(query)}&per_page=25`, { headers: { Accept: 'application/json' } })
+                    ]);
+                    const [mainResult, weavingResult] = await Promise.all([mainResponse.json(), weavingResponse.json()]);
+                    const suggestions = [...(mainResult.data || []), ...(weavingResult.data || [])]
+                        .map(row => ({
+                            code: row.production_order || row.order_code || '',
+                            item: row.item_code || '',
+                            customer: row.customer || ''
+                        }))
+                        .filter(row => row.code);
+                    const unique = Array.from(new Map(suggestions.map(row => [String(row.code).toUpperCase(), row])).values()).slice(0, 40);
+                    document.getElementById('rackProductionOrderOptions').innerHTML = unique.map(row =>
+                        `<option value="${escapeHtml(row.code)}" label="${escapeHtml([row.item, row.customer].filter(Boolean).join(' · '))}"></option>`
+                    ).join('');
+                } catch (error) {
+                    // Autocomplete is optional; Enter still performs an exact lookup.
+                }
+            }, 140);
         }
 
         function renderWarehouse3DScene() {
@@ -2711,13 +2921,13 @@
 
         function renderReceiptRow(receipt) {
             const receiptStatus = receipt.issue_status === 'exported'
-                ? `<span class="badge text-bg-success">ã xuất hết · ${formatNumber(receipt.fifo_issued_quantity || 0)}</span>`
+                ? `<span class="badge text-bg-success">Đã xuất hết · ${formatNumber(receipt.fifo_issued_quantity || 0)}</span>`
                 : receipt.issue_status === 'partial_exported'
                     ? `<span class="badge text-bg-warning">Xuất một phần · còn ${formatNumber(receipt.fifo_remaining_quantity || 0)}</span>`
                     : '<span class="badge text-bg-secondary">Chưa xuất</span>';
             const issueButtonLabel = receipt.issue_print_url
                 ? 'In PXTP'
-                : (receipt.issue_status === 'exported' ? 'ã FIFO' : 'Xuất TP');
+                : (receipt.issue_status === 'exported' ? 'Đã FIFO' : 'Xuất TP');
             const issueButtonIcon = receipt.issue_print_url
                 ? 'file-check-2'
                 : (receipt.issue_status === 'exported' ? 'check-circle-2' : 'send');
@@ -2779,7 +2989,7 @@
             fetch(`/api/kiem-ton-kho/noi-dung-vi-tri?${params}`).then(r => r.json()).then(result => {
                 locationContentsCache = result.data || [];
                 rows.innerHTML = locationContentsCache.map(x => {
-                    const colorLabel = x.color || x.pantone_code || x.pantone_hex || '';
+                    const colorLabel = x.color_name || x.color || x.pantone_code || x.pantone_hex || '';
                     const quickStockButton = x.catalog_only ? `<button type="button" class="btn btn-sm btn-outline-primary quick-catalog-stock-btn" data-code="${escapeHtml(x.internal_item_code || '')}">Nhập tồn</button>` : formatNumber(x.total_quantity || 0);
                     return `<tr>
                     <td>${x.internal_item_code || ''}</td><td>${x.ma_sp || ''}</td><td>${x.size || ''}</td>
@@ -3198,6 +3408,21 @@
             const location = locations.find(item => item.location_code === event.target.value);
         });
         document.getElementById('locationSearch').addEventListener('input', renderLocations);
+        document.getElementById('rackProductionOrderForm')?.addEventListener('submit', event => {
+            event.preventDefault();
+            loadRackProductionPlan();
+        });
+        document.getElementById('rackProductionOrderInput')?.addEventListener('input', event => {
+            suggestRackProductionOrders(event.target.value);
+        });
+        document.getElementById('rackProductionOrderInput')?.addEventListener('change', event => {
+            if (event.target.value.trim()) loadRackProductionPlan();
+        });
+        document.getElementById('rackProductionOrderClear')?.addEventListener('click', clearRackProductionPlan);
+        document.getElementById('rackProductionOrderResult')?.addEventListener('click', event => {
+            const button = event.target.closest('[data-order-location]');
+            if (button) scrollRackLocationIntoView(button.dataset.orderLocation);
+        });
         document.getElementById('mapSearch').addEventListener('input', () => {
             renderLayoutEditor();
             if (!document.getElementById('map3dPanel')?.classList.contains('d-none')) {
@@ -3413,6 +3638,7 @@
         const requestedView = pageParams.get('view');
         const requestedIssue = pageParams.get('from_issue');
         const requestedKeyword = pageParams.get('keyword');
+        const requestedProductionOrder = pageParams.get('production_order');
         if (requestedKeyword) document.getElementById('receiptKeyword').value = requestedKeyword;
         switchWorkspace(shelfMapOnly ? 'map3d' : (requestedView === 'map' ? 'editor' : (['entry', 'receipts', 'history', 'overview', 'editor', 'map3d'].includes(requestedView) ? requestedView : 'entry')));
         const requestedLocation = pageParams.get('location_code');
@@ -3422,9 +3648,19 @@
             loadPackages();
             loadReceipts();
             loadWarehouseStats();
-            loadWarehouseMap();
+            const mapPromise = loadWarehouseMap();
             loadLocationContents();
             if (requestedIssue) loadReceiptFromIssue(requestedIssue);
+            if (requestedProductionOrder) {
+                document.getElementById('rackProductionOrderInput').value = requestedProductionOrder;
+                mapPromise
+                    .then(() => loadRackProductionPlan())
+                    .then(() => {
+                        if (requestedLocation) scrollRackLocationIntoView(requestedLocation);
+                    });
+            } else if (requestedLocation) {
+                mapPromise.then(() => scrollRackLocationIntoView(requestedLocation));
+            }
         });
         updateSavePackageButton();
         refreshIcons();

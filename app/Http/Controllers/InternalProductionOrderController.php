@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\InternalItemCatalog;
 use App\Models\InternalProductionOrder;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -39,6 +40,7 @@ class InternalProductionOrderController extends Controller
                         ->orWhereRaw('UPPER(purchase_order) LIKE ?', [$like])
                         ->orWhereRaw('UPPER(customer) LIKE ?', [$like])
                         ->orWhereRaw('UPPER(item_code) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(standard_item_code) LIKE ?', [$like])
                         ->orWhereRaw('UPPER(description) LIKE ?', [$like])
                         ->orWhereRaw('UPPER(size) LIKE ?', [$like])
                         ->orWhereRaw('UPPER(color) LIKE ?', [$like]);
@@ -103,9 +105,15 @@ class InternalProductionOrderController extends Controller
                 $remainingAfterCustomer = $receivedQuantity - $issuedCustomer;
                 $status = $this->workflowStatus($plannedQuantity, $receivedQuantity, $issuedProduction, (bool) ($issue->has_completed_issue ?? false), $issuedCustomer);
 
-                $items = $lines->take(6)->map(function ($line) {
+                $items = $lines->map(function ($line) {
+                    $sourceItemCode = trim((string) $line->item_code);
+                    $standardItemCode = trim((string) $line->standard_item_code);
                     return [
-                        'item_code' => trim((string) $line->item_code),
+                        'id' => (int) $line->id,
+                        'production_order' => trim((string) $line->production_order),
+                        'item_code' => $standardItemCode !== '' ? $standardItemCode : $sourceItemCode,
+                        'source_item_code' => $sourceItemCode,
+                        'standard_item_code' => $standardItemCode,
                         'description' => trim((string) $line->description),
                         'size' => trim((string) $line->size),
                         'color' => trim((string) $line->color),
@@ -150,12 +158,88 @@ class InternalProductionOrderController extends Controller
         ]);
     }
 
+    public function updateStandardItemCode(Request $request, InternalProductionOrder $order)
+    {
+        $data = $request->validate([
+            'standard_item_code' => 'nullable|string|max:200',
+        ]);
+        $standardCode = mb_strtoupper(trim((string) ($data['standard_item_code'] ?? '')));
+
+        if ($standardCode !== '') {
+            $catalog = InternalItemCatalog::query()
+                ->where('is_active', true)
+                ->whereRaw('UPPER(TRIM(item_code)) = ?', [$standardCode])
+                ->first();
+            if (!$catalog) {
+                return response()->json([
+                    'message' => 'Mã chuẩn không tồn tại trong Danh mục nội bộ.',
+                ], 422);
+            }
+            $standardCode = trim((string) $catalog->item_code);
+        }
+
+        $order->standard_item_code = $standardCode !== '' ? $standardCode : null;
+        $order->save();
+
+        return response()->json([
+            'message' => 'Đã cập nhật mã hàng chuẩn.',
+            'data' => [
+                'id' => (int) $order->id,
+                'source_item_code' => trim((string) $order->item_code),
+                'standard_item_code' => trim((string) $order->standard_item_code),
+                'item_code' => trim((string) ($order->standard_item_code ?: $order->item_code)),
+            ],
+        ]);
+    }
+
     public function data(Request $request)
     {
         $query = InternalProductionOrder::query()->where('is_active', true);
         $keyword = trim((string) $request->query('keyword', ''));
         $status = trim((string) $request->query('status', ''));
         $productionOrder = trim((string) $request->query('production_order', ''));
+        $firstFinishedReceiptDate = DB::connection('internal')
+            ->table('internal_material_receipts')
+            ->where(function ($receiptQuery) {
+                $receiptQuery->where('source', 'Phieu nhap thanh pham')
+                    ->orWhere('receipt_code', 'like', 'PNTP-%');
+            })
+            ->min('receipt_date');
+
+        // Quick receipts should only suggest orders available by the selected receipt date.
+        if ($productionOrder === '' && $request->filled('order_date_to')) {
+            $query->whereNotNull('received_date')
+                ->whereDate('received_date', '<=', $request->query('order_date_to'));
+            if ($firstFinishedReceiptDate) {
+                $query->where(function ($eligibleOrderQuery) use ($firstFinishedReceiptDate) {
+                    $eligibleOrderQuery->whereDate('received_date', '>=', $firstFinishedReceiptDate)
+                        ->orWhereRaw("EXISTS (
+                            SELECT 1
+                            FROM internal_material_receipt_lines AS linked_line
+                            INNER JOIN internal_material_receipts AS linked_receipt
+                                ON linked_receipt.id = linked_line.receipt_id
+                            WHERE linked_line.production_order = internal_production_orders.production_order
+                              AND linked_receipt.source = 'Phieu nhap thanh pham'
+                        )");
+                });
+            }
+        }
+
+        if ($request->boolean('unfinished') && $productionOrder === '') {
+            $query->whereRaw("COALESCE((
+                SELECT SUM(receipt_line.quantity)
+                FROM internal_material_receipt_lines AS receipt_line
+                INNER JOIN internal_material_receipts AS receipt
+                    ON receipt.id = receipt_line.receipt_id
+                WHERE receipt_line.production_order = internal_production_orders.production_order
+                  AND receipt.source = 'Phieu nhap thanh pham'
+            ), 0) < COALESCE((
+                SELECT SUM(planned_order.order_quantity)
+                FROM internal_production_orders AS planned_order
+                WHERE planned_order.production_order = internal_production_orders.production_order
+                  AND planned_order.is_active = 1
+            ), 0)");
+        }
 
         if ($productionOrder !== '') {
             $query->where('production_order', $productionOrder);
@@ -167,6 +251,7 @@ class InternalProductionOrderController extends Controller
                     ->orWhere('purchase_order', 'like', '%' . $keyword . '%')
                     ->orWhere('customer', 'like', '%' . $keyword . '%')
                     ->orWhere('item_code', 'like', '%' . $keyword . '%')
+                    ->orWhere('standard_item_code', 'like', '%' . $keyword . '%')
                     ->orWhere('specification', 'like', '%' . $keyword . '%')
                     ->orWhere('description', 'like', '%' . $keyword . '%')
                     ->orWhere('tracking_staff', 'like', '%' . $keyword . '%')
@@ -216,6 +301,64 @@ class InternalProductionOrderController extends Controller
             : $rowsQuery->limit($limit)->get();
         $totalRows = (clone $summaryQuery)->count();
 
+        if ($request->boolean('unfinished') && $rows->isNotEmpty()) {
+            $orderCodes = $rows->pluck('production_order')->filter()->unique()->values();
+            $plannedByOrder = InternalProductionOrder::query()
+                ->where('is_active', true)
+                ->whereIn('production_order', $orderCodes)
+                ->select('production_order', DB::raw('SUM(order_quantity) as planned_quantity'))
+                ->groupBy('production_order')
+                ->pluck('planned_quantity', 'production_order');
+            $receivedByOrder = DB::connection('internal')
+                ->table('internal_material_receipt_lines as receipt_line')
+                ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'receipt_line.receipt_id')
+                ->whereIn('receipt_line.production_order', $orderCodes)
+                ->where('receipt.source', 'Phieu nhap thanh pham')
+                ->select('receipt_line.production_order', DB::raw('SUM(receipt_line.quantity) as received_quantity'))
+                ->groupBy('receipt_line.production_order')
+                ->pluck('received_quantity', 'receipt_line.production_order');
+
+            $rows->each(function ($row) use ($plannedByOrder, $receivedByOrder) {
+                $planned = (float) ($plannedByOrder[$row->production_order] ?? 0);
+                $received = (float) ($receivedByOrder[$row->production_order] ?? 0);
+                $row->setAttribute('planned_quantity', $planned);
+                $row->setAttribute('received_quantity', $received);
+                $row->setAttribute('remaining_quantity', max($planned - $received, 0));
+            });
+        }
+
+        // API consumers use the central standard code while the synced source code stays intact.
+        $rows->each(function ($row) {
+            $sourceItemCode = trim((string) $row->item_code);
+            $standardItemCode = trim((string) $row->standard_item_code);
+            $row->setAttribute('source_item_code', $sourceItemCode);
+            $row->setAttribute('item_code', $standardItemCode !== '' ? $standardItemCode : $sourceItemCode);
+        });
+
+        $receiptProgress = null;
+        if ($productionOrder !== '') {
+            $plannedQuantity = (float) (clone $summaryQuery)->sum('order_quantity');
+            $orderDate = optional((clone $summaryQuery)->orderBy('received_date')->first())->received_date;
+            // Count every finished-goods receipt, including lots later consumed by FIFO.
+            $linkedReceiptQuery = DB::connection('internal')
+                ->table('internal_material_receipt_lines as receipt_line')
+                ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'receipt_line.receipt_id')
+                ->where('receipt_line.production_order', $productionOrder)
+                ->where('receipt.source', 'Phieu nhap thanh pham');
+            $hasLinkedFinishedReceipt = (clone $linkedReceiptQuery)->exists();
+            $receivedQuantity = (float) $linkedReceiptQuery->sum('receipt_line.quantity');
+            $receiptProgress = [
+                'planned_quantity' => $plannedQuantity,
+                'received_quantity' => $receivedQuantity,
+                'remaining_quantity' => max($plannedQuantity - $receivedQuantity, 0),
+                'excess_quantity' => max($receivedQuantity - $plannedQuantity, 0),
+                'is_over_received' => $receivedQuantity > $plannedQuantity + 0.0001,
+                'order_date' => $orderDate ? $orderDate->format('Y-m-d') : null,
+                'receipt_data_start_date' => $firstFinishedReceiptDate,
+                'has_linked_finished_receipt' => $hasLinkedFinishedReceipt,
+            ];
+        }
+
         return response()->json([
             'data' => $rows,
             'summary' => [
@@ -226,6 +369,7 @@ class InternalProductionOrderController extends Controller
                 'due_count' => (clone $summaryQuery)->where('status', 'due')->count(),
                 'customer_count' => (clone $summaryQuery)->whereNotNull('customer')->distinct('customer')->count('customer'),
                 'last_synced_at' => InternalProductionOrder::query()->max('updated_at'),
+                'receipt_progress' => $receiptProgress,
             ],
             'pagination' => [
                 'page' => $isPaged ? $page : 1,
@@ -316,7 +460,7 @@ class InternalProductionOrderController extends Controller
                         'unit' => $this->pick($row, ['dvt']),
                         'order_quantity' => $this->number($this->pick($row, ['so luong dat'])),
                         'location' => $this->pick($row, ['vi tri']),
-                        'received_date' => $this->dateValue($this->pick($row, ['ngay nhan'])),
+                        'received_date' => $this->dateValue($this->pick($row, ['ngay nhan', 'ngay ra lenh'])),
                         'promised_date' => $this->dateValue($this->pick($row, ['ngay hen giao'])),
                         'customer_requested_date' => $this->dateValue($this->pick($row, ['ngay khach hang yeu cau giao'])),
                         'delivery_place' => $this->pick($row, ['noi giao']),

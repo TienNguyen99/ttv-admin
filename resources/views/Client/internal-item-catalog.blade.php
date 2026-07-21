@@ -236,7 +236,7 @@
                     document.getElementById('catalogPrevPage').disabled = catalogPage <= 1;
                     document.getElementById('catalogNextPage').disabled = !pagination.has_more;
                     rowsEl.innerHTML = (result.data || []).map(row => {
-                        const colorLabel = row.color || row.pantone_code || row.pantone_hex || '-';
+                        const colorLabel = row.color_name || row.color || row.pantone_code || row.pantone_hex || '-';
                         return `<tr>
                         <td class="wms-code">${esc(row.item_code)}</td>
                         <td class="name-cell">

@@ -29,6 +29,9 @@
         .weaving-import { min-height:96px; font-family:Consolas, monospace; font-size:12px; }
         .weaving-location-list { display:flex; gap:4px; flex-wrap:wrap; }
         .weaving-location { border:1px solid #bfdbfe; background:#eff6ff; color:#1d4ed8; border-radius:999px; padding:2px 8px; font-size:12px; font-weight:800; }
+        .weaving-location-link { display:inline-flex; align-items:center; gap:4px; text-decoration:none; cursor:pointer; transition:background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
+        .weaving-location-link:hover, .weaving-location-link:focus-visible { border-color:#2563eb; background:#2563eb; color:#fff; outline:0; }
+        .weaving-location-link svg { width:13px; height:13px; }
         .weaving-ok { color:#047857; background:#ecfdf5; border:1px solid #a7f3d0; border-radius:999px; padding:3px 8px; font-size:12px; font-weight:900; }
         .weaving-short { color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; border-radius:999px; padding:3px 8px; font-size:12px; font-weight:900; }
         .weaving-help { color:#64748b; font-size:12px; line-height:1.45; }
@@ -216,6 +219,7 @@
                 <div class="weaving-plan-header-main"><h2>Soạn sợi theo lệnh SX</h2><p id="planTitle" class="weaving-help mb-0">Chọn một lệnh sản xuất để xem sợi cần lấy.</p></div>
                 <div class="weaving-plan-actions">
                     <div id="planSummary" class="d-flex flex-wrap gap-2"></div>
+                    <button id="openShelfMapBtn" class="wms-btn" type="button" disabled><i data-lucide="map-pin"></i>Xem mặt kệ</button>
                     <button id="printWeavingTicketBtn" class="wms-btn" type="button" disabled><i data-lucide="printer"></i>In lệnh</button>
                     <button id="createIssueBtn" class="wms-btn wms-btn--primary" type="button" disabled><i data-lucide="send"></i>Tạo phiếu xuất</button>
                 </div>
@@ -267,6 +271,19 @@ const imageUrl = value => {
     if (!url) return '';
     if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:')) return url;
     return url.startsWith('/') ? url : '/' + url;
+};
+const shelfMapUrl = (locationCode = '', productionOrder = '') => {
+    const params = new URLSearchParams();
+    if (productionOrder) params.set('production_order', productionOrder);
+    if (locationCode) params.set('location_code', locationCode);
+    const query = params.toString();
+    return `/client/mat-ke-kho${query ? `?${query}` : ''}`;
+};
+const rowShelfLocations = row => {
+    const locations = Array.isArray(row?.locations) ? row.locations.filter(location => location?.location_code) : [];
+    if (locations.length) return locations;
+    const fallback = row?.first_location || row?.catalog_shelf_code || '';
+    return fallback ? [{location_code: fallback, quantity: Number(row?.stock_quantity || 0)}] : [];
 };
 let orderPage = 1, orderTotalPages = 1, itemPage = 1, itemTotalPages = 1, currentProductionOrder = null, timer = null;
 let bomQuickItem = null, bomQuickModal = null, catalogTimer = null;
@@ -368,13 +385,14 @@ function loadBom() {
                 <td class="wms-code">${esc(row.material_code)}</td>
                 <td>${esc(row.catalog_name || row.material_name || '-')}</td>
                 <td>${esc(row.unit || '-')}</td>
-                <td>${esc(row.catalog_shelf_code || '-')}</td>
+                <td>${row.catalog_shelf_code ? `<a class="weaving-location weaving-location-link" href="${shelfMapUrl(row.catalog_shelf_code)}" title="Xem ${esc(row.catalog_shelf_code)} trên mặt kệ"><i data-lucide="map-pin"></i>${esc(row.catalog_shelf_code)}</a>` : '-'}</td>
                 <td class="wms-number">${num(row.consumption_per_unit)}</td>
                 <td class="wms-number">${num(row.waste_percent)}</td>
                 <td><span class="${row.catalog_exists ? 'weaving-ok' : 'weaving-short'}">${row.catalog_exists ? 'Có DM' : 'Thiếu DM'}</span></td>
                 <td>${esc(row.note || '')}</td>
             </tr>
         `).join('') || '<tr><td colspan="8" class="wms-empty">Mã hàng này chưa có định mức.</td></tr>';
+        if (window.lucide) lucide.createIcons();
     });
 }
 
@@ -387,6 +405,7 @@ function loadPlan(code) {
     document.getElementById('weavingTicket').classList.remove('is-visible');
     document.getElementById('createIssueBtn').disabled = true;
     document.getElementById('printWeavingTicketBtn').disabled = true;
+    document.getElementById('openShelfMapBtn').disabled = true;
     api(`/api/lenh-det/production-order-plan?production_order=${encodeURIComponent(code)}`).then(result => {
         currentPlanResult = result;
         const summary = result.summary || {};
@@ -403,8 +422,13 @@ function loadPlan(code) {
         const hasMissingCatalog = (result.data || []).some(row => !row.catalog_exists);
         document.getElementById('createIssueBtn').disabled = !(result.data || []).length || hasMissingCatalog;
         document.getElementById('printWeavingTicketBtn').disabled = !(result.data || []).length;
+        document.getElementById('openShelfMapBtn').disabled = false;
         document.getElementById('planRows').innerHTML = (result.data || []).map(row => {
-            const locations = (row.locations || []).slice(0, 4).map(location => `<span class="weaving-location">${esc(location.location_code)}: ${num(location.quantity)}</span>`).join('');
+            const locations = rowShelfLocations(row).slice(0, 6).map(location => `
+                <a class="weaving-location weaving-location-link" href="${shelfMapUrl(location.location_code, code)}" title="Mở kệ ${esc(location.location_code)}">
+                    <i data-lucide="map-pin"></i>${esc(location.location_code)}: ${num(location.quantity)}
+                </a>
+            `).join('');
             return `
                 <tr>
                     <td class="wms-code">${esc(row.material_code)}</td>
@@ -419,10 +443,12 @@ function loadPlan(code) {
                 </tr>
             `;
         }).join('') || '<tr><td colspan="6" class="wms-empty">Lệnh này chưa có định mức.</td></tr>';
+        if (window.lucide) lucide.createIcons();
     }).catch(error => {
         currentPlanResult = null;
         document.getElementById('weavingTicket').classList.remove('is-visible');
         document.getElementById('printWeavingTicketBtn').disabled = true;
+        document.getElementById('openShelfMapBtn').disabled = true;
         document.getElementById('sourceItemRows').innerHTML = '';
         document.getElementById('planRows').innerHTML = `<tr><td colspan="6" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
     });
@@ -975,6 +1001,11 @@ document.getElementById('createIssueBtn').addEventListener('click', () => {
         .catch(error => alert(error.message));
 });
 document.getElementById('printWeavingTicketBtn').addEventListener('click', printWeavingTicket);
+document.getElementById('openShelfMapBtn').addEventListener('click', () => {
+    if (!currentProductionOrder || !currentPlanResult) return;
+    const firstLocation = (currentPlanResult.data || []).flatMap(rowShelfLocations)[0]?.location_code || '';
+    window.location.href = shelfMapUrl(firstLocation, currentProductionOrder);
+});
 document.getElementById('directPlanBtn').addEventListener('click', () => {
     const code = (document.getElementById('orderKeyword').value || document.getElementById('topKeyword').value || '').trim();
     if (!code) return alert('Nhập lệnh sản xuất cần soạn.');

@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\InternalColorMapping;
 use App\Models\InternalItemCatalog;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class PantoneColorMatcher
@@ -15,10 +17,13 @@ class PantoneColorMatcher
 
     private array $nameKeys = [];
 
+    private array $byInternalCode = [];
+
     public function __construct()
     {
         $this->loadPantoneColors();
         $this->loadTcxColors();
+        $this->loadInternalColors();
 
         $this->nameKeys = array_keys($this->byName);
         usort($this->nameKeys, fn ($a, $b) => strlen($b) <=> strlen($a));
@@ -28,6 +33,14 @@ class PantoneColorMatcher
     {
         if (!$catalog) {
             return $this->emptyMatch();
+        }
+
+        $internal = $this->matchInternalColor([
+            $catalog->item_code,
+            $catalog->color,
+        ]);
+        if ($internal['hex']) {
+            return $internal;
         }
 
         $raw = is_array($catalog->raw_data ?? null) ? $catalog->raw_data : [];
@@ -66,8 +79,16 @@ class PantoneColorMatcher
             }
         }
 
+        $internal = $this->matchInternalColor($values);
+        if ($internal['hex']) {
+            return $internal;
+        }
+
         foreach ($values as $value) {
-            $matched = $this->matchPantoneText((string) $value);
+            $text = (string) $value;
+            $matched = $this->isExplicitPantoneText($text)
+                ? $this->matchPantoneText($text)
+                : $this->matchColorName($text);
             if ($matched['hex']) {
                 return $matched;
             }
@@ -136,26 +157,26 @@ class PantoneColorMatcher
     private function matchCommonColor(array $values): array
     {
         $map = [
-            'black' => '#111111',
-            'den' => '#111111',
-            'white' => '#ffffff',
-            'trang' => '#ffffff',
-            'red' => '#dc2626',
-            'do' => '#dc2626',
-            'blue' => '#2563eb',
-            'xanh' => '#2563eb',
-            'green' => '#16a34a',
-            'yellow' => '#facc15',
-            'vang' => '#facc15',
-            'grey' => '#6b7280',
-            'gray' => '#6b7280',
-            'xam' => '#6b7280',
+            'black' => ['#111111', 'Đen'],
+            'den' => ['#111111', 'Đen'],
+            'white' => ['#ffffff', 'Trắng'],
+            'trang' => ['#ffffff', 'Trắng'],
+            'red' => ['#dc2626', 'Đỏ'],
+            'do' => ['#dc2626', 'Đỏ'],
+            'blue' => ['#2563eb', 'Xanh dương'],
+            'xanh' => ['#2563eb', 'Xanh'],
+            'green' => ['#16a34a', 'Xanh lá'],
+            'yellow' => ['#facc15', 'Vàng'],
+            'vang' => ['#facc15', 'Vàng'],
+            'grey' => ['#6b7280', 'Xám'],
+            'gray' => ['#6b7280', 'Xám'],
+            'xam' => ['#6b7280', 'Xám'],
         ];
 
         $text = $this->normalizeSearch(implode(' ', array_map('strval', $values)));
-        foreach ($map as $word => $hex) {
+        foreach ($map as $word => [$hex, $name]) {
             if (strpos($text, $word) !== false) {
-                return ['pantone' => '', 'hex' => $hex, 'source' => 'common_name'];
+                return ['pantone' => '', 'hex' => $hex, 'name' => $name, 'source' => 'common_name'];
             }
         }
 
@@ -248,6 +269,63 @@ class PantoneColorMatcher
         }
     }
 
+    private function loadInternalColors(): void
+    {
+        try {
+            if (!Schema::connection('internal')->hasTable('internal_color_mappings')) {
+                return;
+            }
+
+            InternalColorMapping::query()
+                ->where('is_active', true)
+                ->get(['color_code', 'color_name', 'hex', 'pantone_code'])
+                ->each(function ($row) {
+                    $key = $this->normalizePantoneCode((string) $row->color_code);
+                    $hex = $this->normalizeHex((string) $row->hex);
+                    if ($key === '' || $hex === '') return;
+                    $this->byInternalCode[$key] = [
+                        'pantone' => trim((string) $row->pantone_code),
+                        'hex' => $hex,
+                        'name' => trim((string) $row->color_name),
+                        'source' => 'internal_mapping',
+                    ];
+                });
+        } catch (\Throwable $error) {
+            // Migrations may not have run yet; color matching must remain available.
+        }
+    }
+
+    private function matchInternalColor(array $values): array
+    {
+        foreach ($values as $value) {
+            $text = trim((string) $value);
+            $candidates = [$text];
+
+            foreach (preg_split('/\s+(?:-|\/|\|)\s+|[,;]+/', $text) ?: [] as $part) {
+                if (trim($part) !== '') {
+                    $candidates[] = trim($part);
+                }
+            }
+
+            foreach (array_unique($candidates) as $candidate) {
+                $key = $this->normalizePantoneCode($candidate);
+                if ($key !== '' && isset($this->byInternalCode[$key])) {
+                    return $this->byInternalCode[$key];
+                }
+            }
+        }
+
+        return $this->emptyMatch();
+    }
+
+    private function isExplicitPantoneText(string $text): bool
+    {
+        $exactCode = $this->normalizePantoneCode(trim($text));
+
+        return ($exactCode !== '' && isset($this->byCode[$exactCode]))
+            || (bool) preg_match('/\b(?:PANTONE|PMS|TCX|TPX|TPG)\b|\b[0-9]{2}\s*[- ]\s*[0-9]{4}\b/i', $text);
+    }
+
     private function readJson(string $fileName): ?array
     {
         $path = storage_path('app/' . $fileName);
@@ -273,6 +351,7 @@ class PantoneColorMatcher
         $color = [
             'pantone' => strtoupper($pantone),
             'hex' => $hex,
+            'name' => $name,
         ];
 
         $this->colors[] = $color;
@@ -290,6 +369,6 @@ class PantoneColorMatcher
 
     private function emptyMatch(): array
     {
-        return ['pantone' => '', 'hex' => '', 'source' => ''];
+        return ['pantone' => '', 'hex' => '', 'name' => '', 'source' => ''];
     }
 }

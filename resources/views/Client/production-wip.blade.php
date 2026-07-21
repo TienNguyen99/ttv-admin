@@ -32,6 +32,23 @@
         .wip-status--draft { background:#e0f2fe; color:#075985; }
         .wip-status--issued { background:#dcfce7; color:#166534; }
         .tracking-empty { padding:50px 20px; color:var(--wms-muted); text-align:center; }
+        .wip-bulk-bar { position:fixed; left:50%; bottom:20px; z-index:1080; width:min(680px,calc(100% - 32px)); display:none; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid #93c5fd; border-radius:8px; background:#ffffff; box-shadow:0 16px 38px rgba(15,47,99,.2); transform:translateX(-50%); }
+        .wip-bulk-bar.is-visible { display:flex; animation:bulkReveal 180ms ease-out; }
+        .wip-bulk-count { color:#0f2f63; font-size:13px; font-weight:800; }
+        .wip-bulk-actions { display:flex; align-items:center; gap:8px; }
+        .wip-group-row td { padding:9px 12px !important; border-top:2px solid #93c5fd; background:#eaf4ff !important; color:#0f2f63; font-weight:800; animation:groupReveal 180ms ease-out both; }
+        .wip-group-row--1 td { border-top-color:#a7f3d0; background:#ecfdf5 !important; }
+        .wip-group-row--2 td { border-top-color:#fde68a; background:#fffbeb !important; }
+        .wip-group-meta { display:inline-flex; align-items:center; gap:12px; margin-left:10px; color:#64748b; font-size:11px; font-weight:700; }
+        .wip-group-item { animation:groupReveal 180ms ease-out both; }
+        .wip-group-item td:first-child { border-left:4px solid #93c5fd; }
+        .wip-group-item--1 td:first-child { border-left-color:#6ee7b7; }
+        .wip-group-item--2 td:first-child { border-left-color:#fcd34d; }
+        .wip-group-item.is-selected td { background:#dbeafe !important; }
+        .wip-select { width:17px; height:17px; cursor:pointer; accent-color:#2563eb; }
+        @keyframes groupReveal { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes bulkReveal { from { opacity:0; transform:translate(-50%,8px); } to { opacity:1; transform:translate(-50%,0); } }
+        @media (prefers-reduced-motion: reduce) { .wip-group-row td, .wip-group-item, .wip-bulk-bar.is-visible { animation:none; } }
         @media (max-width:900px) {
             .flow-board { grid-template-columns:1fr; }
             .flow-stage { border-radius:0 !important; }
@@ -52,7 +69,6 @@
         </div>
         <div class="wms-topbar__actions">
             <a class="wms-btn" href="{{ url('/client/xuat-vat-tu-noi-bo?type=production') }}"><i data-lucide="package-minus"></i> Xuất BTP</a>
-            <a class="wms-btn wms-btn--primary" href="{{ url('/client/kiem-ton-kho?view=entry') }}"><i data-lucide="package-plus"></i> Nhập thành phẩm</a>
         </div>
     </header>
 
@@ -115,10 +131,18 @@
                     <button id="clearTrackingFilter" class="wms-btn" type="button">Xóa lọc</button>
                 </div>
             </div>
+            <div id="bulkCompleteBar" class="wip-bulk-bar">
+                <div class="wip-bulk-count"><span id="bulkSelectedCount">0</span> dòng đã chọn</div>
+                <div class="wip-bulk-actions">
+                    <button id="clearBulkSelectionBtn" class="wms-btn" type="button">Bỏ chọn</button>
+                    <button id="bulkCompleteBtn" class="wms-btn wms-btn--primary" type="button"><i data-lucide="package-check"></i> <span id="bulkCompleteLabel">Nhập + xuất TP</span></button>
+                </div>
+            </div>
             <div class="wms-table-wrap">
                 <table class="wms-table">
                     <thead>
                         <tr>
+                            <th style="width:42px"></th>
                             <th>Lệnh SX / Phiếu xuất</th>
                             <th>Trạng thái</th>
                             <th>Mã hàng</th>
@@ -128,7 +152,6 @@
                             <th class="text-end">Còn treo</th>
                             <th>Tiến độ</th>
                             <th>Tuổi phiếu</th>
-                            <th>Thao tác</th>
                         </tr>
                     </thead>
                     <tbody id="trackingRows"><tr><td colspan="10" class="wms-loading">Đang tải dữ liệu...</td></tr></tbody>
@@ -146,6 +169,24 @@
             return date.toISOString().slice(0, 10);
         };
         let trackingTimer = null;
+        let selectedProductionLineIds = new Set();
+
+        function updateBulkSelection() {
+            document.querySelectorAll('.row-select').forEach(input => {
+                const ids = String(input.dataset.lineIds || '').split(',').map(Number).filter(Boolean);
+                input.checked = ids.length > 0 && ids.every(id => selectedProductionLineIds.has(id));
+                input.closest('tr')?.classList.toggle('is-selected', input.checked);
+            });
+            document.querySelectorAll('.group-select').forEach(input => {
+                const ids = String(input.dataset.lineIds || '').split(',').map(Number).filter(Boolean);
+                input.checked = ids.length > 0 && ids.every(id => selectedProductionLineIds.has(id));
+                input.indeterminate = ids.some(id => selectedProductionLineIds.has(id)) && !input.checked;
+            });
+            document.getElementById('bulkSelectedCount').textContent = selectedProductionLineIds.size;
+            document.getElementById('bulkCompleteLabel').textContent = `Nhập + xuất TP (${selectedProductionLineIds.size} dòng)`;
+            document.getElementById('bulkCompleteBar').classList.toggle('is-visible', selectedProductionLineIds.size > 0);
+            if (window.lucide) lucide.createIcons();
+        }
 
         function trackingStatus(row) {
             const labels = {normal: '0 - 3 ngày', warning: '4 - 7 ngày', overdue: 'Quá 7 ngày'};
@@ -175,6 +216,7 @@
                     return response.json();
                 })
                 .then(result => {
+                    selectedProductionLineIds.clear();
                     const summary = result.summary || {};
                     document.getElementById('flowIssued').textContent = trackingNum(summary.issued_quantity);
                     document.getElementById('flowReturned').textContent = trackingNum(summary.returned_quantity);
@@ -185,15 +227,28 @@
                     document.getElementById('trackingOrders').textContent = trackingNum(summary.order_count);
                     document.getElementById('trackingOutstanding').textContent = trackingNum(summary.outstanding_quantity);
 
-                    document.getElementById('trackingRows').innerHTML = (result.data || []).map(row => {
-                        const issueId = (row.issue_ids || [])[0] || '';
-                        const receiveButton = row.btp_status === 'completed'
-                            ? '<span class="badge text-bg-success">Đã xong</span>'
-                            : issueId
-                            ? `<button type="button" class="btn btn-sm btn-success receive-production-btn" data-issue-id="${trackingEsc(issueId)}" data-code="${trackingEsc((row.issue_codes || [])[0] || row.production_order)}">Hoàn tất</button>`
-                            : '<span class="text-muted small">Chưa xuất</span>';
-                        return `
-                        <tr>
+                    const groups = new Map();
+                    (result.data || []).forEach(row => {
+                        const groupCode = (row.issue_codes || [])[0] || 'Chưa có phiếu xuất';
+                        if (!groups.has(groupCode)) groups.set(groupCode, []);
+                        groups.get(groupCode).push(row);
+                    });
+                    let tableHtml = '';
+                    Array.from(groups.entries()).forEach(([groupCode, groupRows], groupIndex) => {
+                        const tone = groupIndex % 3;
+                        const groupLineIds = groupRows.flatMap(row => row.issue_line_ids || []).map(Number).filter(Boolean);
+                        const groupQuantity = groupRows.reduce((sum, row) => sum + Number(row.outstanding_quantity || 0), 0);
+                        tableHtml += `<tr class="wip-group-row wip-group-row--${tone}">
+                            <td><input class="wip-select group-select" type="checkbox" data-line-ids="${trackingEsc(groupLineIds.join(','))}" ${groupLineIds.length ? '' : 'disabled'} aria-label="Chọn nhóm ${trackingEsc(groupCode)}"></td>
+                            <td colspan="9"><i data-lucide="layers-3"></i> ${trackingEsc(groupCode)}
+                                <span class="wip-group-meta"><span>${groupRows.length} dòng</span><span>Còn ${trackingNum(groupQuantity)}</span></span>
+                            </td>
+                        </tr>`;
+                        groupRows.forEach(row => {
+                        const issueLineIds = (row.issue_line_ids || []).join(',');
+                        tableHtml += `
+                        <tr class="wip-group-item wip-group-item--${tone}">
+                            <td><input class="wip-select row-select" type="checkbox" data-group="${trackingEsc(groupCode)}" data-line-ids="${trackingEsc(issueLineIds)}" ${issueLineIds ? '' : 'disabled'} aria-label="Chọn ${trackingEsc(row.production_order)}"></td>
                             <td>
                                 <div class="wip-order">${trackingEsc(row.production_order)}</div>
                                 <div class="wip-sub">${trackingEsc((row.issue_codes || []).join(', '))}</div>
@@ -215,10 +270,13 @@
                                 <div class="wip-sub">${trackingNum(row.progress_percent)}% đã nhập</div>
                             </td>
                             <td>${trackingStatus(row)}</td>
-                            <td>${receiveButton}</td>
                         </tr>
-                    `}).join('') || '<tr><td colspan="10" class="tracking-empty">Không có hàng đang treo theo bộ lọc hiện tại.</td></tr>';
+                    `;
+                        });
+                    });
+                    document.getElementById('trackingRows').innerHTML = tableHtml || '<tr><td colspan="10" class="tracking-empty">Không có hàng đang treo theo bộ lọc hiện tại.</td></tr>';
 
+                    updateBulkSelection();
                     if (window.lucide) lucide.createIcons();
                 })
                 .catch(error => {
@@ -244,30 +302,54 @@
             document.getElementById('trackingAging').value = '';
             loadProductionTracking();
         });
-        document.getElementById('trackingRows').addEventListener('click', event => {
-            const button = event.target.closest('.receive-production-btn');
-            if (!button) return;
-            if (!confirm(`Đánh dấu ${button.dataset.code} đã sản xuất xong và nhập lại về CHUA-XEP?`)) return;
+        document.getElementById('trackingRows').addEventListener('change', event => {
+            const input = event.target.closest('.row-select, .group-select');
+            if (!input) return;
+            const ids = String(input.dataset.lineIds || '').split(',').map(Number).filter(Boolean);
+            ids.forEach(id => input.checked ? selectedProductionLineIds.add(id) : selectedProductionLineIds.delete(id));
+            updateBulkSelection();
+        });
+        document.getElementById('clearBulkSelectionBtn').addEventListener('click', () => {
+            selectedProductionLineIds.clear();
+            updateBulkSelection();
+        });
+        document.getElementById('bulkCompleteBtn').addEventListener('click', () => {
+            const lineIds = Array.from(selectedProductionLineIds);
+            if (!lineIds.length) return;
+            const groupCodes = Array.from(new Set(Array.from(document.querySelectorAll('.row-select:checked')).map(input => input.dataset.group).filter(Boolean)));
+            if (!confirm(`Gom ${lineIds.length} dòng từ ${groupCodes.length} nhóm thành 1 phiếu nhập TP và 1 phiếu xuất TP?\n\nNhóm nguồn: ${groupCodes.join(', ')}`)) return;
+
+            const button = document.getElementById('bulkCompleteBtn');
+            const receiptWindow = window.open('', '_blank');
+            const issueWindow = window.open('', '_blank');
             button.disabled = true;
-            fetch(`/api/xuat-vat-tu-noi-bo/${button.dataset.issueId}/nhap-lai-thanh-pham`, {
+            fetch('/api/xuat-vat-tu-noi-bo/nhap-xuat-thanh-pham-theo-dong', {
                 method: 'POST',
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'},
                 body: JSON.stringify({
                     checked_at: trackingLocalDate(),
-                    location_code: 'CHUA-XEP'
+                    location_code: 'CHUA-XEP',
+                    line_ids: lineIds,
+                    export_finished_goods: true
                 })
             })
-                .then(response => {
-                    if (!response.ok) {
-                        return response.json().then(error => { throw new Error(error.message || 'Không nhập lại được thành phẩm'); });
-                    }
-                    return response.json();
-                })
+                .then(response => response.json().then(result => {
+                    if (!response.ok) throw new Error(result.message || 'Không thể tạo phiếu nhập và xuất thành phẩm');
+                    return result;
+                }))
                 .then(result => {
-                    if (result.receipt_print_url) window.open(result.receipt_print_url, '_blank');
+                    if (result.receipt_print_url && receiptWindow) receiptWindow.location.href = result.receipt_print_url;
+                    else if (receiptWindow) receiptWindow.close();
+                    if (result.customer_issue_print_url && issueWindow) issueWindow.location.href = result.customer_issue_print_url;
+                    else if (issueWindow) issueWindow.close();
+                    selectedProductionLineIds.clear();
                     loadProductionTracking();
                 })
-                .catch(error => alert(error.message))
+                .catch(error => {
+                    if (receiptWindow) receiptWindow.close();
+                    if (issueWindow) issueWindow.close();
+                    alert(error.message);
+                })
                 .finally(() => { button.disabled = false; });
         });
 

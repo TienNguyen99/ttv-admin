@@ -22,6 +22,7 @@ use App\Http\Controllers\InternalBtpProductionOrderController;
 use App\Http\Controllers\InternalFinishedGoodsReceiptController;
 use App\Http\Controllers\InternalMaterialIssueController;
 use App\Http\Controllers\InternalItemCatalogController;
+use App\Http\Controllers\InternalColorMappingController;
 use App\Http\Controllers\InternalUnitConversionController;
 use App\Http\Controllers\InternalXntController;
 use App\Http\Controllers\InternalWeavingController;
@@ -164,6 +165,7 @@ Route::get('/api/theo-doi-san-xuat', [InternalMaterialIssueController::class, 'p
 Route::post('/api/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'store']);
 Route::post('/api/xuat-vat-tu-noi-bo/tu-phieu-nhap/{receipt}', [InternalMaterialIssueController::class, 'createFromReceipt']);
 Route::post('/api/xuat-vat-tu-noi-bo/gui-san-xuat/{receipt}', [InternalMaterialIssueController::class, 'sendReceiptToProduction']);
+Route::post('/api/xuat-vat-tu-noi-bo/nhap-xuat-thanh-pham-theo-dong', [InternalMaterialIssueController::class, 'receiveProductionLines']);
 Route::post('/api/xuat-vat-tu-noi-bo/{issue}/nhap-lai-thanh-pham', [InternalMaterialIssueController::class, 'receiveProductionIssue']);
 Route::get('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'show']);
 Route::put('/api/xuat-vat-tu-noi-bo/{issue}', [InternalMaterialIssueController::class, 'update']);
@@ -202,6 +204,7 @@ Route::get('/api/lenh-san-xuat-sheet', [InternalProductionOrderController::class
 Route::post('/api/lenh-san-xuat-sheet/dong-bo', [InternalProductionOrderController::class, 'sync']);
 Route::get('/client/lenh-san-xuat-trung-tam', [InternalProductionOrderController::class, 'workflowIndex']);
 Route::get('/api/lenh-san-xuat-trung-tam', [InternalProductionOrderController::class, 'workflow']);
+Route::patch('/api/lenh-san-xuat-trung-tam/dong/{order}', [InternalProductionOrderController::class, 'updateStandardItemCode']);
 Route::get('/client/lenh-btp', [InternalBtpProductionOrderController::class, 'index']);
 Route::get('/client/lenh-btp/tem-qr', [InternalBtpProductionOrderController::class, 'printLabels']);
 Route::get('/api/lenh-btp', [InternalBtpProductionOrderController::class, 'data']);
@@ -213,6 +216,10 @@ Route::get('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::cl
 Route::put('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'update']);
 Route::delete('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'destroy']);
 Route::get('/client/danh-muc-noi-bo', [InternalItemCatalogController::class, 'index']);
+Route::get('/client/mau-noi-bo', [InternalColorMappingController::class, 'page']);
+Route::get('/api/mau-noi-bo', [InternalColorMappingController::class, 'index']);
+Route::post('/api/mau-noi-bo', [InternalColorMappingController::class, 'store']);
+Route::delete('/api/mau-noi-bo/{colorMapping}', [InternalColorMappingController::class, 'destroy']);
 Route::view('/client/quy-doi-don-vi', 'client.internal-unit-conversions');
 Route::get('/api/danh-muc-noi-bo', [InternalItemCatalogController::class, 'data']);
 Route::get('/api/danh-muc-noi-bo/loi-ma-phieu', [InternalItemCatalogController::class, 'invalidDocumentCodes']);

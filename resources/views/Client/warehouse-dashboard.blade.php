@@ -384,13 +384,13 @@
             });
         }
 
-        function renderTodayFlow(receipts, issues, weeklyFlow) {
-            const receiptQty = Number(receipts.summary?.total_quantity || 0);
-            const issueQty = Number(issues.summary?.total_quantity || 0);
+        function renderTodayFlow(todayFlow, weeklyFlow) {
+            const receiptQty = Number(todayFlow?.receipt_quantity || 0);
+            const issueQty = Number(todayFlow?.issue_quantity || 0);
             document.getElementById('todayReceiptQty').textContent = dashboardNum(receiptQty);
             document.getElementById('todayIssueQty').textContent = dashboardNum(issueQty);
-            document.getElementById('todayReceiptDocs').textContent = `${dashboardNum(receipts.summary?.receipt_count || 0)} phiếu`;
-            document.getElementById('todayIssueDocs').textContent = `${dashboardNum(issues.summary?.total_issues || 0)} phiếu`;
+            document.getElementById('todayReceiptDocs').textContent = `${dashboardNum(todayFlow?.receipt_count || 0)} phiếu`;
+            document.getElementById('todayIssueDocs').textContent = `${dashboardNum(todayFlow?.issue_count || 0)} phiếu`;
             renderLineChart('todayFlowChart', weeklyFlow);
         }
 
@@ -505,14 +505,15 @@
             const stockRows = stock.data || [];
             const receiptRows = receipts.data || [];
             const issueRows = issues.data || [];
+            const todayFlow = (flow.data || []).find(row => row.date === today) || {};
             const unassigned = stockRows.filter(row => !row.location_code || row.location_code === 'CHUA-XEP');
 
             document.getElementById('dashboardItems').textContent = dashboardNum(stock.summary?.item_count);
             document.getElementById('dashboardUnassigned').textContent = dashboardNum(unassigned.length);
-            document.getElementById('dashboardReceipts').textContent = dashboardNum(receipts.summary?.total_quantity);
-            document.getElementById('dashboardIssues').textContent = dashboardNum(issues.summary?.total_quantity);
+            document.getElementById('dashboardReceipts').textContent = dashboardNum(todayFlow?.receipt_quantity);
+            document.getElementById('dashboardIssues').textContent = dashboardNum(todayFlow?.issue_quantity);
             renderStockStatusChart(stockRows, quality);
-            renderTodayFlow(receipts, issues, weeklyFlow);
+            renderTodayFlow(todayFlow, weeklyFlow);
             renderLocationChart(stockRows);
             renderWipChart(wip);
 

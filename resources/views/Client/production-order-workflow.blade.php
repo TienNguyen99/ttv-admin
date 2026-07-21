@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Lệnh SX trung tâm</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
@@ -39,6 +40,8 @@
         .muted { color: #66809a; font-size: 12px; }
         .item-stack { display: flex; flex-wrap: wrap; gap: 6px; max-width: 380px; }
         .item-chip { padding: 5px 7px; border: 1px solid #d7e5f4; border-radius: 8px; background: #f8fbff; color: #14314f; font-size: 12px; }
+        .item-chip__edit { padding: 0 3px; border: 0; background: transparent; color: #2563eb; font-weight: 800; }
+        .item-chip__source { display: block; margin-top: 2px; color: #64748b; font-size: 10px; }
         .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 850; white-space: nowrap; }
         .status-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
         .status-planned { background: #eef4fb; color: #45627f; }
@@ -152,6 +155,40 @@
         </section>
     </main>
 
+    <div class="modal fade" id="standardItemModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form id="standardItemForm" class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5">Chu&#7849;n h&#243;a m&#227; h&#224;ng trong l&#7879;nh</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="&#272;&#243;ng"></button>
+                </div>
+                <div class="modal-body">
+                    <input id="standardLineId" type="hidden">
+                    <div class="mb-3">
+                        <label class="form-label">L&#7879;nh s&#7843;n xu&#7845;t</label>
+                        <input id="standardProductionOrder" class="form-control" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">M&#227; ngu&#7891;n t&#7915; Google Sheet</label>
+                        <input id="sourceItemCode" class="form-control" readonly>
+                    </div>
+                    <div>
+                        <label for="standardItemCode" class="form-label">M&#227; h&#224;ng chu&#7849;n</label>
+                        <input id="standardItemCode" class="form-control" list="standardCatalogOptions" autocomplete="off" placeholder="V&#237; d&#7909;: TT01-BLACK">
+                        <datalist id="standardCatalogOptions"></datalist>
+                        <div class="form-text">Ch&#7881; ch&#7885;n m&#227; c&#243; trong Danh m&#7909;c n&#7897;i b&#7897;.</div>
+                    </div>
+                    <div id="standardItemStatus" class="small mt-2"></div>
+                </div>
+                <div class="modal-footer">
+                    <button id="resetStandardItem" type="button" class="btn btn-outline-secondary">D&#249;ng m&#227; g&#7889;c</button>
+                    <button type="submit" class="btn btn-primary">L&#432;u m&#227; chu&#7849;n</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <script>
         const groupsEl = document.getElementById('groups');
@@ -159,6 +196,10 @@
         const topKeywordEl = document.getElementById('topKeyword');
         const statusEl = document.getElementById('status');
         let timer = null;
+        let catalogTimer = null;
+        const standardModal = new bootstrap.Modal(document.getElementById('standardItemModal'));
+        const standardItemCodeEl = document.getElementById('standardItemCode');
+        const standardItemStatusEl = document.getElementById('standardItemStatus');
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
         const statuses = {
@@ -182,6 +223,8 @@
             if (!items.length) return '<span class="muted">Chưa có dòng hàng</span>';
             return `<div class="item-stack">${items.map(item => `<span class="item-chip">
                 <strong>${esc(item.item_code || 'Mã trống')}</strong>
+                <button type="button" class="item-chip__edit" title="Sửa mã chuẩn" data-edit-standard="${esc(item.id)}" data-production-order="${esc(item.production_order || '')}" data-source-code="${esc(item.source_item_code || '')}" data-standard-code="${esc(item.standard_item_code || '')}">&#9998;</button>
+                ${item.standard_item_code ? `<span class="item-chip__source">Gốc: ${esc(item.source_item_code || '-')}</span>` : ''}
                 ${item.size ? ` · Size ${esc(item.size)}` : ''}
                 ${item.color ? ` · ${esc(item.color)}` : ''}
                 ${item.quantity ? ` · ${num(item.quantity)} ${esc(item.unit || '')}` : ''}
@@ -190,6 +233,64 @@
 
         function codeList(codes) {
             return (codes || []).slice(0, 4).map(code => `<div class="code">${esc(code)}</div>`).join('') || '<span class="muted">-</span>';
+        }
+
+        function openStandardItemEditor(button) {
+            document.getElementById('standardLineId').value = button.dataset.editStandard || '';
+            document.getElementById('standardProductionOrder').value = button.dataset.productionOrder || '';
+            document.getElementById('sourceItemCode').value = button.dataset.sourceCode || '';
+            standardItemCodeEl.value = button.dataset.standardCode || button.dataset.sourceCode || '';
+            standardItemStatusEl.textContent = '';
+            standardModal.show();
+            setTimeout(() => {
+                standardItemCodeEl.focus();
+                standardItemCodeEl.select();
+            }, 180);
+        }
+
+        function loadCatalogOptions() {
+            const keyword = standardItemCodeEl.value.trim();
+            clearTimeout(catalogTimer);
+            if (keyword.length < 2) return;
+            catalogTimer = setTimeout(() => {
+                fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(keyword)}&limit=30&with_color=0`)
+                    .then(response => response.json())
+                    .then(result => {
+                        document.getElementById('standardCatalogOptions').innerHTML = (result.data || []).map(item =>
+                            `<option value="${esc(item.item_code || '')}">${esc(item.item_name || '')}${item.color ? ` - ${esc(item.color)}` : ''}</option>`
+                        ).join('');
+                    })
+                    .catch(() => {});
+            }, 120);
+        }
+
+        function saveStandardItem(event) {
+            event.preventDefault();
+            const lineId = document.getElementById('standardLineId').value;
+            standardItemStatusEl.className = 'small mt-2 text-primary';
+            standardItemStatusEl.textContent = 'Đang lưu...';
+            fetch(`/api/lenh-san-xuat-trung-tam/dong/${encodeURIComponent(lineId)}`, {
+                method: 'PATCH',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: JSON.stringify({ standard_item_code: standardItemCodeEl.value.trim() }),
+            })
+                .then(async response => {
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(result.message || 'Không lưu được mã chuẩn.');
+                    return result;
+                })
+                .then(() => {
+                    standardModal.hide();
+                    load();
+                })
+                .catch(error => {
+                    standardItemStatusEl.className = 'small mt-2 text-danger';
+                    standardItemStatusEl.textContent = error.message;
+                });
         }
 
         function rowHtml(row) {
@@ -318,6 +419,16 @@
             topKeywordEl.value = '';
             statusEl.value = '';
             load();
+        });
+        groupsEl.addEventListener('click', event => {
+            const button = event.target.closest('[data-edit-standard]');
+            if (button) openStandardItemEditor(button);
+        });
+        standardItemCodeEl.addEventListener('input', loadCatalogOptions);
+        document.getElementById('standardItemForm').addEventListener('submit', saveStandardItem);
+        document.getElementById('resetStandardItem').addEventListener('click', () => {
+            standardItemCodeEl.value = '';
+            document.getElementById('standardItemForm').requestSubmit();
         });
 
         if (window.lucide) lucide.createIcons();

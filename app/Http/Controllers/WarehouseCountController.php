@@ -458,6 +458,7 @@ class WarehouseCountController extends Controller
                 ], $catalog);
                 $package->pantone_code = $match['pantone'];
                 $package->pantone_hex = $match['hex'];
+                $package->color_name = $match['name'] ?? '';
                 $package->pantone_source = $match['source'];
                 $package->catalog_name = $catalog->item_name ?? '';
                 $package->catalog_unit = $catalog->unit ?? '';
@@ -552,6 +553,7 @@ class WarehouseCountController extends Controller
                 'catalog_unit' => $catalog ? $catalog->unit : '',
                 'pantone_code' => $match['pantone'],
                 'pantone_hex' => $match['hex'],
+                'color_name' => $match['name'] ?? '',
                 'pantone_source' => $match['source'],
             ];
         });
@@ -572,12 +574,27 @@ class WarehouseCountController extends Controller
         $query = InternalMaterialReceipt::query()
             ->withCount('lines')
             ->withSum('lines as total_quantity', 'quantity')
-            ->where(function ($query) {
-                $query->where('source', 'Phieu nhap thanh pham')
-                    ->orWhere('receipt_code', 'like', 'PNTP-%');
-            })
             ->orderByDesc('created_at')
             ->orderByDesc('id');
+
+        $receiptKind = trim((string) $request->query('receipt_kind', 'finished'));
+        if ($receiptKind === 'semi_finished') {
+            $query->where(function ($inner) {
+                $inner->where('source', 'Phieu nhap ban thanh pham')
+                    ->orWhere('receipt_code', 'like', 'PNBTP-%');
+            });
+        } elseif ($receiptKind === 'all') {
+            $query->where(function ($inner) {
+                $inner->whereIn('source', ['Phieu nhap thanh pham', 'Phieu nhap ban thanh pham'])
+                    ->orWhere('receipt_code', 'like', 'PNTP-%')
+                    ->orWhere('receipt_code', 'like', 'PNBTP-%');
+            });
+        } else {
+            $query->where(function ($inner) {
+                $inner->where('source', 'Phieu nhap thanh pham')
+                    ->orWhere('receipt_code', 'like', 'PNTP-%');
+            });
+        }
 
         if ($request->filled('receipt_date')) {
             $query->whereDate('receipt_date', $request->query('receipt_date'));
@@ -620,6 +637,16 @@ class WarehouseCountController extends Controller
                     'issued_quantity' => $issue ? (float) ($receipt->total_quantity ?? 0) : 0,
                     'remaining_quantity' => $issue ? 0 : (float) ($receipt->total_quantity ?? 0),
                 ];
+                $hasDirectCustomerIssue = $issue
+                    && (int) $issue->source_receipt_id === (int) $receipt->id
+                    && $issue->issue_type === 'customer';
+                if ($hasDirectCustomerIssue) {
+                    $fifo = [
+                        'issue_status' => 'exported',
+                        'issued_quantity' => (float) ($receipt->total_quantity ?? 0),
+                        'remaining_quantity' => 0.0,
+                    ];
+                }
 
                 return [
                     'id' => $receipt->id,
@@ -628,12 +655,15 @@ class WarehouseCountController extends Controller
                     'warehouse_code' => $receipt->warehouse_code,
                     'location_code' => $receipt->location_code,
                     'note' => $receipt->note,
+                    'source' => $receipt->source,
+                    'receipt_kind' => $receipt->source === 'Phieu nhap ban thanh pham' ? 'semi_finished' : 'finished',
                     'lines_count' => (int) $receipt->lines_count,
                     'total_quantity' => (float) ($receipt->total_quantity ?? 0),
                     'issue_status' => $fifo['issue_status'],
                     'fifo_issued_quantity' => $fifo['issued_quantity'],
                     'fifo_remaining_quantity' => $fifo['remaining_quantity'],
                     'issue_code' => $issue->issue_code ?? null,
+                    'issue_type' => $issue->issue_type ?? null,
                     'issue_id' => $issue->id ?? null,
                     'issue_print_url' => $issue ? url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in') : null,
                     'print_url' => url('/client/nhap-thanh-pham-noi-bo/' . $receipt->id . '/in'),
@@ -846,6 +876,7 @@ class WarehouseCountController extends Controller
             ], $catalog);
             $row->pantone_code = $match['pantone'];
             $row->pantone_hex = $match['hex'];
+            $row->color_name = $match['name'] ?? '';
             $row->pantone_source = $match['source'];
             return $row;
         });
@@ -1674,6 +1705,7 @@ class WarehouseCountController extends Controller
             ], $catalog);
             $row->pantone_code = $match['pantone'];
             $row->pantone_hex = $match['hex'];
+            $row->color_name = $match['name'] ?? '';
             $row->pantone_source = $match['source'];
             $row->catalog_only = false;
             $row->catalog_item_name = $catalog->item_name ?? '';
@@ -1714,6 +1746,7 @@ class WarehouseCountController extends Controller
                     'latest_checked_at' => $rows->max('latest_checked_at'),
                     'pantone_code' => $first->pantone_code ?: $match['pantone'],
                     'pantone_hex' => $first->pantone_hex ?: $match['hex'],
+                    'color_name' => $first->color_name ?: ($match['name'] ?? ''),
                     'pantone_source' => $first->pantone_source ?: $match['source'],
                     'catalog_only' => false,
                     'catalog_item_name' => (string) $first->catalog_item_name,
@@ -1753,6 +1786,7 @@ class WarehouseCountController extends Controller
                     'latest_checked_at' => null,
                     'pantone_code' => $match['pantone'],
                     'pantone_hex' => $match['hex'],
+                    'color_name' => $match['name'] ?? '',
                     'pantone_source' => $match['source'],
                     'catalog_only' => true,
                     'catalog_item_name' => trim((string) $item->item_name),
@@ -2524,6 +2558,7 @@ class WarehouseCountController extends Controller
     public function storeReceiptBatch(Request $request)
     {
         $data = $request->validate([
+            'receipt_kind' => 'nullable|in:finished,semi_finished',
             'location_code' => 'nullable|string|max:100',
             'ma_ko' => 'nullable|string|max:50',
             'checked_at' => 'required|date',
@@ -2595,13 +2630,19 @@ class WarehouseCountController extends Controller
             : ($lineLocationCodes->isEmpty() ? $locationCode : '');
 
         $accountingCodes = $lines->pluck('ma_sp')->filter()->unique()->all();
-        $catalogItems = empty($accountingCodes)
-            ? collect()
-            : DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
-                ->whereIn('Ma_hh', $accountingCodes)
-                ->select('Ma_hh', 'Ten_hh', 'Dvt')
-                ->get()
-                ->keyBy('Ma_hh');
+        $catalogItems = collect();
+        if (!empty($accountingCodes)) {
+            try {
+                $catalogItems = DB::connection('sqlsrv')->table('TSoft_NhanTG_kt_new.dbo.CodeHanghoa')
+                    ->whereIn('Ma_hh', $accountingCodes)
+                    ->select('Ma_hh', 'Ten_hh', 'Dvt')
+                    ->get()
+                    ->keyBy('Ma_hh');
+            } catch (\Throwable $error) {
+                // Internal warehouse operations must remain available when TSoft is offline.
+                $catalogItems = collect();
+            }
+        }
         $internalCatalogItems = InternalItemCatalog::query()
             ->where('is_active', true)
             ->whereIn('item_code', $lines->pluck('internal_item_code')->filter()->unique()->values())
@@ -2633,13 +2674,14 @@ class WarehouseCountController extends Controller
                 $location->warehouse_code = $warehouseCode;
             }
 
+            $isSemiFinished = ($data['receipt_kind'] ?? 'finished') === 'semi_finished';
             $receipt = InternalMaterialReceipt::query()->create([
-                'receipt_code' => $this->nextMaterialReceiptCode(),
+                'receipt_code' => $isSemiFinished ? $this->nextBtpReceiptCode() : $this->nextMaterialReceiptCode(),
                 'receipt_date' => $data['checked_at'],
                 'warehouse_code' => $warehouseCode,
                 'location_code' => $receiptLocationCode,
                 'receiver_name' => '',
-                'source' => 'Phieu nhap thanh pham',
+                'source' => $isSemiFinished ? 'Phieu nhap ban thanh pham' : 'Phieu nhap thanh pham',
                 'status' => 'posted',
                 'note' => $data['note'] ?? null,
             ]);
@@ -2647,7 +2689,7 @@ class WarehouseCountController extends Controller
             $packages = collect();
 
             foreach ($lines as $line) {
-                if ($line['production_order'] === '') {
+                if ($line['production_order'] === '' && ($data['receipt_kind'] ?? 'finished') !== 'semi_finished') {
                     $matchedBtpLine = app(InternalBtpOrderMatcher::class)->find([
                         'ps_number' => $line['purchase_order'],
                         'purchase_order' => $line['purchase_order'],
@@ -3506,16 +3548,36 @@ class WarehouseCountController extends Controller
             return collect();
         }
 
-        return InventoryPackage::query()
+        $rows = InventoryPackage::query()
             ->whereIn('warehouse_location_id', $ids)
             ->where('quantity', '>', 0)
-            ->whereRaw("TRIM(COALESCE(color, '')) <> ''")
-            ->select('warehouse_location_id', 'color')
+            ->select('warehouse_location_id', 'internal_item_code', 'ma_sp', 'size', 'color', 'side')
+            ->get();
+
+        $catalogs = InternalItemCatalog::query()
+            ->whereIn('item_code', $rows->pluck('internal_item_code')->filter()->unique())
             ->get()
+            ->keyBy(fn ($catalog) => mb_strtoupper(trim((string) $catalog->item_code)));
+        $matcher = app(PantoneColorMatcher::class);
+
+        return $rows
             ->groupBy('warehouse_location_id')
-            ->map(function ($rows) {
-                return $rows->pluck('color')
-                    ->map(fn ($color) => trim((string) $color))
+            ->map(function ($locationRows) use ($catalogs, $matcher) {
+                return $locationRows
+                    ->map(function ($row) use ($catalogs, $matcher) {
+                        $catalog = $catalogs->get(mb_strtoupper(trim((string) $row->internal_item_code)));
+                        $match = $matcher->matchValues([
+                            $row->internal_item_code,
+                            $row->ma_sp,
+                            $row->color,
+                            $row->size,
+                            $row->side,
+                        ], $catalog);
+
+                        return trim((string) ($match['name'] ?? ''))
+                            ?: trim((string) $row->color)
+                            ?: trim((string) $row->internal_item_code);
+                    })
                     ->filter()
                     ->unique(fn ($color) => mb_strtoupper($color))
                     ->take(3)
@@ -3538,6 +3600,11 @@ class WarehouseCountController extends Controller
     private function nextMaterialReceiptCode()
     {
         return app(InternalDocumentNumber::class)->next('PNTP', 4);
+    }
+
+    private function nextBtpReceiptCode()
+    {
+        return app(InternalDocumentNumber::class)->next('PNBTP', 4);
     }
 
     private function movePackageRecord(InventoryPackage $package, WarehouseLocation $targetLocation): void
