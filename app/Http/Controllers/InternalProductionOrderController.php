@@ -6,6 +6,7 @@ use App\Models\InternalItemCatalog;
 use App\Models\InternalProductionOrder;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -53,6 +54,10 @@ class InternalProductionOrderController extends Controller
             ->get();
 
         $orderCodes = $orders->pluck('production_order')->filter()->unique()->values();
+        $catalogsById = InternalItemCatalog::query()
+            ->whereIn('id', $orders->pluck('standard_catalog_id')->filter()->unique()->values())
+            ->get()
+            ->keyBy('id');
 
         if ($orderCodes->isEmpty()) {
             return response()->json([
@@ -94,7 +99,7 @@ class InternalProductionOrderController extends Controller
 
         $rows = $orders
             ->groupBy('production_order')
-            ->map(function ($lines, $productionOrder) use ($receiptRows, $issueRows) {
+            ->map(function ($lines, $productionOrder) use ($receiptRows, $issueRows, $catalogsById) {
                 $first = $lines->first();
                 $receipt = $receiptRows->get($productionOrder);
                 $issue = $issueRows->get($productionOrder);
@@ -105,20 +110,22 @@ class InternalProductionOrderController extends Controller
                 $remainingAfterCustomer = $receivedQuantity - $issuedCustomer;
                 $status = $this->workflowStatus($plannedQuantity, $receivedQuantity, $issuedProduction, (bool) ($issue->has_completed_issue ?? false), $issuedCustomer);
 
-                $items = $lines->map(function ($line) {
+                $items = $lines->map(function ($line) use ($catalogsById) {
                     $sourceItemCode = trim((string) $line->item_code);
                     $standardItemCode = trim((string) $line->standard_item_code);
+                    $catalog = $line->standard_catalog_id ? $catalogsById->get($line->standard_catalog_id) : null;
                     return [
                         'id' => (int) $line->id,
                         'production_order' => trim((string) $line->production_order),
-                        'item_code' => $standardItemCode !== '' ? $standardItemCode : $sourceItemCode,
+                        'item_code' => trim((string) ($catalog->item_code ?? '')) ?: ($standardItemCode !== '' ? $standardItemCode : $sourceItemCode),
                         'source_item_code' => $sourceItemCode,
                         'standard_item_code' => $standardItemCode,
-                        'description' => trim((string) $line->description),
-                        'size' => trim((string) $line->size),
-                        'color' => trim((string) $line->color),
+                        'standard_catalog_id' => $catalog ? (int) $catalog->id : null,
+                        'description' => trim((string) ($catalog->item_name ?? '')) ?: trim((string) $line->description),
+                        'size' => trim((string) ($catalog->size ?? '')) ?: trim((string) $line->size),
+                        'color' => trim((string) ($catalog->color ?? '')) ?: trim((string) $line->color),
                         'quantity' => (float) $line->order_quantity,
-                        'unit' => trim((string) $line->unit),
+                        'unit' => trim((string) ($catalog->unit ?? '')) ?: trim((string) $line->unit),
                     ];
                 })->values();
 
@@ -161,25 +168,23 @@ class InternalProductionOrderController extends Controller
     public function updateStandardItemCode(Request $request, InternalProductionOrder $order)
     {
         $data = $request->validate([
-            'standard_item_code' => 'nullable|string|max:200',
+            'standard_catalog_id' => 'nullable|integer',
         ]);
-        $standardCode = mb_strtoupper(trim((string) ($data['standard_item_code'] ?? '')));
-
-        if ($standardCode !== '') {
-            $catalog = InternalItemCatalog::query()
-                ->where('is_active', true)
-                ->whereRaw('UPPER(TRIM(item_code)) = ?', [$standardCode])
-                ->first();
+        $catalogId = (int) ($data['standard_catalog_id'] ?? 0);
+        $catalog = null;
+        if ($catalogId > 0) {
+            $catalog = InternalItemCatalog::query()->where('is_active', true)->find($catalogId);
             if (!$catalog) {
                 return response()->json([
-                    'message' => 'Mã chuẩn không tồn tại trong Danh mục nội bộ.',
+                    'message' => 'Dòng mã chuẩn không tồn tại trong Danh mục nội bộ.',
                 ], 422);
             }
-            $standardCode = trim((string) $catalog->item_code);
         }
 
-        $order->standard_item_code = $standardCode !== '' ? $standardCode : null;
+        $order->standard_catalog_id = $catalog ? $catalog->id : null;
+        $order->standard_item_code = $catalog ? trim((string) $catalog->item_code) : null;
         $order->save();
+        Cache::forget('internal_catalog_customer_map_v1');
 
         return response()->json([
             'message' => 'Đã cập nhật mã hàng chuẩn.',
@@ -187,6 +192,7 @@ class InternalProductionOrderController extends Controller
                 'id' => (int) $order->id,
                 'source_item_code' => trim((string) $order->item_code),
                 'standard_item_code' => trim((string) $order->standard_item_code),
+                'standard_catalog_id' => $order->standard_catalog_id ? (int) $order->standard_catalog_id : null,
                 'item_code' => trim((string) ($order->standard_item_code ?: $order->item_code)),
             ],
         ]);
@@ -328,11 +334,22 @@ class InternalProductionOrderController extends Controller
         }
 
         // API consumers use the central standard code while the synced source code stays intact.
-        $rows->each(function ($row) {
+        $dataCatalogsById = InternalItemCatalog::query()
+            ->whereIn('id', $rows->pluck('standard_catalog_id')->filter()->unique()->values())
+            ->get()
+            ->keyBy('id');
+        $rows->each(function ($row) use ($dataCatalogsById) {
             $sourceItemCode = trim((string) $row->item_code);
             $standardItemCode = trim((string) $row->standard_item_code);
+            $catalog = $row->standard_catalog_id ? $dataCatalogsById->get($row->standard_catalog_id) : null;
             $row->setAttribute('source_item_code', $sourceItemCode);
-            $row->setAttribute('item_code', $standardItemCode !== '' ? $standardItemCode : $sourceItemCode);
+            $row->setAttribute('item_code', trim((string) ($catalog->item_code ?? '')) ?: ($standardItemCode !== '' ? $standardItemCode : $sourceItemCode));
+            if ($catalog) {
+                $row->setAttribute('description', trim((string) $catalog->item_name) ?: $row->description);
+                $row->setAttribute('size', trim((string) $catalog->size) ?: $row->size);
+                $row->setAttribute('color', trim((string) $catalog->color) ?: $row->color);
+                $row->setAttribute('unit', trim((string) $catalog->unit) ?: $row->unit);
+            }
         });
 
         $receiptProgress = null;
@@ -416,9 +433,10 @@ class InternalProductionOrderController extends Controller
         $activeKeys = [];
         $created = 0;
         $updated = 0;
+        $unchanged = 0;
         $skipped = 0;
 
-        DB::connection('internal')->transaction(function () use ($rows, $headers, $batch, &$activeKeys, &$created, &$updated, &$skipped) {
+        DB::connection('internal')->transaction(function () use ($rows, $headers, $batch, &$activeKeys, &$created, &$updated, &$unchanged, &$skipped) {
             foreach ($rows as $index => $values) {
                 $row = [];
                 foreach ($headers as $column => $header) {
@@ -444,6 +462,14 @@ class InternalProductionOrderController extends Controller
                 $existing = InternalProductionOrder::query()
                     ->where('row_key', $rowKey)
                     ->first();
+                $sourceHash = hash('sha256', json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                if ($existing && hash_equals((string) ($existing->source_hash ?? ''), $sourceHash)) {
+                    if (!$existing->is_active) {
+                        $existing->update(['is_active' => true]);
+                    }
+                    $unchanged++;
+                    continue;
+                }
 
                 InternalProductionOrder::query()->updateOrCreate(
                     ['row_key' => $rowKey],
@@ -467,6 +493,7 @@ class InternalProductionOrderController extends Controller
                         'status' => $status,
                         'source_row' => $index + 2,
                         'raw_data' => $row,
+                        'source_hash' => $sourceHash,
                         'sync_batch' => $batch,
                         'is_active' => true,
                     ]
@@ -481,12 +508,14 @@ class InternalProductionOrderController extends Controller
             }
             $archiveQuery->update(['is_active' => false]);
         });
+        Cache::forget('internal_catalog_customer_map_v1');
 
         return response()->json([
             'message' => 'Đã đồng bộ lệnh sản xuất từ Google Sheet.',
             'data' => [
                 'created' => $created,
                 'updated' => $updated,
+                'unchanged' => $unchanged,
                 'skipped' => $skipped,
                 'active_variants' => count(array_unique($activeKeys)),
                 'sheet' => self::SHEET_NAME,

@@ -15,7 +15,21 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')->hourly();
+        if (!config('internal_sync.enabled')) {
+            return;
+        }
+
+        $timezone = config('internal_sync.timezone', 'Asia/Ho_Chi_Minh');
+
+        $schedule->command('internal:sync-google-sheets operational')
+            ->everyTwoMinutes()
+            ->timezone($timezone)
+            ->withoutOverlapping(2);
+
+        $schedule->command('internal:sync-google-sheets reference')
+            ->everyThirtyMinutes()
+            ->timezone($timezone)
+            ->withoutOverlapping(30);
     }
 
     /**

@@ -534,7 +534,11 @@
     <a class="summary-sidebar__link {{ request()->is('client/don-hang-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/don-hang-noi-bo') }}"><i data-lucide="clipboard-list"></i>Đơn hàng A/B</a>
     <a class="summary-sidebar__link {{ request()->is('client/lenh-san-xuat-trung-tam*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-san-xuat-trung-tam') }}"><i data-lucide="route"></i>Lệnh SX trung tâm</a>
     <a class="summary-sidebar__link {{ request()->is('client/lenh-san-xuat-sheet*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-san-xuat-sheet') }}"><i data-lucide="factory"></i>Lệnh sản xuất</a>
-    <a class="summary-sidebar__link {{ request()->is('client/lenh-det*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-det') }}"><i data-lucide="network"></i>Lệnh dệt / định mức</a>
+    <details class="summary-sidebar__group" {{ request()->is('client/lenh-det*') || request()->is('client/designer-lenh-det*') ? 'open' : '' }}>
+        <summary class="summary-sidebar__summary"><i data-lucide="swatch-book"></i>Quản lý dệt</summary>
+        <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/designer-lenh-det*') ? 'is-active' : '' }}" href="{{ url('/client/designer-lenh-det') }}">Dashboard designer</a>
+        <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/lenh-det*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-det') }}">Lệnh dệt / định mức</a>
+    </details>
     <a class="summary-sidebar__link {{ request()->is('client/lenh-btp*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-btp') }}"><i data-lucide="git-branch-plus"></i>Lệnh BTP</a>
     <a class="summary-sidebar__link {{ request()->is('client/danh-muc-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/danh-muc-noi-bo') }}"><i data-lucide="book-open"></i>Danh mục nội bộ</a>
     <a class="summary-sidebar__link {{ request()->is('client/mau-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/mau-noi-bo') }}"><i data-lucide="palette"></i>Màu nội bộ</a>
@@ -548,7 +552,11 @@
     <a class="summary-sidebar__link {{ request()->is('client/xuat-vat-tu-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-vat-tu-noi-bo') }}"><i data-lucide="package-minus"></i>Xuất kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/xuat-chi-lenh-sx*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-chi-lenh-sx') }}"><i data-lucide="file-spreadsheet"></i>Xuất chỉ XNT</a>
     <a class="summary-sidebar__link {{ request()->is('client/doi-chieu-ton') ? 'is-active' : '' }}" href="{{ url('/client/doi-chieu-ton') }}"><i data-lucide="scale"></i>Đối chiếu TSoft</a>
-    <a class="summary-sidebar__link {{ request()->is('client/material-calculator') ? 'is-active' : '' }}" href="{{ url('/client/material-calculator') }}"><i data-lucide="ruler"></i>Tính cắt vải</a>
+    <details class="summary-sidebar__group" {{ request()->is('client/material-calculator') || request()->is('client/fabric-cut-simulator') ? 'open' : '' }}>
+        <summary class="summary-sidebar__summary"><i data-lucide="scissors"></i>Cắt vải</summary>
+        <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/material-calculator') ? 'is-active' : '' }}" href="{{ url('/client/material-calculator') }}">Tính vật tư</a>
+        <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/fabric-cut-simulator') ? 'is-active' : '' }}" href="{{ url('/client/fabric-cut-simulator') }}">Giả lập sơ đồ cắt</a>
+    </details>
 
     <div class="summary-sidebar__label">Dữ liệu công ty</div>
     <details class="summary-sidebar__group" {{ request()->is('client/home') || request()->is('orders') || request()->is('client/view-*') ? 'open' : '' }}>

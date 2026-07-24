@@ -23,6 +23,199 @@ class InternalWeavingController extends Controller
         return view('client.internal-weaving');
     }
 
+    public function designerDashboardIndex()
+    {
+        return view('client.weaving-designer-dashboard');
+    }
+
+    public function designerDashboard(Request $request)
+    {
+        $keyword = mb_strtolower(trim((string) $request->query('keyword', '')));
+        $customer = trim((string) $request->query('customer', ''));
+        $status = trim((string) $request->query('status', ''));
+        $page = max((int) $request->query('page', 1), 1);
+        $perPage = min(max((int) $request->query('per_page', 50), 25), 200);
+
+        $orders = InternalWeavingOrder::query()
+            ->with('item:id,item_code,item_name')
+            ->orderByDesc('order_date')
+            ->orderByDesc('id')
+            ->get();
+        $receiptTotals = collect();
+        $orders->pluck('order_code')->filter()->unique()->chunk(500)->each(function ($orderCodes) use ($receiptTotals) {
+            DB::connection('internal')->table('internal_material_receipt_lines as line')
+                ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'line.receipt_id')
+                ->whereIn('line.production_order', $orderCodes->values()->all())
+                ->where(function ($query) {
+                    $query->whereNull('receipt.status')->orWhere('receipt.status', '<>', 'cancelled');
+                })
+                ->selectRaw('line.production_order as order_key')
+                ->selectRaw('SUM(line.quantity) as received_quantity')
+                ->selectRaw('COUNT(DISTINCT line.receipt_id) as receipt_count')
+                ->selectRaw('MAX(receipt.receipt_date) as last_receipt_date')
+                ->groupBy('line.production_order')
+                ->get()
+                ->each(function ($row) use ($receiptTotals) {
+                    $receiptTotals->put(mb_strtoupper(trim((string) $row->order_key)), $row);
+                });
+        });
+
+        $allRows = $orders
+            ->map(function (InternalWeavingOrder $order) use ($receiptTotals) {
+                $receipt = $receiptTotals->get(mb_strtoupper(trim((string) $order->order_code)));
+                $planned = (float) $order->order_quantity;
+                $metadata = json_decode((string) ($order->metadata_json ?? ''), true) ?: [];
+                $sentToProduction = $order->status === 'issued' || !empty($metadata['sent_to_production_at']);
+                $rawReceived = (float) ($receipt->received_quantity ?? 0);
+                $rawReceiptCount = (int) ($receipt->receipt_count ?? 0);
+                $receivedBaseline = (float) ($metadata['receipt_quantity_baseline'] ?? 0);
+                $receiptCountBaseline = (int) ($metadata['receipt_count_baseline'] ?? 0);
+                $received = $sentToProduction ? max($rawReceived - $receivedBaseline, 0) : 0;
+                $receiptCount = $sentToProduction ? max($rawReceiptCount - $receiptCountBaseline, 0) : 0;
+                $remaining = max($planned - $received, 0);
+                $progress = $planned > 0 ? min(($received / $planned) * 100, 100) : 0;
+                $workflowStatus = !$sentToProduction
+                    ? 'waiting'
+                    : ($received > 0
+                        ? ($planned > 0 && $received + 0.0001 >= $planned ? 'completed' : 'partial')
+                        : 'producing');
+                $isOverdue = $remaining > 0 && $order->due_date && $order->due_date->isBefore(now('Asia/Ho_Chi_Minh')->startOfDay());
+
+                return [
+                    'id' => (int) $order->id,
+                    'order_code' => trim((string) $order->order_code),
+                    'item_code' => trim((string) $order->item_code),
+                    'item_name' => trim((string) ($order->item->item_name ?? '')),
+                    'customer' => trim((string) $order->customer),
+                    'po_number' => trim((string) $order->po_number),
+                    'design_code' => trim((string) $order->design_code),
+                    'order_quantity' => $planned,
+                    'received_quantity' => $received,
+                    'remaining_quantity' => $remaining,
+                    'unit' => trim((string) $order->unit),
+                    'order_date' => optional($order->order_date)->format('Y-m-d'),
+                    'due_date' => optional($order->due_date)->format('Y-m-d'),
+                    'sent_at' => $metadata['sent_to_production_at'] ?? ($order->status === 'issued' ? optional($order->updated_at)->toIso8601String() : null),
+                    'last_receipt_date' => $receiptCount > 0 ? ($receipt->last_receipt_date ?? null) : null,
+                    'receipt_count' => $receiptCount,
+                    'progress' => round($progress, 1),
+                    'workflow_status' => $workflowStatus,
+                    'is_overdue' => (bool) $isOverdue,
+                    'note' => trim((string) $order->note),
+                ];
+            });
+
+        $customers = $allRows->pluck('customer')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values();
+        $scopeRows = $allRows->filter(function ($row) use ($keyword, $customer) {
+            if ($customer !== '' && mb_strtolower($row['customer']) !== mb_strtolower($customer)) {
+                return false;
+            }
+            if ($keyword === '') {
+                return true;
+            }
+            $haystack = mb_strtolower(implode(' ', [
+                $row['order_code'], $row['item_code'], $row['item_name'], $row['customer'],
+                $row['po_number'], $row['design_code'], $row['note'],
+            ]));
+            return mb_strpos($haystack, $keyword) !== false;
+        })->values();
+        $filtered = $scopeRows->filter(function ($row) use ($status) {
+            return $status === ''
+                || $row['workflow_status'] === $status
+                || ($status === 'overdue' && $row['is_overdue']);
+        })->values();
+
+        $summary = [
+            'total' => $scopeRows->count(),
+            'waiting' => $scopeRows->where('workflow_status', 'waiting')->count(),
+            'producing' => $scopeRows->where('workflow_status', 'producing')->count(),
+            'partial' => $scopeRows->where('workflow_status', 'partial')->count(),
+            'completed' => $scopeRows->where('workflow_status', 'completed')->count(),
+            'overdue' => $scopeRows->where('is_overdue', true)->count(),
+        ];
+        $total = $filtered->count();
+        $rows = $filtered->slice(($page - 1) * $perPage, $perPage)->values();
+
+        return response()->json([
+            'data' => $rows,
+            'summary' => $summary,
+            'charts' => $this->designerChartData($scopeRows),
+            'customers' => $customers,
+            'pagination' => $this->pagination($page, $perPage, $total),
+        ]);
+    }
+
+    public function sendToProduction(InternalWeavingOrder $order)
+    {
+        if ($order->status === 'issued') {
+            return response()->json(['message' => 'Lệnh này đã được gửi xuống sản xuất.']);
+        }
+
+        $metadata = json_decode((string) ($order->metadata_json ?? ''), true) ?: [];
+        $receiptBaseline = DB::connection('internal')->table('internal_material_receipt_lines as line')
+            ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'line.receipt_id')
+            ->where('line.production_order', trim((string) $order->order_code))
+            ->where(function ($query) {
+                $query->whereNull('receipt.status')->orWhere('receipt.status', '<>', 'cancelled');
+            })
+            ->selectRaw('COALESCE(SUM(line.quantity), 0) as received_quantity')
+            ->selectRaw('COUNT(DISTINCT line.receipt_id) as receipt_count')
+            ->first();
+        $metadata['sent_to_production_at'] = now('Asia/Ho_Chi_Minh')->toIso8601String();
+        $metadata['receipt_quantity_baseline'] = (float) ($receiptBaseline->received_quantity ?? 0);
+        $metadata['receipt_count_baseline'] = (int) ($receiptBaseline->receipt_count ?? 0);
+        $order->status = 'issued';
+        $order->metadata_json = json_encode($metadata, JSON_UNESCAPED_UNICODE);
+        $order->save();
+
+        return response()->json(['message' => 'Đã chuyển lệnh ' . $order->order_code . ' sang Đang sản xuất.']);
+    }
+
+    private function designerChartData($rows): array
+    {
+        $statusLabels = ['Chờ sản xuất', 'Đang sản xuất', 'Nhập một phần', 'Đã nhập kho'];
+        $statusValues = [
+            $rows->where('workflow_status', 'waiting')->count(),
+            $rows->where('workflow_status', 'producing')->count(),
+            $rows->where('workflow_status', 'partial')->count(),
+            $rows->where('workflow_status', 'completed')->count(),
+        ];
+        $overdueByCustomer = $rows->where('is_overdue', true)
+            ->groupBy(fn ($row) => $row['customer'] ?: 'Chưa xác định')
+            ->map(fn ($group) => $group->count())
+            ->sortDesc()
+            ->take(7);
+        $trend = collect(range(7, 0))->map(function ($weeksAgo) use ($rows) {
+            $start = now('Asia/Ho_Chi_Minh')->startOfWeek()->subWeeks($weeksAgo);
+            $end = $start->copy()->endOfWeek();
+            $orderCount = $rows->filter(function ($row) use ($start, $end) {
+                if (empty($row['order_date'])) return false;
+                $date = \Carbon\Carbon::parse($row['order_date'], 'Asia/Ho_Chi_Minh');
+                return $date->betweenIncluded($start, $end);
+            })->count();
+            $receiptCount = $rows->filter(function ($row) use ($start, $end) {
+                if (empty($row['last_receipt_date'])) return false;
+                $date = \Carbon\Carbon::parse($row['last_receipt_date'], 'Asia/Ho_Chi_Minh');
+                return $date->betweenIncluded($start, $end);
+            })->count();
+
+            return [
+                'label' => $start->format('d/m'),
+                'orders' => $orderCount,
+                'receipts' => $receiptCount,
+            ];
+        })->values();
+
+        return [
+            'status' => ['labels' => $statusLabels, 'values' => $statusValues],
+            'trend' => $trend,
+            'overdue_customers' => [
+                'labels' => $overdueByCustomer->keys()->values(),
+                'values' => $overdueByCustomer->values(),
+            ],
+        ];
+    }
+
     public function items(Request $request)
     {
         $keyword = mb_strtoupper(trim((string) $request->query('keyword', '')));

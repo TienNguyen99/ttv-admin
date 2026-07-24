@@ -94,9 +94,10 @@ class InternalXntController extends Controller
         $activeKeys = [];
         $created = 0;
         $updated = 0;
+        $unchanged = 0;
         $skipped = 0;
 
-        DB::connection('internal')->transaction(function () use ($rows, $headers, $batch, &$activeKeys, &$created, &$updated, &$skipped) {
+        DB::connection('internal')->transaction(function () use ($rows, $headers, $batch, &$activeKeys, &$created, &$updated, &$unchanged, &$skipped) {
             foreach ($rows as $index => $values) {
                 $row = [];
                 foreach ($headers as $column => $header) {
@@ -117,7 +118,16 @@ class InternalXntController extends Controller
                 $rowKey = sha1(implode('|', ['XNT', $voucher, $sourceRow]));
                 $activeKeys[] = $rowKey;
 
-                $existing = InternalXntRow::query()->where('row_key', $rowKey)->exists();
+                $existing = InternalXntRow::query()->where('row_key', $rowKey)->first();
+                $sourceHash = hash('sha256', json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                if ($existing && hash_equals((string) ($existing->source_hash ?? ''), $sourceHash)) {
+                    if (!$existing->is_active) {
+                        $existing->update(['is_active' => true]);
+                    }
+                    $unchanged++;
+                    continue;
+                }
+
                 InternalXntRow::query()->updateOrCreate(
                     ['row_key' => $rowKey],
                     [
@@ -131,6 +141,7 @@ class InternalXntController extends Controller
                         'receiver_name' => $this->pick($row, ['nguoi nhan', 'ngÆ°á»i nháº­n']),
                         'production_order' => $this->pick($row, ['lenh sx', 'lá»‡nh sx']),
                         'raw_data' => $row,
+                        'source_hash' => $sourceHash,
                         'sync_batch' => $batch,
                         'is_active' => true,
                     ]
@@ -146,13 +157,16 @@ class InternalXntController extends Controller
             $archive->update(['is_active' => false]);
         });
 
-        $issueSync = $this->syncIssuesFromRows();
+        $issueSync = ($created + $updated) > 0
+            ? $this->syncIssuesFromRows()
+            : ['created' => 0, 'linked' => 0, 'skipped' => 0, 'errors' => []];
 
         return response()->json([
             'message' => 'ÄÃ£ Ä‘á»“ng bá»™ XNT.',
             'data' => [
                 'created' => $created,
                 'updated' => $updated,
+                'unchanged' => $unchanged,
                 'skipped' => $skipped,
                 'active' => InternalXntRow::query()->where('is_active', true)->count(),
                 'issue_created' => $issueSync['created'],

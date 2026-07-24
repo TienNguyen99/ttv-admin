@@ -30,4 +30,9 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'google_sheets' => [
+        'write_enabled' => env('GOOGLE_SHEETS_WRITE_ENABLED', false),
+        'credentials_path' => env('GOOGLE_SHEETS_CREDENTIALS_PATH', 'storage/app/google-service-account.json'),
+    ],
+
 ];

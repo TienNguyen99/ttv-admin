@@ -1029,8 +1029,14 @@ document.getElementById('itemPrev').addEventListener('click', () => { if (itemPa
 document.getElementById('itemNext').addEventListener('click', () => { if (itemPage < itemTotalPages) { itemPage++; loadItems(); } });
 document.getElementById('reloadBtn').addEventListener('click', () => { loadItems(); loadOrders(); if (currentProductionOrder) loadPlan(currentProductionOrder); });
 
+const requestedOrder = new URLSearchParams(window.location.search).get('order');
+if (requestedOrder) {
+    document.getElementById('orderKeyword').value = requestedOrder;
+    document.getElementById('topKeyword').value = requestedOrder;
+}
 loadItems();
 loadOrders();
+if (requestedOrder) loadPlan(requestedOrder);
 if (window.lucide) lucide.createIcons();
 </script>
 </body>

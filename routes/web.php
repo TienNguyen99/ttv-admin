@@ -26,6 +26,7 @@ use App\Http\Controllers\InternalColorMappingController;
 use App\Http\Controllers\InternalUnitConversionController;
 use App\Http\Controllers\InternalXntController;
 use App\Http\Controllers\InternalWeavingController;
+use App\Http\Controllers\InternalInventoryReportController;
 use App\Http\Controllers\LocalQrCodeController;
 use Google\Service\Dfareporting\Order;
 
@@ -177,6 +178,9 @@ Route::get('/api/xnt', [InternalXntController::class, 'data']);
 Route::post('/api/xnt/dong-bo', [InternalXntController::class, 'sync']);
 Route::post('/api/xnt/tao-phieu-xuat', [InternalXntController::class, 'createIssue']);
 Route::get('/client/lenh-det', [InternalWeavingController::class, 'index']);
+Route::get('/client/designer-lenh-det', [InternalWeavingController::class, 'designerDashboardIndex']);
+Route::get('/api/lenh-det/designer-dashboard', [InternalWeavingController::class, 'designerDashboard']);
+Route::post('/api/lenh-det/orders/{order}/gui-san-xuat', [InternalWeavingController::class, 'sendToProduction']);
 Route::get('/api/lenh-det/items', [InternalWeavingController::class, 'items']);
 Route::post('/api/lenh-det/items', [InternalWeavingController::class, 'storeItem']);
 Route::post('/api/lenh-det/items/import', [InternalWeavingController::class, 'importItems']);
@@ -195,6 +199,8 @@ Route::get('/api/lenh-det/production-orders', [InternalWeavingController::class,
 Route::get('/api/lenh-det/production-order-plan', [InternalWeavingController::class, 'productionPlan']);
 Route::post('/api/lenh-det/production-order-issue', [InternalWeavingController::class, 'createProductionIssue']);
 Route::view('/client/material-calculator', 'client.material-calculator');
+Route::view('/client/fabric-cut-simulator', 'client.fabric-cut-simulator');
+Route::view('/tools/tinh-met-vai', 'tools.fabric-meter-calculator');
 Route::view('/client/kho-noi-bo', 'client.warehouse-dashboard');
 Route::get('/client/don-hang-noi-bo', [InternalOrderTrackingController::class, 'index']);
 Route::get('/api/don-hang-noi-bo', [InternalOrderTrackingController::class, 'data']);
@@ -226,6 +232,9 @@ Route::get('/api/danh-muc-noi-bo/loi-ma-phieu', [InternalItemCatalogController::
 Route::post('/api/danh-muc-noi-bo/dong-bo', [InternalItemCatalogController::class, 'sync']);
 Route::post('/api/danh-muc-noi-bo/tu-dong-dong-bo', [InternalItemCatalogController::class, 'autoSync']);
 Route::post('/api/danh-muc-noi-bo/dong-bo-vi-tri', [InternalItemCatalogController::class, 'syncShelvesToLocations']);
+Route::post('/api/danh-muc-noi-bo/tach-ma-trung', [InternalItemCatalogController::class, 'splitDuplicateCodes']);
+Route::post('/api/danh-muc-noi-bo/bien-the-lenh-san-xuat', [InternalItemCatalogController::class, 'productionOrderVariants']);
+Route::patch('/api/danh-muc-noi-bo/{catalog}', [InternalItemCatalogController::class, 'updateCatalogRow']);
 Route::post('/api/danh-muc-noi-bo/{catalog}/anh', [InternalItemCatalogController::class, 'uploadImage']);
 Route::get('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'index']);
 Route::post('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'store']);
@@ -240,6 +249,8 @@ Route::get('/client/canh-bao-kho', [WarehouseCountController::class, 'qualityInd
 Route::get('/api/canh-bao-kho', [WarehouseCountController::class, 'qualityData']);
 Route::get('/api/kho-noi-bo/nhap-xuat-ngay', [WarehouseCountController::class, 'dailyFlow']);
 Route::get('/api/ton-kho-noi-bo/export', [WarehouseCountController::class, 'exportStock']);
+Route::get('/api/bao-cao-nhap-xuat-ton/loai-hang', [InternalInventoryReportController::class, 'groups']);
+Route::get('/api/bao-cao-nhap-xuat-ton/xuat', [InternalInventoryReportController::class, 'export']);
 Route::get('/api/ton-kho-noi-bo/kho', [WarehouseCountController::class, 'stockWarehouses']);
 Route::get('/api/ton-kho-noi-bo/chi-tiet-fifo', [WarehouseCountController::class, 'stockFifoDetail']);
 Route::get('/api/ton-kho-noi-bo', [WarehouseCountController::class, 'stockData']);

@@ -20,6 +20,7 @@
         <div class="wms-topbar__actions">
             <button id="voiceStockBtn" type="button" class="wms-btn" title="Tìm bằng giọng nói"><i data-lucide="mic"></i><span class="visually-hidden">Tìm bằng giọng nói</span></button>
             <a id="exportStockBtn" class="wms-btn" href="#"><i data-lucide="download"></i> Xuất CSV</a>
+            <button id="openInventoryReportBtn" type="button" class="wms-btn"><i data-lucide="file-spreadsheet"></i> Báo cáo N-X-T</button>
             <a class="wms-btn" href="{{ url('/client/kiem-ton-kho') }}"><i data-lucide="scan-line"></i> Quét kho</a>
         </div>
     </header>
@@ -133,7 +134,7 @@
                         <div class="col-md-3"><div class="wms-kpi h-100"><div><div class="wms-kpi__label">Tổng nhập</div><div id="fifoReceiptQty" class="wms-kpi__value">0</div></div></div></div>
                         <div class="col-md-3"><div class="wms-kpi h-100"><div><div class="wms-kpi__label">Tổng xuất</div><div id="fifoIssueQty" class="wms-kpi__value">0</div></div></div></div>
                         <div class="col-md-3"><div class="wms-kpi h-100"><div><div class="wms-kpi__label">Còn lại</div><div id="fifoRemainQty" class="wms-kpi__value">0</div></div></div></div>
-                        <div class="col-md-3"><div class="wms-kpi h-100"><div><div class="wms-kpi__label">�m tn</div><div id="fifoOverQty" class="wms-kpi__value text-danger">0</div></div></div></div>
+                        <div class="col-md-3"><div class="wms-kpi h-100"><div><div class="wms-kpi__label">Âm tồn</div><div id="fifoOverQty" class="wms-kpi__value text-danger">0</div></div></div></div>
                     </div>
                     <h3 class="fs-6 mb-2">Phiếu nhập bị trừ theo thứ tự cũ nhất</h3>
                     <div class="wms-table-wrap mb-3">
@@ -154,6 +155,42 @@
         </div>
     </div>
 
+    <div class="modal fade" id="inventoryReportModal" tabindex="-1" aria-labelledby="inventoryReportModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h2 class="modal-title fs-5" id="inventoryReportModalTitle">Xuất báo cáo nhập xuất tồn</h2>
+                        <div class="text-secondary small">Mỗi loại hàng là một sheet Excel riêng.</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label" for="inventoryReportMonth">Tháng báo cáo</label>
+                    <input id="inventoryReportMonth" type="month" class="form-control mb-3" value="{{ now()->format('Y-m') }}">
+
+                    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                        <span class="form-label mb-0">Loại hàng</span>
+                        <div class="d-flex gap-2">
+                            <button id="selectAllReportGroupsBtn" type="button" class="btn btn-sm btn-outline-primary">Chọn tất cả</button>
+                            <button id="clearReportGroupsBtn" type="button" class="btn btn-sm btn-outline-secondary">Bỏ chọn</button>
+                        </div>
+                    </div>
+                    <div id="inventoryReportGroups" class="border rounded p-2" style="max-height: 260px; overflow-y: auto;">
+                        <div class="text-secondary small p-2">Đang tải loại hàng...</div>
+                    </div>
+                    <div class="text-secondary small mt-2">Subtotal được tách theo đơn vị tính để không cộng lẫn KG, MÉT, YARD và PCS.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button id="downloadInventoryReportBtn" type="button" class="btn btn-primary">
+                        <i data-lucide="download"></i> Tải file Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const stockMonthEl = document.getElementById('stockMonth');
@@ -164,10 +201,12 @@
         const accountingCodeModal = new bootstrap.Modal(document.getElementById('accountingCodeModal'));
         const stockLocationModal = new bootstrap.Modal(document.getElementById('stockLocationModal'));
         const stockFifoModal = new bootstrap.Modal(document.getElementById('stockFifoModal'));
+        const inventoryReportModal = new bootstrap.Modal(document.getElementById('inventoryReportModal'));
         let searchTimer = null;
         let mappingSearchTimer = null;
         let stockLocationPayload = null;
         let locationOptionsLoaded = false;
+        let reportGroupsLoaded = false;
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits: 3});
@@ -208,7 +247,7 @@
                     ? '<span class="wms-badge wms-badge--secondary">Đã xuất hết</span>'
                     : remaining > 0
                         ? '<span class="wms-badge">Còn tồn</span>'
-                        : '<span class="wms-badge wms-badge--danger">�m/thiu</span>';
+                        : '<span class="wms-badge wms-badge--danger">Âm/thiu</span>';
                 return `<tr>
                     <td>${esc(lot.document_date || '')}</td>
                     <td class="wms-code">${esc(lot.document_code || '')}</td>
@@ -378,7 +417,7 @@
                         const status = unassigned
                             ? '<span class="wms-badge wms-badge--warning">Chưa xếp</span>'
                             : quantity < 0
-                                ? '<span class="wms-badge wms-badge--danger">�m tn</span>'
+                                ? '<span class="wms-badge wms-badge--danger">Âm tn</span>'
                                 : '<span class="wms-badge">Có tồn</span>';
                         const locationStatus = row.location_count > 1
                             ? `<span class="wms-badge wms-badge--secondary">${num(row.location_count)} vị trí</span>`
@@ -605,6 +644,60 @@
                 loadStock();
             };
             recognition.start();
+        });
+
+        function reportGroupCheckboxes() {
+            return Array.from(document.querySelectorAll('input[name="inventory_report_groups[]"]'));
+        }
+
+        function loadReportGroups() {
+            if (reportGroupsLoaded) return Promise.resolve();
+
+            return fetch('/api/bao-cao-nhap-xuat-ton/loai-hang')
+                .then(response => jsonOrError(response, 'Không tải được danh sách loại hàng'))
+                .then(result => {
+                    const preferredGroups = ['Thun bản', 'Nhãn dệt', 'Nhãn size'];
+                    const groups = result.data || [];
+                    document.getElementById('inventoryReportGroups').innerHTML = groups.length
+                        ? groups.map((group, index) => {
+                            const checked = preferredGroups.includes(group.name) ? ' checked' : '';
+                            return `<label class="d-flex align-items-center justify-content-between gap-3 px-2 py-2${index ? ' border-top' : ''}">
+                                <span class="d-flex align-items-center gap-2">
+                                    <input class="form-check-input mt-0" type="checkbox" name="inventory_report_groups[]" value="${esc(group.name)}"${checked}>
+                                    <span>${esc(group.name)}</span>
+                                </span>
+                                <span class="badge text-bg-light">${num(group.item_count)} mã</span>
+                            </label>`;
+                        }).join('')
+                        : '<div class="text-secondary small p-2">Danh mục chưa có loại hàng.</div>';
+                    reportGroupsLoaded = true;
+                });
+        }
+
+        document.getElementById('openInventoryReportBtn').addEventListener('click', () => {
+            document.getElementById('inventoryReportMonth').value = stockMonthEl.value || '{{ now()->format('Y-m') }}';
+            loadReportGroups()
+                .then(() => inventoryReportModal.show())
+                .catch(error => alert(error.message));
+        });
+
+        document.getElementById('selectAllReportGroupsBtn').addEventListener('click', () => {
+            reportGroupCheckboxes().forEach(checkbox => checkbox.checked = true);
+        });
+
+        document.getElementById('clearReportGroupsBtn').addEventListener('click', () => {
+            reportGroupCheckboxes().forEach(checkbox => checkbox.checked = false);
+        });
+
+        document.getElementById('downloadInventoryReportBtn').addEventListener('click', () => {
+            const month = document.getElementById('inventoryReportMonth').value;
+            const groups = reportGroupCheckboxes().filter(checkbox => checkbox.checked).map(checkbox => checkbox.value);
+            if (!month) return alert('Chọn tháng cần xuất báo cáo.');
+            if (!groups.length) return alert('Chọn ít nhất một loại hàng.');
+
+            const params = new URLSearchParams({month});
+            groups.forEach(group => params.append('groups[]', group));
+            window.location.href = `/api/bao-cao-nhap-xuat-ton/xuat?${params.toString()}`;
         });
 
         topKeywordEl.value = keywordEl.value;

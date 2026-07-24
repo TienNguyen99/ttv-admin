@@ -173,10 +173,11 @@
                         <input id="sourceItemCode" class="form-control" readonly>
                     </div>
                     <div>
-                        <label for="standardItemCode" class="form-label">M&#227; h&#224;ng chu&#7849;n</label>
-                        <input id="standardItemCode" class="form-control" list="standardCatalogOptions" autocomplete="off" placeholder="V&#237; d&#7909;: TT01-BLACK">
-                        <datalist id="standardCatalogOptions"></datalist>
-                        <div class="form-text">Ch&#7881; ch&#7885;n m&#227; c&#243; trong Danh m&#7909;c n&#7897;i b&#7897;.</div>
+                        <label for="standardItemCode" class="form-label">T&#236;m d&#242;ng Danh m&#7909;c chu&#7849;n</label>
+                        <input id="standardCatalogId" type="hidden">
+                        <input id="standardItemCode" class="form-control" autocomplete="off" placeholder="G&#245; m&#227;, t&#234;n h&#224;ng ho&#7863;c m&#224;u">
+                        <select id="standardCatalogResults" class="form-select mt-2" size="6"></select>
+                        <div class="form-text">C&#249;ng m&#7897;t m&#227; c&#243; th&#7875; c&#243; nhi&#7873;u d&#242;ng m&#224;u. H&#227;y ch&#7885;n &#273;&#250;ng t&#234;n h&#224;ng v&#224; m&#224;u.</div>
                     </div>
                     <div id="standardItemStatus" class="small mt-2"></div>
                 </div>
@@ -199,6 +200,8 @@
         let catalogTimer = null;
         const standardModal = new bootstrap.Modal(document.getElementById('standardItemModal'));
         const standardItemCodeEl = document.getElementById('standardItemCode');
+        const standardCatalogIdEl = document.getElementById('standardCatalogId');
+        const standardCatalogResultsEl = document.getElementById('standardCatalogResults');
         const standardItemStatusEl = document.getElementById('standardItemStatus');
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
@@ -223,7 +226,7 @@
             if (!items.length) return '<span class="muted">Chưa có dòng hàng</span>';
             return `<div class="item-stack">${items.map(item => `<span class="item-chip">
                 <strong>${esc(item.item_code || 'Mã trống')}</strong>
-                <button type="button" class="item-chip__edit" title="Sửa mã chuẩn" data-edit-standard="${esc(item.id)}" data-production-order="${esc(item.production_order || '')}" data-source-code="${esc(item.source_item_code || '')}" data-standard-code="${esc(item.standard_item_code || '')}">&#9998;</button>
+                <button type="button" class="item-chip__edit" title="Sửa mã chuẩn" data-edit-standard="${esc(item.id)}" data-production-order="${esc(item.production_order || '')}" data-source-code="${esc(item.source_item_code || '')}" data-standard-code="${esc(item.standard_item_code || '')}" data-standard-catalog-id="${esc(item.standard_catalog_id || '')}">&#9998;</button>
                 ${item.standard_item_code ? `<span class="item-chip__source">Gốc: ${esc(item.source_item_code || '-')}</span>` : ''}
                 ${item.size ? ` · Size ${esc(item.size)}` : ''}
                 ${item.color ? ` · ${esc(item.color)}` : ''}
@@ -239,9 +242,12 @@
             document.getElementById('standardLineId').value = button.dataset.editStandard || '';
             document.getElementById('standardProductionOrder').value = button.dataset.productionOrder || '';
             document.getElementById('sourceItemCode').value = button.dataset.sourceCode || '';
+            standardCatalogIdEl.value = button.dataset.standardCatalogId || '';
             standardItemCodeEl.value = button.dataset.standardCode || button.dataset.sourceCode || '';
+            standardCatalogResultsEl.innerHTML = '';
             standardItemStatusEl.textContent = '';
             standardModal.show();
+            loadCatalogOptions();
             setTimeout(() => {
                 standardItemCodeEl.focus();
                 standardItemCodeEl.select();
@@ -253,12 +259,14 @@
             clearTimeout(catalogTimer);
             if (keyword.length < 2) return;
             catalogTimer = setTimeout(() => {
-                fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(keyword)}&limit=30&with_color=0`)
+                fetch(`/api/danh-muc-noi-bo?keyword=${encodeURIComponent(keyword)}&limit=50`)
                     .then(response => response.json())
                     .then(result => {
-                        document.getElementById('standardCatalogOptions').innerHTML = (result.data || []).map(item =>
-                            `<option value="${esc(item.item_code || '')}">${esc(item.item_name || '')}${item.color ? ` - ${esc(item.color)}` : ''}</option>`
-                        ).join('');
+                        const selectedId = String(standardCatalogIdEl.value || '');
+                        standardCatalogResultsEl.innerHTML = (result.data || []).filter(item => item.item_code).map(item => {
+                            const detail = [item.item_code, item.item_name, item.color, item.size, item.source_row ? `D\u00f2ng ${item.source_row}` : ''].filter(Boolean).join(' - ');
+                            return `<option value="${esc(item.id)}" data-code="${esc(item.item_code || '')}" ${String(item.id) === selectedId ? 'selected' : ''}>${esc(detail)}</option>`;
+                        }).join('');
                     })
                     .catch(() => {});
             }, 120);
@@ -276,7 +284,7 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                 },
-                body: JSON.stringify({ standard_item_code: standardItemCodeEl.value.trim() }),
+                body: JSON.stringify({ standard_catalog_id: standardCatalogIdEl.value ? Number(standardCatalogIdEl.value) : null }),
             })
                 .then(async response => {
                     const result = await response.json().catch(() => ({}));
@@ -425,8 +433,14 @@
             if (button) openStandardItemEditor(button);
         });
         standardItemCodeEl.addEventListener('input', loadCatalogOptions);
+        standardCatalogResultsEl.addEventListener('change', () => {
+            const option = standardCatalogResultsEl.selectedOptions[0];
+            standardCatalogIdEl.value = option?.value || '';
+            if (option?.dataset.code) standardItemCodeEl.value = option.dataset.code;
+        });
         document.getElementById('standardItemForm').addEventListener('submit', saveStandardItem);
         document.getElementById('resetStandardItem').addEventListener('click', () => {
+            standardCatalogIdEl.value = '';
             standardItemCodeEl.value = '';
             document.getElementById('standardItemForm').requestSubmit();
         });

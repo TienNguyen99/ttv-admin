@@ -12,13 +12,17 @@
         .hint { color: #64748b; font-size: 13px; }
         .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; }
         .metric { font-size: 21px; font-weight: 800; }
-        .control-grid { display: grid; grid-template-columns: 1.25fr repeat(6, minmax(108px, 1fr)) 1.3fr auto; gap: 8px; align-items: end; }
+        .control-grid { display: grid; grid-template-columns: 1.25fr repeat(7, minmax(108px, 1fr)) 1.3fr auto; gap: 8px; align-items: end; }
         .form-label { margin-bottom: 4px; color: #475569; font-size: 12px; font-weight: 700; }
         .form-control { min-height: 38px; border-color: #cbd5e1; border-radius: 6px; }
         .line-row { cursor: pointer; }
         .line-row.is-active td { background: #eff6ff; }
         .ratio-chip { display: inline-flex; gap: 4px; align-items: center; padding: 4px 8px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 12px; font-weight: 700; }
         .preview-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 10px; }
+        .orientation-compare { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+        .orientation-option { padding: 5px 8px; border: 1px solid #d7e2f1; border-radius: 6px; background: #f8fafc; color: #475569; font-size: 11px; font-weight: 700; }
+        .orientation-option.is-selected { border-color: #60a5fa; background: #eff6ff; color: #1d4ed8; }
+        .orientation-option.is-invalid { color: #b91c1c; background: #fff1f2; border-color: #fecdd3; }
         .fabric-preview { height: 540px; overflow: auto; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
         .svg-wrap { padding: 12px; width: max-content; min-width: 100%; }
         .tool-actions { display: flex; gap: 8px; align-items: center; }
@@ -44,6 +48,7 @@
             </div>
             <div class="tool-actions">
                 <span id="saveStatus" class="hint"></span>
+                <a href="{{ url('/tools/tinh-met-vai') }}" class="btn btn-outline-primary">Tool kinh doanh</a>
                 <button id="addLineBtn" type="button" class="btn btn-outline-primary">Thêm dòng</button>
                 <button id="exportCsvBtn" type="button" class="btn btn-success">Xuất CSV</button>
             </div>
@@ -51,7 +56,7 @@
 
         <section class="row g-3 mb-3">
             <div class="col-md-3"><div class="panel"><div class="hint">Mã vật tư</div><div id="materialCount" class="metric">0</div></div></div>
-            <div class="col-md-3"><div class="panel"><div class="hint">Tổng pcs cần cắt</div><div id="totalPieces" class="metric">0</div></div></div>
+            <div class="col-md-3"><div class="panel"><div class="hint">Tổng tấm cần cắt</div><div id="totalPieces" class="metric">0</div></div></div>
             <div class="col-md-3"><div class="panel"><div class="hint">Tổng dài vải xuất</div><div id="totalLength" class="metric">0 m</div></div></div>
             <div class="col-md-3"><div class="panel"><div class="hint">Tỷ lệ dùng khổ</div><div id="avgUtilization" class="metric">0%</div></div></div>
         </section>
@@ -67,24 +72,31 @@
                     <input id="fabricWidth" type="number" step="0.01" class="form-control" value="150">
                 </div>
                 <div>
-                    <label class="form-label">Dài chi tiết (cm)</label>
+                    <label class="form-label">Dài tấm (cm)</label>
                     <input id="pieceLength" type="number" step="0.01" class="form-control" value="20">
                 </div>
                 <div>
-                    <label class="form-label">Rộng chi tiết (cm)</label>
+                    <label class="form-label">Rộng tấm (cm)</label>
                     <input id="pieceWidth" type="number" step="0.01" class="form-control" value="5">
                 </div>
                 <div>
-                    <label class="form-label">Pcs / set</label>
+                    <label class="form-label">Sản lượng / tấm (pcs)</label>
                     <input id="pcsPerSet" type="number" step="1" class="form-control" value="1">
                 </div>
                 <div>
-                    <label class="form-label">SL đơn hàng</label>
+                    <label class="form-label">SL đơn hàng (pcs)</label>
                     <input id="orderQty" type="number" step="1" class="form-control" value="1000">
                 </div>
                 <div>
                     <label class="form-label">Hao hụt (%)</label>
                     <input id="wastePercent" type="number" step="0.01" class="form-control" value="3">
+                </div>
+                <div>
+                    <label class="form-label d-block">Hướng cắt</label>
+                    <label class="form-check d-flex align-items-center gap-2 mb-0" style="height:38px">
+                        <input id="autoRotate" class="form-check-input mt-0" type="checkbox" checked>
+                        <span class="small fw-semibold">Tự xoay 90°</span>
+                    </label>
                 </div>
                 <div>
                     <label class="form-label">Ghi chú</label>
@@ -110,7 +122,7 @@
                                 <tr>
                                     <th>Mã vải</th>
                                     <th class="text-end">Khổ</th>
-                                    <th class="text-end">Pcs</th>
+                                    <th class="text-end">Số tấm</th>
                                     <th class="text-end">SL xuất</th>
                                 </tr>
                             </thead>
@@ -125,6 +137,7 @@
                         <div>
                             <h2 class="h6 mb-1">Editor grid cuộn ngang</h2>
                             <div id="previewHint" class="hint">Chọn một dòng để xem sơ đồ cắt.</div>
+                            <div id="orientationCompare" class="orientation-compare"></div>
                         </div>
                         <div class="d-flex gap-2 align-items-center">
                             <label class="hint">Zoom</label>
@@ -144,10 +157,10 @@
     <script>
         const storageKey = 'ttv.materialCalculator.fabricCut.v2';
         const legacyStorageKey = 'ttv.materialCalculator.fabricCut.v1';
-        const fields = ['materialCode','fabricWidth','pieceLength','pieceWidth','pcsPerSet','orderQty','wastePercent','lineNote'];
+        const fields = ['materialCode','fabricWidth','pieceLength','pieceWidth','pcsPerSet','orderQty','wastePercent','autoRotate','lineNote'];
         const newId = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `line-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const defaultLines = [
-            { id: newId(), materialCode: 'VAI-MAU', fabricWidth: 150, pieceLength: 20, pieceWidth: 5, pcsPerSet: 1, orderQty: 1000, wastePercent: 3, lineNote: 'Dòng mẫu' }
+            { id: newId(), materialCode: 'VAI-MAU', fabricWidth: 150, pieceLength: 25, pieceWidth: 20, pcsPerSet: 30, orderQty: 1000, wastePercent: 3, autoRotate: true, lineNote: 'Dòng mẫu' }
         ];
         let lines = loadSavedLines();
         let activeId = lines[0].id;
@@ -188,18 +201,51 @@
 
         function calcLine(line) {
             const fabricWidth = Math.max(num(line.fabricWidth), 0);
-            const pieceWidth = Math.max(num(line.pieceWidth), 0);
-            const pieceLength = Math.max(num(line.pieceLength), 0);
+            const originalPieceWidth = Math.max(num(line.pieceWidth), 0);
+            const originalPieceLength = Math.max(num(line.pieceLength), 0);
             const pcsPerSet = Math.max(Math.floor(num(line.pcsPerSet)), 1);
             const orderQty = Math.max(Math.ceil(num(line.orderQty)), 0);
             const wastePercent = Math.max(num(line.wastePercent), 0);
             const requiredPieces = Math.ceil(orderQty / pcsPerSet);
-            const piecesPerColumn = pieceWidth > 0 ? Math.max(Math.floor(fabricWidth / pieceWidth), 0) : 0;
-            const columnsNeeded = piecesPerColumn > 0 ? Math.ceil(requiredPieces / piecesPerColumn) : 0;
-            const rawLengthCm = columnsNeeded * pieceLength;
-            const outputLengthCm = rawLengthCm * (1 + wastePercent / 100);
-            const utilization = fabricWidth > 0 && piecesPerColumn > 0 ? (piecesPerColumn * pieceWidth / fabricWidth) * 100 : 0;
-            return { fabricWidth, pieceWidth, pieceLength, pcsPerSet, orderQty, wastePercent, requiredPieces, piecesPerColumn, columnsNeeded, rawLengthCm, outputLengthCm, utilization };
+            const autoRotate = line.autoRotate !== false;
+
+            const createPlan = (pieceLength, pieceWidth, rotated) => {
+                const piecesPerColumn = pieceWidth > 0 ? Math.floor(fabricWidth / pieceWidth) : 0;
+                const columnsNeeded = piecesPerColumn > 0 ? Math.ceil(requiredPieces / piecesPerColumn) : 0;
+                const rawLengthCm = columnsNeeded * pieceLength;
+                const outputLengthCm = rawLengthCm * (1 + wastePercent / 100);
+                const usedArea = requiredPieces * originalPieceLength * originalPieceWidth;
+                const utilization = fabricWidth > 0 && rawLengthCm > 0 ? (usedArea / (fabricWidth * rawLengthCm)) * 100 : 0;
+                return { pieceLength, pieceWidth, piecesPerColumn, columnsNeeded, rawLengthCm, outputLengthCm, utilization, rotated };
+            };
+
+            const normal = createPlan(originalPieceLength, originalPieceWidth, false);
+            const rotated = createPlan(originalPieceWidth, originalPieceLength, true);
+            const normalValid = normal.piecesPerColumn > 0;
+            const rotatedValid = rotated.piecesPerColumn > 0;
+            let selected = normal;
+
+            if (autoRotate && rotatedValid && (!normalValid || rotated.rawLengthCm < normal.rawLengthCm)) {
+                selected = rotated;
+            }
+
+            if (!selected.piecesPerColumn) {
+                selected = { ...selected, columnsNeeded: 0, rawLengthCm: 0, outputLengthCm: 0, utilization: 0 };
+            }
+
+            return {
+                fabricWidth,
+                originalPieceWidth,
+                originalPieceLength,
+                pcsPerSet,
+                orderQty,
+                wastePercent,
+                requiredPieces,
+                autoRotate,
+                normalPlan: normal,
+                rotatedPlan: rotated,
+                ...selected,
+            };
         }
 
         function fillForm(line) {
@@ -210,6 +256,7 @@
             document.getElementById('pcsPerSet').value = line.pcsPerSet || '';
             document.getElementById('orderQty').value = line.orderQty || '';
             document.getElementById('wastePercent').value = line.wastePercent || '';
+            document.getElementById('autoRotate').checked = line.autoRotate !== false;
             document.getElementById('lineNote').value = line.lineNote || '';
         }
 
@@ -223,6 +270,7 @@
                 pcsPerSet: num(value('pcsPerSet')),
                 orderQty: num(value('orderQty')),
                 wastePercent: num(value('wastePercent')),
+                autoRotate: document.getElementById('autoRotate').checked,
                 lineNote: value('lineNote').trim(),
             };
         }
@@ -300,12 +348,12 @@
                     const seq = pieceIndex + 1;
                     const tooltip = [
                         `Mã vật tư: ${line.materialCode}`,
-                        `Pcs #${seq}`,
-                        `Cột dài: ${column + 1}`,
-                        `Vị trí theo khổ: ${row + 1}`,
-                        `Chi tiết: ${fmt(calc.pieceLength)} x ${fmt(calc.pieceWidth)} cm`,
+                        `Tấm #${seq}`,
+                        `Hàng dọc: ${column + 1}`,
+                        `Vị trí ngang khổ: ${row + 1}`,
+                        `Hướng cắt: ${fmt(calc.pieceLength)} dọc x ${fmt(calc.pieceWidth)} ngang`,
                         `Khổ vải: ${fmt(calc.fabricWidth)} cm`,
-                        `Pcs mỗi cột: ${fmt(calc.piecesPerColumn)}`,
+                        `Tấm mỗi hàng: ${fmt(calc.piecesPerColumn)}`,
                         `Hao hụt: ${fmt(calc.wastePercent)}%`,
                         `Chiều dài xuất: ${fmt(calc.outputLengthCm / 100)} m`
                     ].join('\n');
@@ -326,8 +374,21 @@
             }
 
             svg.innerHTML = markup;
-            document.getElementById('previewHint').textContent = `${line.materialCode}: ${fmt(calc.requiredPieces)} pcs cần cắt, ${fmt(calc.piecesPerColumn)} pcs / cột, ${fmt(calc.columnsNeeded)} cột ngang, xuất ${fmt(calc.outputLengthCm / 100)} m`;
-            document.getElementById('activeRatio').textContent = `${fmt(calc.piecesPerColumn)} pcs / cột`;
+            const orientation = calc.rotated ? 'đã xoay 90°' : 'giữ nguyên';
+            document.getElementById('previewHint').textContent = `${line.materialCode}: ${fmt(calc.requiredPieces)} tấm · ${fmt(calc.pieceLength)} cm dọc × ${fmt(calc.pieceWidth)} cm ngang (${orientation}) · ${fmt(calc.piecesPerColumn)} tấm / hàng · xuất ${fmt(calc.outputLengthCm / 100)} m`;
+            document.getElementById('activeRatio').textContent = `${fmt(calc.piecesPerColumn)} tấm / hàng`;
+            const planOption = (plan, label, selected) => {
+                const invalid = plan.piecesPerColumn <= 0;
+                const classes = `orientation-option${selected ? ' is-selected' : ''}${invalid ? ' is-invalid' : ''}`;
+                const result = invalid
+                    ? 'không vừa khổ'
+                    : `${fmt(plan.piecesPerColumn)} tấm/hàng · ${fmt(plan.outputLengthCm / 100)} m`;
+                return `<span class="${classes}">${label}: ${result}</span>`;
+            };
+            document.getElementById('orientationCompare').innerHTML = [
+                planOption(calc.normalPlan, `${fmt(calc.originalPieceLength)} dọc × ${fmt(calc.originalPieceWidth)} ngang`, !calc.rotated),
+                planOption(calc.rotatedPlan, `${fmt(calc.originalPieceWidth)} dọc × ${fmt(calc.originalPieceLength)} ngang`, calc.rotated)
+            ].join('');
         }
 
         function render() {
@@ -348,7 +409,7 @@
         });
 
         document.getElementById('addLineBtn').addEventListener('click', () => {
-            const next = { id: newId(), materialCode: 'VAI-MOI', fabricWidth: 150, pieceLength: 20, pieceWidth: 5, pcsPerSet: 1, orderQty: 1000, wastePercent: 3, lineNote: '' };
+            const next = { id: newId(), materialCode: 'VAI-MOI', fabricWidth: 150, pieceLength: 25, pieceWidth: 20, pcsPerSet: 30, orderQty: 1000, wastePercent: 3, autoRotate: true, lineNote: '' };
             lines.push(next);
             activeId = next.id;
             saveLines();
@@ -380,10 +441,10 @@
         }));
 
         document.getElementById('exportCsvBtn').addEventListener('click', () => {
-            const headers = ['ma_vat_tu','kho_vai_cm','dai_chi_tiet_cm','rong_chi_tiet_cm','pcs_set','so_luong_don_hang_pcs','hao_hut_percent','pcs_can_cat','pcs_moi_cot','so_cot_cat','chieu_dai_xuat_m','ghi_chu'];
+            const headers = ['ma_vat_tu','kho_vai_cm','dai_tam_cm','rong_tam_cm','san_luong_moi_tam_pcs','so_luong_don_hang_pcs','hao_hut_percent','so_tam_can_cat','tu_dong_xoay','huong_dai_doc_cm','huong_rong_ngang_cm','tam_moi_hang','so_hang_cat','chieu_dai_xuat_m','ghi_chu'];
             const rows = lines.map(line => {
                 const calc = calcLine(line);
-                return [line.materialCode, line.fabricWidth, line.pieceLength, line.pieceWidth, line.pcsPerSet, line.orderQty, line.wastePercent, calc.requiredPieces, calc.piecesPerColumn, calc.columnsNeeded, (calc.outputLengthCm / 100).toFixed(3), line.lineNote];
+                return [line.materialCode, line.fabricWidth, line.pieceLength, line.pieceWidth, line.pcsPerSet, line.orderQty, line.wastePercent, calc.requiredPieces, calc.autoRotate ? 1 : 0, calc.pieceLength, calc.pieceWidth, calc.piecesPerColumn, calc.columnsNeeded, (calc.outputLengthCm / 100).toFixed(3), line.lineNote];
             });
             const csv = [headers, ...rows].map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

@@ -21,6 +21,17 @@
         .catalog-image-drop.is-uploading { opacity:.65; pointer-events:none; }
         .catalog-image-drop img { width:100%; height:58px; object-fit:cover; border-radius:7px; display:block; }
         .catalog-image-help { font-size:10px; line-height:1.2; }
+        .split-dialog { width:min(980px, calc(100vw - 32px)); max-height:86vh; padding:0; border:0; border-radius:14px; box-shadow:0 24px 70px rgba(15,23,42,.3); }
+        .split-dialog::backdrop { background:rgba(15,23,42,.5); }
+        .split-dialog__header, .split-dialog__footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; }
+        .split-dialog__header { border-bottom:1px solid #dbe7f3; }
+        .split-dialog__footer { border-top:1px solid #dbe7f3; }
+        .split-dialog__body { padding:16px; overflow:auto; max-height:62vh; }
+        .split-code-input { min-width:190px; height:34px; font-weight:700; color:#155eef; }
+        .catalog-customer-list { max-width:220px; line-height:1.35; }
+        .catalog-edit-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
+        .catalog-edit-grid .wide { grid-column:span 2; }
+        @media (max-width:760px) { .catalog-edit-grid { grid-template-columns:1fr; } .catalog-edit-grid .wide { grid-column:auto; } }
     </style>
 </head>
 <body>
@@ -34,6 +45,7 @@
         </div>
         <div class="wms-topbar__actions">
             <button id="syncCatalogBtn" class="wms-btn wms-btn--primary"><i data-lucide="refresh-cw"></i> Đồng bộ DANH MỤC</button>
+            <button id="splitDuplicateCodesBtn" class="wms-btn"><i data-lucide="split"></i> Tách mã trùng</button>
             <button id="syncShelvesBtn" class="wms-btn"><i data-lucide="map-pinned"></i> Đồng bộ kệ sang vị trí</button>
         </div>
     </header>
@@ -46,7 +58,7 @@
                 <p>Đồng bộ tab <strong>DANH MỤC</strong> từ file QUANLY-VATTU vào database kho nội bộ.</p>
             </div>
             <div class="sync-note">
-                Google Sheet chỉ đọc · Autocomplete đọc database nội bộ
+                Google Sheet đọc tự động · Ghi chỉ khi xác nhận tách mã
                 <div id="catalogSyncResult"></div>
             </div>
         </div>
@@ -58,8 +70,10 @@
             <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="clock-3"></i></div><div><div class="wms-kpi__label">Cập nhật</div><div class="wms-kpi__value" style="font-size:16px">Nội bộ</div><div id="catalogLastSync" class="wms-kpi__meta">Chưa đồng bộ</div></div></article>
         </section>
 
-        <section class="wms-filterbar" style="grid-template-columns:minmax(260px,1fr) auto">
-            <div><label for="catalogKeyword">Tìm kiếm</label><input id="catalogKeyword" class="form-control" placeholder="Mã hàng, tên hàng, ĐVT hoặc kệ..."></div>
+        <section class="wms-filterbar" style="grid-template-columns:minmax(260px,1fr) minmax(170px,220px) minmax(170px,220px) auto">
+            <div><label for="catalogKeyword">Tìm kiếm</label><input id="catalogKeyword" class="form-control" placeholder="Mã, tên hàng, khách, loại hoặc kệ..."></div>
+            <div><label for="catalogCustomer">Khách hàng</label><select id="catalogCustomer" class="form-select"><option value="">Tất cả khách hàng</option></select></div>
+            <div><label for="catalogGroup">Nhóm hàng</label><select id="catalogGroup" class="form-select"><option value="">Tất cả nhóm hàng</option></select></div>
             <div><button id="clearCatalogFilter" class="wms-btn"><i data-lucide="filter-x"></i> Xóa lọc</button></div>
         </section>
 
@@ -112,8 +126,8 @@
             <div class="wms-panel__header"><h2>Danh sách mã nội bộ</h2><span id="catalogResultLabel" class="text-secondary small">Đang tải...</span></div>
             <div class="wms-table-wrap">
                 <table class="wms-table catalog-table">
-                    <thead><tr><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Size</th><th>Màu</th><th>Màu in</th><th>Mặt</th><th>Kệ</th><th class="text-end">Tồn đầu</th><th>Dòng nguồn</th></tr></thead>
-                    <tbody id="catalogRows"><tr><td colspan="10" class="wms-loading">Chưa có dữ liệu. Bấm Đồng bộ DANH MỤC.</td></tr></tbody>
+                    <thead><tr><th>Mã hàng</th><th>Tên hàng</th><th>Nhóm hàng</th><th>Khách hàng</th><th>ĐVT</th><th>Size</th><th>Màu</th><th>Màu in</th><th>Mặt</th><th>Kệ</th><th class="text-end">Tồn đầu</th><th>Dòng nguồn</th><th></th></tr></thead>
+                    <tbody id="catalogRows"><tr><td colspan="13" class="wms-loading">Chưa có dữ liệu. Bấm Đồng bộ DANH MỤC.</td></tr></tbody>
                 </table>
             </div>
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
@@ -131,6 +145,51 @@
         </section>
     </main>
 
+    <dialog id="splitDuplicateDialog" class="split-dialog">
+        <div class="split-dialog__header">
+            <div><strong>Tách mã trùng</strong><div id="splitDuplicateSummary" class="sync-note"></div></div>
+            <button id="closeSplitDuplicateDialog" type="button" class="btn-close" aria-label="Đóng"></button>
+        </div>
+        <div class="split-dialog__body">
+            <div id="splitDuplicateNotice" class="alert alert-info py-2"></div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>Dòng Sheet</th><th>Mã hiện tại</th><th>Mã mới</th><th>Tên hàng / màu</th></tr></thead>
+                    <tbody id="splitDuplicateRows"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="split-dialog__footer">
+            <button id="cancelSplitDuplicate" type="button" class="wms-btn">Hủy</button>
+            <button id="applySplitDuplicate" type="button" class="wms-btn wms-btn--primary">Tách + ghi Google Sheet</button>
+        </div>
+    </dialog>
+
+    <dialog id="editCatalogDialog" class="split-dialog">
+        <div class="split-dialog__header">
+            <div><strong>Sửa danh mục</strong><div id="editCatalogSource" class="sync-note"></div></div>
+            <button id="closeEditCatalogDialog" type="button" class="btn-close" aria-label="Đóng"></button>
+        </div>
+        <form id="editCatalogForm">
+            <div class="split-dialog__body">
+                <div id="editCatalogNotice" class="alert alert-info py-2">Chỉ ghi đúng dòng này trong tab DANH MỤC.</div>
+                <div class="catalog-edit-grid">
+                    <div><label for="editCatalogCode">Mã hàng</label><input id="editCatalogCode" class="form-control" maxlength="200"></div>
+                    <div class="wide"><label for="editCatalogName">Tên hàng *</label><input id="editCatalogName" class="form-control" maxlength="500" required></div>
+                    <div><label for="editCatalogType">LOẠI trên Sheet</label><input id="editCatalogType" class="form-control" maxlength="100" list="catalogTypeOptions"><datalist id="catalogTypeOptions"><option value="TP"><option value="BTP"><option value="TPTHUN"><option value="SOI"><option value="VT"><option value="HC"><option value="KEO"><option value="MUC"><option value="SLC"><option value="TPU"></datalist></div>
+                    <div><label for="editCatalogUnit">Đơn vị tính</label><input id="editCatalogUnit" class="form-control" maxlength="50"></div>
+                    <div><label for="editCatalogShelf">Kệ</label><input id="editCatalogShelf" class="form-control" maxlength="150"></div>
+                    <div><label for="editCatalogOpening">Tồn đầu</label><input id="editCatalogOpening" class="form-control" type="number" step="0.001"></div>
+                </div>
+                <p class="sync-note mt-3 mb-0">Khách hàng lấy từ Lệnh sản xuất trung tâm nên không chỉnh tại đây.</p>
+            </div>
+            <div class="split-dialog__footer">
+                <button id="cancelEditCatalog" type="button" class="wms-btn">Hủy</button>
+                <button id="saveEditCatalog" type="submit" class="wms-btn wms-btn--primary">Lưu vào Google Sheet</button>
+            </div>
+        </form>
+    </dialog>
+
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const rowsEl = document.getElementById('catalogRows');
@@ -139,6 +198,8 @@
         const topKeywordEl = document.getElementById('topCatalogKeyword');
         const invalidCodeTypeEl = document.getElementById('invalidCodeType');
         const invalidCodeKeywordEl = document.getElementById('invalidCodeKeyword');
+        const catalogCustomerEl = document.getElementById('catalogCustomer');
+        const catalogGroupEl = document.getElementById('catalogGroup');
         let searchTimer = null;
         let invalidCodeSearchTimer = null;
         let catalogPage = 1;
@@ -147,8 +208,22 @@
         let invalidCodeTotalPages = 1;
         let activeImageCatalogId = null;
         const catalogImageInput = document.getElementById('catalogImageInput');
+        const splitDuplicateDialog = document.getElementById('splitDuplicateDialog');
+        const editCatalogDialog = document.getElementById('editCatalogDialog');
+        const editCatalogForm = document.getElementById('editCatalogForm');
+        let splitDuplicateCode = '';
+        let editingCatalogId = null;
+        let catalogRowsById = new Map();
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits:3});
+
+        function updateFacetOptions(select, values, emptyLabel) {
+            const selected = select.value;
+            select.innerHTML = `<option value="">${esc(emptyLabel)}</option>` + (values || [])
+                .map(value => `<option value="${esc(value)}">${esc(value)}</option>`)
+                .join('');
+            if (Array.from(select.options).some(option => option.value === selected)) select.value = selected;
+        }
 
         function jsonOrError(response, fallback) {
             if (response.ok) return response.json();
@@ -216,7 +291,9 @@
                 per_page: document.getElementById('catalogPerPage').value || 100,
             });
             if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
-            rowsEl.innerHTML = '<tr><td colspan="10" class="wms-loading">Đang tải dữ liệu...</td></tr>';
+            if (catalogCustomerEl.value) params.set('customer', catalogCustomerEl.value);
+            if (catalogGroupEl.value) params.set('group', catalogGroupEl.value);
+            rowsEl.innerHTML = '<tr><td colspan="13" class="wms-loading">Đang tải dữ liệu...</td></tr>';
 
             fetch('/api/danh-muc-noi-bo?' + params.toString())
                 .then(response => jsonOrError(response, 'Không tải được danh mục nội bộ'))
@@ -228,6 +305,8 @@
                     document.getElementById('catalogLastSync').textContent = summary.last_synced_at
                         ? new Date(summary.last_synced_at).toLocaleString('vi-VN')
                         : 'Chưa đồng bộ';
+                    updateFacetOptions(catalogCustomerEl, result.facets?.customers, 'Tất cả khách hàng');
+                    updateFacetOptions(catalogGroupEl, result.facets?.groups, 'Tất cả nhóm hàng');
                     const pagination = result.pagination || {};
                     catalogPage = Number(pagination.page || catalogPage || 1);
                     catalogTotalPages = Math.max(1, Number(pagination.total_pages || 1));
@@ -235,6 +314,7 @@
                     document.getElementById('catalogPageLabel').textContent = `Trang ${num(catalogPage)} / ${num(catalogTotalPages)}`;
                     document.getElementById('catalogPrevPage').disabled = catalogPage <= 1;
                     document.getElementById('catalogNextPage').disabled = !pagination.has_more;
+                    catalogRowsById = new Map((result.data || []).map(row => [String(row.id), row]));
                     rowsEl.innerHTML = (result.data || []).map(row => {
                         const colorLabel = row.color_name || row.color || row.pantone_code || row.pantone_hex || '-';
                         return `<tr>
@@ -245,6 +325,8 @@
                                 <div>${esc(row.item_name || '-')}</div>
                             </div>
                         </td>
+                        <td>${esc(row.item_group || 'Chưa phân nhóm')}</td>
+                        <td class="catalog-customer-list" title="${esc((row.customers || []).join(', '))}">${esc((row.customers || []).slice(0, 3).join(', ') || '-')}${(row.customers || []).length > 3 ? ` +${num(row.customers.length - 3)}` : ''}</td>
                         <td>${esc(row.unit || '-')}</td>
                         <td>${esc(row.size || '-')}</td>
                         <td>${colorLabel !== '-' ? `<span class="color-chip">${row.pantone_hex ? `<span class="color-swatch" style="--swatch:${esc(row.pantone_hex)}"></span>` : ''}<span>${esc(colorLabel)}${row.pantone_code ? ` · ${esc(row.pantone_code)}` : ''}</span></span>` : '-'}</td>
@@ -253,10 +335,11 @@
                         <td>${esc(row.shelf_code || '-')}</td>
                         <td class="wms-number">${num(row.opening_quantity)}</td>
                         <td>${num(row.source_row)}</td>
+                        <td><button type="button" class="wms-btn" data-edit-catalog="${esc(row.id)}">Sửa</button></td>
                     </tr>`;
-                    }).join('') || '<tr><td colspan="10" class="wms-empty">Không có mã phù hợp.</td></tr>';
+                    }).join('') || '<tr><td colspan="13" class="wms-empty">Không có mã phù hợp.</td></tr>';
                 })
-                .catch(error => rowsEl.innerHTML = `<tr><td colspan="10" class="wms-empty text-danger">${esc(error.message)}</td></tr>`);
+                .catch(error => rowsEl.innerHTML = `<tr><td colspan="13" class="wms-empty text-danger">${esc(error.message)}</td></tr>`);
         }
 
         function loadInvalidCodes() {
@@ -302,6 +385,81 @@
                 .catch(error => {
                     document.getElementById('invalidCodeResultLabel').textContent = 'Loi quet';
                     invalidCodeRowsEl.innerHTML = `<tr><td colspan="13" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
+                });
+        }
+
+        function requestSplitDuplicate(apply = false) {
+            const code = splitDuplicateCode || keywordEl.value.trim() || topKeywordEl.value.trim();
+            if (!code) {
+                alert('Nhập chính xác mã đang bị trùng vào ô tìm kiếm trước.');
+                return;
+            }
+            splitDuplicateCode = code;
+            const notice = document.getElementById('splitDuplicateNotice');
+            const applyButton = document.getElementById('applySplitDuplicate');
+            notice.className = 'alert alert-info py-2';
+            notice.textContent = apply ? 'Đang ghi Google Sheet...' : 'Đang tạo bản xem trước...';
+            applyButton.disabled = true;
+            const editedChanges = apply ? Array.from(document.querySelectorAll('[data-split-id]')).map(input => ({
+                id: Number(input.dataset.splitId),
+                new_code: input.value.trim(),
+                input,
+            })) : [];
+            const emptyChange = editedChanges.find(change => !change.new_code);
+            if (emptyChange) {
+                notice.className = 'alert alert-danger py-2';
+                notice.textContent = 'Mã mới không được để trống.';
+                applyButton.disabled = false;
+                emptyChange.input.focus();
+                return;
+            }
+
+            fetch('/api/danh-muc-noi-bo/tach-ma-trung', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({
+                    code,
+                    apply,
+                    changes: apply ? editedChanges.map(({id, new_code}) => ({id, new_code})) : undefined,
+                }),
+            })
+                .then(async response => {
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        const validationMessage = result.errors
+                            ? Object.values(result.errors).flat().find(Boolean)
+                            : '';
+                        const error = new Error(validationMessage || result.message || 'Không tách được mã trùng.');
+                        error.result = result;
+                        throw error;
+                    }
+                    return result;
+                })
+                .then(result => {
+                    const data = result.data || {};
+                    const changes = data.changes || [];
+                    document.getElementById('splitDuplicateSummary').textContent = `${data.code || code} · ${num(changes.length)} dòng sẽ đổi`;
+                    document.getElementById('splitDuplicateRows').innerHTML = changes.map(change => `<tr>
+                        <td>${num(change.source_row)}</td>
+                        <td class="wms-code">${esc(change.old_code)}</td>
+                        <td><input class="wms-input split-code-input" data-split-id="${esc(change.id)}" maxlength="200" value="${esc(change.new_code)}" aria-label="Mã mới dòng ${num(change.source_row)}"></td>
+                        <td>${esc(change.item_name || '-')}${change.color ? `<div class="sync-note">${esc(change.color)}</div>` : ''}</td>
+                    </tr>`).join('') || '<tr><td colspan="4" class="text-center text-secondary">Mã này không trùng.</td></tr>';
+                    notice.className = result.write_configured ? 'alert alert-success py-2' : 'alert alert-warning py-2';
+                    notice.textContent = result.write_configured
+                        ? (apply ? result.message : 'Đã sẵn sàng. Kiểm tra danh sách trước khi ghi Google Sheet.')
+                        : 'Chưa có quyền ghi Google Sheet. Chưa thay đổi dữ liệu.';
+                    applyButton.disabled = !result.write_configured || !changes.length || apply;
+                    if (apply) {
+                        loadCatalog();
+                        setTimeout(() => splitDuplicateDialog.close(), 900);
+                    }
+                })
+                .catch(error => {
+                    const result = error.result || {};
+                    notice.className = 'alert alert-danger py-2';
+                    notice.textContent = error.message;
+                    applyButton.disabled = !result.write_configured;
                 });
         }
 
@@ -372,11 +530,80 @@
             searchTimer = setTimeout(loadCatalog, 250);
         }
 
+        function openCatalogEditor(row) {
+            editingCatalogId = row.id;
+            document.getElementById('editCatalogSource').textContent = `Dòng Sheet ${num(row.source_row)} · ${row.item_code || 'Chưa có mã'}`;
+            document.getElementById('editCatalogCode').value = row.item_code || '';
+            document.getElementById('editCatalogName').value = row.item_name || '';
+            document.getElementById('editCatalogType').value = row.source_type || '';
+            document.getElementById('editCatalogUnit').value = row.unit || '';
+            document.getElementById('editCatalogShelf').value = row.shelf_code || '';
+            document.getElementById('editCatalogOpening').value = Number(row.opening_quantity || 0);
+            const notice = document.getElementById('editCatalogNotice');
+            notice.className = 'alert alert-info py-2';
+            notice.textContent = 'Chỉ ghi đúng dòng này trong tab DANH MỤC.';
+            editCatalogDialog.showModal();
+        }
+
+        rowsEl.addEventListener('click', event => {
+            const button = event.target.closest('[data-edit-catalog]');
+            if (!button) return;
+            const row = catalogRowsById.get(String(button.dataset.editCatalog));
+            if (row) openCatalogEditor(row);
+        });
+
+        editCatalogForm.addEventListener('submit', event => {
+            event.preventDefault();
+            if (!editingCatalogId) return;
+            const notice = document.getElementById('editCatalogNotice');
+            const saveButton = document.getElementById('saveEditCatalog');
+            const payload = {
+                item_code: document.getElementById('editCatalogCode').value.trim(),
+                item_name: document.getElementById('editCatalogName').value.trim(),
+                source_type: document.getElementById('editCatalogType').value.trim(),
+                unit: document.getElementById('editCatalogUnit').value.trim(),
+                shelf_code: document.getElementById('editCatalogShelf').value.trim(),
+                opening_quantity: document.getElementById('editCatalogOpening').value || 0,
+            };
+            if (!payload.item_name) {
+                notice.className = 'alert alert-danger py-2';
+                notice.textContent = 'Tên hàng không được để trống.';
+                return;
+            }
+            saveButton.disabled = true;
+            notice.className = 'alert alert-info py-2';
+            notice.textContent = 'Đang ghi Google Sheet...';
+            fetch(`/api/danh-muc-noi-bo/${encodeURIComponent(editingCatalogId)}`, {
+                method: 'PATCH',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify(payload),
+            }).then(async response => {
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const validationMessage = result.errors ? Object.values(result.errors).flat().find(Boolean) : '';
+                    throw new Error(validationMessage || result.message || 'Không cập nhật được danh mục.');
+                }
+                return result;
+            }).then(result => {
+                notice.className = 'alert alert-success py-2';
+                notice.textContent = result.message;
+                loadCatalog();
+                setTimeout(() => editCatalogDialog.close(), 700);
+            }).catch(error => {
+                notice.className = 'alert alert-danger py-2';
+                notice.textContent = error.message;
+            }).finally(() => saveButton.disabled = false);
+        });
+
         keywordEl.addEventListener('input', () => queueSearch(keywordEl));
         topKeywordEl.addEventListener('input', () => queueSearch(topKeywordEl));
+        catalogCustomerEl.addEventListener('change', () => { catalogPage = 1; loadCatalog(); });
+        catalogGroupEl.addEventListener('change', () => { catalogPage = 1; loadCatalog(); });
         document.getElementById('clearCatalogFilter').addEventListener('click', () => {
             keywordEl.value = '';
             topKeywordEl.value = '';
+            catalogCustomerEl.value = '';
+            catalogGroupEl.value = '';
             catalogPage = 1;
             loadCatalog();
         });
@@ -463,6 +690,24 @@
                 loadInvalidCodes();
             }
         });
+        document.getElementById('splitDuplicateCodesBtn').addEventListener('click', () => {
+            splitDuplicateCode = keywordEl.value.trim() || topKeywordEl.value.trim();
+            if (!splitDuplicateCode) {
+                alert('Tìm chính xác một mã trùng, ví dụ GC-PULLER, rồi bấm Tách mã trùng.');
+                return;
+            }
+            splitDuplicateDialog.showModal();
+            requestSplitDuplicate(false);
+        });
+        document.getElementById('applySplitDuplicate').addEventListener('click', () => {
+            if (confirm(`Ghi các mã mới của ${splitDuplicateCode} lên Google Sheet và database nội bộ?`)) {
+                requestSplitDuplicate(true);
+            }
+        });
+        document.getElementById('closeSplitDuplicateDialog').addEventListener('click', () => splitDuplicateDialog.close());
+        document.getElementById('cancelSplitDuplicate').addEventListener('click', () => splitDuplicateDialog.close());
+        document.getElementById('closeEditCatalogDialog').addEventListener('click', () => editCatalogDialog.close());
+        document.getElementById('cancelEditCatalog').addEventListener('click', () => editCatalogDialog.close());
         document.getElementById('catalogPrevPage').disabled = true;
         document.getElementById('catalogNextPage').disabled = true;
         document.getElementById('invalidCodePrevPage').disabled = true;

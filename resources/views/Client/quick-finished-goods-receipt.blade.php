@@ -366,6 +366,22 @@
 
         .quick-status.is-error { color: #b91c1c; }
         .quick-status.is-ok { color: var(--quick-good); }
+        .variant-dialog { width:min(920px,calc(100% - 24px)); max-height:min(760px,calc(100vh - 32px)); padding:0; border:0; border-radius:16px; background:#fff; box-shadow:0 24px 70px rgba(15,47,99,.24); }
+        .variant-dialog::backdrop { background:rgba(15,23,42,.48); backdrop-filter:blur(2px); }
+        .variant-dialog__head,.variant-dialog__foot { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; }
+        .variant-dialog__head { border-bottom:1px solid #dbeafe; }
+        .variant-dialog__head h2 { margin:0; color:#0f2f63; font-size:18px; font-weight:800; }
+        .variant-dialog__head p { margin:3px 0 0; color:#64748b; font-size:12px; }
+        .variant-dialog__body { max-height:520px; overflow:auto; padding:12px 16px; }
+        .variant-size-entry { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-bottom:12px; padding:10px; border:1px solid #bfdbfe; border-radius:12px; background:#f8fbff; }
+        .variant-size-entry small { grid-column:1 / -1; color:#64748b; }
+        .variant-dialog__foot { border-top:1px solid #dbeafe; background:#f8fbff; }
+        .variant-table { width:100%; min-width:680px; border-collapse:collapse; }
+        .variant-table th { padding:8px; background:#eaf4ff; color:#0f2f63; font-size:11px; text-transform:uppercase; }
+        .variant-table td { padding:7px 8px; border-bottom:1px solid #e2e8f0; vertical-align:middle; font-size:13px; }
+        .variant-code-input { min-width:190px; font-family:Consolas,monospace; text-transform:uppercase; }
+        .variant-existing { color:#15803d; font-size:11px; font-weight:800; }
+        .variant-missing { color:#b45309; font-size:11px; font-weight:800; }
 
         @media (max-width: 1100px) {
             .quick-grid { grid-template-columns: 1fr; }
@@ -460,13 +476,40 @@
         </div>
     </main>
 
+    <dialog id="variantDialog" class="variant-dialog">
+        <div class="variant-dialog__head">
+            <div><h2>Tạo mã theo size</h2><p id="variantDialogSummary"></p></div>
+            <button id="closeVariantDialog" class="quick-btn" type="button" aria-label="Đóng"><i data-lucide="x"></i></button>
+        </div>
+        <div class="variant-dialog__body">
+            <div id="variantSizeEntry" class="variant-size-entry d-none">
+                <input id="variantSizeInput" class="form-control" autocomplete="off" placeholder="Dán danh sách size: 35, 36, 37, 38...">
+                <button id="previewVariantSizesBtn" class="quick-btn" type="button">Tách size</button>
+                <small>Lệnh nguồn chưa tách size. Có thể dán từ Excel, ngăn cách bằng dấu phẩy, tab hoặc xuống dòng.</small>
+            </div>
+            <div class="table-responsive">
+                <table class="variant-table">
+                    <thead><tr><th>Size</th><th>Màu</th><th>Mã đề xuất</th><th>Trạng thái</th></tr></thead>
+                    <tbody id="variantPreviewRows"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="variant-dialog__foot">
+            <span id="variantDialogNote" class="text-muted small"></span>
+            <div class="d-flex gap-2">
+                <button id="cancelVariantDialog" class="quick-btn" type="button">Để sau</button>
+                <button id="applyVariantsBtn" class="quick-btn quick-btn-primary" type="button"><i data-lucide="list-plus"></i>Tạo mã còn thiếu</button>
+            </div>
+        </div>
+    </dialog>
+
     <datalist id="internalCatalogOptions"></datalist>
     <datalist id="productionOrderOptions"></datalist>
 
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
-        const rowCount = 10;
+        const initialRowCount = 10;
         let selectedReceiptKind = '';
         let internalCatalogItems = [];
         let catalogSearchTimer = null;
@@ -475,6 +518,9 @@
         let latestCatalogSearchKey = '';
         let productionOrderOptions = [];
         let productionOrderSearchTimer = null;
+        let pendingVariantOrder = '';
+        let pendingVariantPlans = [];
+        let pendingVariantSizes = [];
 
         function localIsoDate() {
             const date = new Date();
@@ -550,26 +596,39 @@
             </tr>`;
         }
 
-        function renderRows() {
-            document.getElementById('quickRows').innerHTML = Array.from({ length: rowCount }, (_, index) => rowTemplate(index)).join('');
-            document.querySelectorAll('.production-order').forEach(input => input.addEventListener('input', () => searchProductionOrders(input)));
-            document.querySelectorAll('.production-order').forEach(input => input.addEventListener('change', () => applyProductionOrder(input)));
-            document.querySelectorAll('.order-suggestions').forEach(select => select.addEventListener('change', () => {
+        function bindQuickRow(row) {
+            row.querySelector('.production-order').addEventListener('input', event => searchProductionOrders(event.target));
+            row.querySelector('.production-order').addEventListener('change', event => applyProductionOrder(event.target));
+            row.querySelector('.order-suggestions').addEventListener('change', event => {
+                const select = event.target;
                 if (!select.value) return;
                 const orderInput = select.closest('tr').querySelector('.production-order');
                 orderInput.value = select.value;
                 applyProductionOrder(orderInput);
-            }));
-            document.querySelectorAll('.internal-code').forEach(input => input.addEventListener('input', () => searchInternalCatalog(input)));
-            document.querySelectorAll('.internal-code').forEach(input => input.addEventListener('change', () => applyInternalCatalog(input, true)));
-            document.querySelectorAll('.quantity').forEach(input => input.addEventListener('input', updateSummary));
-            document.querySelectorAll('input').forEach(input => {
+            });
+            row.querySelector('.internal-code').addEventListener('input', event => searchInternalCatalog(event.target));
+            row.querySelector('.internal-code').addEventListener('change', event => applyInternalCatalog(event.target, true));
+            row.querySelector('.quantity').addEventListener('input', updateSummary);
+            row.querySelectorAll('input').forEach(input => {
                 input.addEventListener('keydown', event => {
                     if (event.key !== 'Enter') return;
                     event.preventDefault();
                     focusNext(input);
                 });
             });
+        }
+
+        function renderRows() {
+            document.getElementById('quickRows').innerHTML = Array.from({ length: initialRowCount }, (_, index) => rowTemplate(index)).join('');
+            document.querySelectorAll('#quickRows tr').forEach(bindQuickRow);
+        }
+
+        function appendQuickRows(count) {
+            if (count <= 0) return;
+            const body = document.getElementById('quickRows');
+            const start = body.querySelectorAll('tr').length;
+            body.insertAdjacentHTML('beforeend', Array.from({length:count}, (_, offset) => rowTemplate(start + offset)).join(''));
+            Array.from(body.querySelectorAll('tr')).slice(start).forEach(bindQuickRow);
         }
 
         function focusNext(input) {
@@ -681,6 +740,9 @@
                         return;
                     }
                     expandProductionOrder(input, variants, progress);
+                    if (selectedReceiptKind === 'finished') {
+                        prepareProductionVariants(input.value.trim()).catch(error => setStatus(error.message, 'error'));
+                    }
                     const excess = Number(progress.excess_quantity || 0);
                     if (excess > 0.0001) {
                         const warning = `L\u1ec7nh ${input.value} \u0111\u00e3 nh\u1eadp d\u01b0 ${fmt(excess)}. K\u1ebf ho\u1ea1ch ${fmt(progress.planned_quantity)}, \u0111\u00e3 nh\u1eadp ${fmt(progress.received_quantity)} (k\u1ec3 c\u1ea3 FIFO).`;
@@ -700,6 +762,7 @@
         }
 
         function fillQuickRow(row, order) {
+            delete row.dataset.variantKey;
             const orderInput = row.querySelector('.production-order');
             orderInput.value = order.production_order || '';
             orderInput.dataset.appliedOrder = String(order.production_order || '').trim().toUpperCase();
@@ -717,8 +780,14 @@
 
         function expandProductionOrder(input, variants, progress = {}) {
             const currentRow = input.closest('tr');
-            const rows = Array.from(document.querySelectorAll('#quickRows tr'));
+            let rows = Array.from(document.querySelectorAll('#quickRows tr'));
             const currentIndex = rows.indexOf(currentRow);
+            const emptyAfterCurrent = rows.slice(currentIndex + 1).filter(quickRowIsEmpty).length;
+            const rowsNeeded = Math.max(0, variants.length - 1 - emptyAfterCurrent);
+            if (rowsNeeded > 0) {
+                appendQuickRows(rowsNeeded);
+                rows = Array.from(document.querySelectorAll('#quickRows tr'));
+            }
             const targets = [currentRow];
 
             for (let index = currentIndex + 1; index < rows.length && targets.length < variants.length; index++) {
@@ -737,6 +806,181 @@
             }
             updateSummary();
             targets[0].querySelector('.quantity')?.focus();
+        }
+
+        function applyVariantPlansToRows(plans, final = false) {
+            (plans || []).forEach(plan => {
+                const row = Array.from(document.querySelectorAll('#quickRows tr')).find(item => {
+                    if (plan.manual) {
+                        return item.dataset.variantKey === String(plan.variant_key);
+                    }
+                    return Number(item.querySelector('.production-order')?.dataset.productionOrderId || 0) === Number(plan.order_id);
+                });
+                if (!row) return;
+                const code = final ? plan.final_code : (plan.exists ? plan.proposed_code : '');
+                if (!code) {
+                    const state = row.querySelector('.row-state');
+                    state.className = 'row-state is-warn';
+                    state.textContent = `Chưa có mã riêng cho size ${plan.size || '-'}`;
+                    return;
+                }
+                row.querySelector('.internal-code').value = code;
+                row.querySelector('.item-name').value = plan.item_name || row.querySelector('.item-name').value;
+                row.querySelector('.item-size').value = plan.size || row.querySelector('.item-size').value;
+                row.querySelector('.item-color').value = plan.color || row.querySelector('.item-color').value;
+                row.querySelector('.item-unit').value = plan.unit || row.querySelector('.item-unit').value;
+                const state = row.querySelector('.row-state');
+                state.className = 'row-state is-ok';
+                state.textContent = final ? 'Đã tạo và liên kết danh mục' : 'Đã có trong danh mục';
+            });
+        }
+
+        function expandManualVariantPlans(plans) {
+            if (!(plans || []).length || !plans[0].manual) return;
+            const sourceRow = Array.from(document.querySelectorAll('#quickRows tr')).find(row => {
+                return Number(row.querySelector('.production-order')?.dataset.productionOrderId || 0) === Number(plans[0].order_id);
+            });
+            if (!sourceRow) return;
+            let rows = Array.from(document.querySelectorAll('#quickRows tr'));
+            const sourceIndex = rows.indexOf(sourceRow);
+            const emptyRows = rows.slice(sourceIndex + 1).filter(quickRowIsEmpty);
+            if (emptyRows.length < plans.length - 1) {
+                appendQuickRows(plans.length - 1 - emptyRows.length);
+                rows = Array.from(document.querySelectorAll('#quickRows tr'));
+            }
+            const targets = [sourceRow, ...rows.slice(sourceIndex + 1).filter(quickRowIsEmpty).slice(0, plans.length - 1)];
+            const sourceOrder = sourceRow.querySelector('.production-order');
+            plans.forEach((plan, index) => {
+                const target = targets[index];
+                fillQuickRow(target, {
+                    id:plan.order_id,
+                    production_order:plan.production_order,
+                    purchase_order:sourceOrder.dataset.purchaseOrder || '',
+                    customer:sourceOrder.dataset.customer || '',
+                    item_code:'',
+                    description:plan.item_name,
+                    size:plan.size,
+                    color:plan.color,
+                    unit:plan.unit,
+                });
+                target.dataset.variantKey = String(plan.variant_key);
+            });
+        }
+
+        async function prepareProductionVariants(orderCode, sizes = []) {
+            const response = await fetch('/api/danh-muc-noi-bo/bien-the-lenh-san-xuat', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({production_order:orderCode,apply:false,sizes}),
+            });
+            const result = await jsonOrError(response, 'Không kiểm tra được biến thể danh mục');
+            const plans = result.data || [];
+            pendingVariantSizes = sizes;
+            if (Number(result.summary?.manual_size_count || 0) > 0) {
+                expandManualVariantPlans(plans);
+            }
+            applyVariantPlansToRows(plans, false);
+            const missing = plans.filter(plan => !plan.exists);
+            if (!missing.length) {
+                pendingVariantOrder = '';
+                pendingVariantPlans = [];
+                pendingVariantSizes = [];
+                if (document.getElementById('variantDialog').open) {
+                    document.getElementById('variantDialog').close();
+                }
+                setStatus(`Lệnh ${orderCode} có ${plans.length} biến thể và tất cả đã có trong danh mục.`, 'ok');
+                return;
+            }
+
+            pendingVariantOrder = orderCode;
+            pendingVariantPlans = plans;
+            document.getElementById('variantDialogSummary').textContent = `${orderCode} · ${plans.length} biến thể · thiếu ${missing.length} mã`;
+            const requiresSizes = Boolean(result.summary?.requires_size_input);
+            const showSizeEntry = requiresSizes || Number(result.summary?.manual_size_count || 0) > 0;
+            document.getElementById('variantSizeEntry').classList.toggle('d-none', !showSizeEntry);
+            document.getElementById('variantPreviewRows').innerHTML = requiresSizes ? '' : plans.map(plan => `
+                <tr data-variant-order-id="${Number(plan.order_id)}" data-variant-key="${esc(plan.variant_key)}">
+                    <td><strong>${esc(plan.size || '-')}</strong></td>
+                    <td>${esc(plan.color || '-')}</td>
+                    <td>${plan.exists
+                        ? `<span class="font-monospace fw-bold">${esc(plan.proposed_code)}</span>`
+                        : `<input class="form-control variant-code-input" value="${esc(plan.proposed_code)}" maxlength="200">`}</td>
+                    <td>${plan.exists
+                        ? '<span class="variant-existing">Đã có</span>'
+                        : '<span class="variant-missing">Sẽ tạo</span>'}</td>
+                </tr>`).join('');
+            document.getElementById('variantDialogNote').textContent = requiresSizes
+                ? 'Dán danh sách size để tạo đúng biến thể; hệ thống không tự đoán size.'
+                : result.summary?.write_configured
+                ? 'Chỉ các dòng “Sẽ tạo” được append vào Google Sheet.'
+                : 'Chưa cấu hình quyền ghi Google Sheet.';
+            document.getElementById('applyVariantsBtn').disabled = requiresSizes || !result.summary?.write_configured;
+            if (!document.getElementById('variantDialog').open) {
+                document.getElementById('variantDialog').showModal();
+            }
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function previewManualVariantSizes() {
+            const sizes = document.getElementById('variantSizeInput').value
+                .split(/[\t,;|\n\r]+/)
+                .map(value => value.trim())
+                .filter((value, index, all) => value && all.indexOf(value) === index);
+            if (sizes.length < 2) {
+                setStatus('Cần dán ít nhất 2 size để tách mã.', 'error');
+                return;
+            }
+            prepareProductionVariants(pendingVariantOrder, sizes).catch(error => setStatus(error.message, 'error'));
+        }
+
+        async function applyProductionVariants() {
+            if (!pendingVariantOrder) return;
+            const button = document.getElementById('applyVariantsBtn');
+            const variants = Array.from(document.querySelectorAll('#variantPreviewRows tr')).map(row => {
+                const input = row.querySelector('.variant-code-input');
+                return input ? {
+                    order_id:Number(row.dataset.variantOrderId),
+                    variant_key:String(row.dataset.variantKey || ''),
+                    new_code:input.value.trim().toUpperCase(),
+                } : null;
+            }).filter(Boolean);
+            if (variants.some(item => !item.new_code)) {
+                setStatus('Mã biến thể không được để trống.', 'error');
+                return;
+            }
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>Đang tạo...';
+            try {
+                const response = await fetch('/api/danh-muc-noi-bo/bien-the-lenh-san-xuat', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                    body:JSON.stringify({production_order:pendingVariantOrder,apply:true,sizes:pendingVariantSizes,variants}),
+                });
+                const result = await jsonOrError(response, 'Không tạo được mã biến thể');
+                applyVariantPlansToRows(result.data || [], true);
+                rememberCatalogItems((result.data || []).map(plan => ({
+                    code:plan.final_code,
+                    value:plan.final_code,
+                    name:plan.item_name,
+                    size:plan.size,
+                    color:plan.color,
+                    unit:plan.unit,
+                })));
+                renderInternalCatalogOptions();
+                const created = Number(result.summary?.created || 0);
+                const linked = Number(result.summary?.linked || 0);
+                pendingVariantOrder = '';
+                pendingVariantPlans = [];
+                pendingVariantSizes = [];
+                document.getElementById('variantDialog').close();
+                setStatus(`Đã tạo ${created} mã mới và liên kết ${linked} biến thể của lệnh. Nhập số lượng theo từng size.`, 'ok');
+            } catch (error) {
+                setStatus(error.message, 'error');
+            } finally {
+                button.disabled = false;
+                button.innerHTML = '<i data-lucide="list-plus"></i>Tạo mã còn thiếu';
+                if (window.lucide) lucide.createIcons();
+            }
         }
 
         function loadProductionOrderFromQuery() {
@@ -977,6 +1221,11 @@
             return confirm(`C\u1ea2NH B\u00c1O NH\u1eacP D\u01af THEO L\u1ec6NH\n\n${warnings.join('\n')}\n\nFIFO \u0111\u00e3 \u0111\u01b0\u1ee3c t\u00ednh trong s\u1ed1 \u0111\u00e3 nh\u1eadp. V\u1eabn l\u01b0u phi\u1ebfu?`);
         }
         async function saveAndPrint() {
+            if (pendingVariantPlans.some(plan => !plan.exists)) {
+                document.getElementById('variantDialog').showModal();
+                setStatus('Cần tạo hoặc xác nhận các mã size còn thiếu trước khi lưu phiếu.', 'error');
+                return;
+            }
             setStatus('Đang kiểm tra mã danh mục...');
             await checkAllCatalog();
             const lines = validLines();
@@ -1041,6 +1290,10 @@
         }
 
         function resetRows(clearHeader = true) {
+            pendingVariantOrder = '';
+            pendingVariantPlans = [];
+            pendingVariantSizes = [];
+            document.getElementById('variantSizeInput').value = '';
             if (clearHeader) document.getElementById('receiptNote').value = '';
             renderRows();
             updateSummary();
@@ -1065,6 +1318,10 @@
 
         function returnToChooser() {
             selectedReceiptKind = '';
+            pendingVariantOrder = '';
+            pendingVariantPlans = [];
+            pendingVariantSizes = [];
+            document.getElementById('variantSizeInput').value = '';
             document.getElementById('receiptWorkspace').classList.add('d-none');
             document.getElementById('modeChooser').classList.remove('d-none');
             document.getElementById('receiptNote').value = '';
@@ -1095,6 +1352,10 @@
         }
 
         document.getElementById('savePrintBtn').addEventListener('click', saveAndPrint);
+        document.getElementById('applyVariantsBtn').addEventListener('click', applyProductionVariants);
+        document.getElementById('previewVariantSizesBtn').addEventListener('click', previewManualVariantSizes);
+        document.getElementById('closeVariantDialog').addEventListener('click', () => document.getElementById('variantDialog').close());
+        document.getElementById('cancelVariantDialog').addEventListener('click', () => document.getElementById('variantDialog').close());
         document.getElementById('clearFormBtn').addEventListener('click', () => resetRows(true));
         document.getElementById('receiptDate').addEventListener('change', () => {
             document.getElementById('productionOrderOptions').innerHTML = '';

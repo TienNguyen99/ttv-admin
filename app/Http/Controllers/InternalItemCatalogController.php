@@ -3,7 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternalItemCatalog;
+use App\Models\InternalProductionOrder;
 use App\Models\WarehouseLocation;
+use App\Services\GoogleSheetCatalogWriter;
+use App\Services\InternalItemGroupResolver;
 use App\Services\PantoneColorMatcher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -29,7 +32,10 @@ class InternalItemCatalogController extends Controller
         $page = max((int) $request->query('page', 1), 1);
         $perPage = min(max((int) $request->query('per_page', 100), 25), 300);
         $limit = min(max((int) $request->query('limit', 500), 1), 2000);
+        $customer = trim((string) $request->query('customer', ''));
+        $group = trim((string) $request->query('group', ''));
         $tokens = $this->searchTokens($keyword);
+        $customerMap = $this->catalogCustomerMap();
 
         $allRows = InternalItemCatalog::query()
             ->where('is_active', true)
@@ -55,8 +61,23 @@ class InternalItemCatalogController extends Controller
             ->orderBy('item_code')
             ->get();
 
+        $allRows->each(function ($row) use ($customerMap) {
+            $codeKey = mb_strtoupper(trim((string) $row->item_code));
+            $raw = is_array($row->raw_data) ? $row->raw_data : [];
+            $row->setAttribute('source_type', trim((string) ($raw['loai'] ?? '')));
+            $row->setAttribute('item_group', $this->catalogItemGroup($row));
+            $row->setAttribute('customers', $customerMap[$codeKey] ?? []);
+        });
+
+        $facets = [
+            'customers' => $allRows->pluck('customers')->flatten()->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values(),
+            'groups' => $allRows->pluck('item_group')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values(),
+        ];
+
         $filteredRows = $allRows
             ->filter(fn ($row) => $this->matchesTokens($this->catalogSearchText($row), $tokens))
+            ->filter(fn ($row) => $customer === '' || collect($row->customers)->contains(fn ($value) => mb_strtolower($value) === mb_strtolower($customer)))
+            ->filter(fn ($row) => $group === '' || mb_strtolower((string) $row->item_group) === mb_strtolower($group))
             ->values();
 
         $rows = $isPaged
@@ -88,10 +109,11 @@ class InternalItemCatalogController extends Controller
                 'total_pages' => $isPaged ? (int) ceil($filteredRows->count() / $perPage) : 1,
                 'has_more' => $isPaged ? ($page * $perPage < $filteredRows->count()) : ($rows->count() < $filteredRows->count()),
             ],
+            'facets' => $facets,
             'source' => [
                 'spreadsheet_id' => self::SPREADSHEET_ID,
                 'sheet' => self::SHEET_NAME,
-                'mode' => 'read_only',
+                'mode' => 'read_write_confirmed',
             ],
         ]);
     }
@@ -332,7 +354,9 @@ class InternalItemCatalogController extends Controller
         $batch = (string) Str::uuid();
         $created = 0;
         $updated = 0;
+        $unchanged = 0;
         $skipped = 0;
+        $activeSourceRows = [];
 
         DB::connection('internal')->transaction(function () use (
             $rows,
@@ -340,10 +364,10 @@ class InternalItemCatalogController extends Controller
             $batch,
             &$created,
             &$updated,
+            &$unchanged,
+            &$activeSourceRows,
             &$skipped
         ) {
-            InternalItemCatalog::query()->where('is_active', true)->update(['is_active' => false]);
-
             foreach ($rows as $index => $values) {
                 $row = [];
                 foreach ($headers as $column => $header) {
@@ -357,10 +381,19 @@ class InternalItemCatalogController extends Controller
                 }
 
                 $sourceRow = $index + 2;
+                $activeSourceRows[] = $sourceRow;
                 $code = trim($this->pick($row, ['ma hang', 'mahang']));
                 $existingCatalog = InternalItemCatalog::query()->where('source_row', $sourceRow)->first();
                 $existing = (bool) $existingCatalog;
                 $sheetImage = $this->pick($row, ['anh']);
+                $sourceHash = hash('sha256', json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                if ($existingCatalog && hash_equals((string) ($existingCatalog->source_hash ?? ''), $sourceHash)) {
+                    if (!$existingCatalog->is_active) {
+                        $existingCatalog->update(['is_active' => true]);
+                    }
+                    $unchanged++;
+                    continue;
+                }
 
                 InternalItemCatalog::query()->updateOrCreate(
                     ['source_row' => $sourceRow],
@@ -376,6 +409,7 @@ class InternalItemCatalogController extends Controller
                         'opening_quantity' => $this->number($this->pick($row, ['ton dau'])),
                         'image_url' => $sheetImage !== '' ? $sheetImage : ($existingCatalog->image_url ?? null),
                         'raw_data' => $row,
+                        'source_hash' => $sourceHash,
                         'sync_batch' => $batch,
                         'is_active' => true,
                     ]
@@ -383,17 +417,416 @@ class InternalItemCatalogController extends Controller
 
                 $existing ? $updated++ : $created++;
             }
+
+            $archiveQuery = InternalItemCatalog::query()->where('is_active', true);
+            if ($activeSourceRows) {
+                $archiveQuery->whereNotIn('source_row', array_unique($activeSourceRows));
+            }
+            $archiveQuery->update(['is_active' => false]);
         });
+        Cache::forget('internal_catalog_customer_map_v1');
 
         return response()->json([
             'message' => 'Đã đồng bộ DANH MỤC vào database nội bộ.',
             'data' => [
                 'created' => $created,
                 'updated' => $updated,
+                'unchanged' => $unchanged,
                 'skipped' => $skipped,
                 'active' => InternalItemCatalog::query()->where('is_active', true)->count(),
                 'sheet' => self::SHEET_NAME,
             ],
+        ]);
+    }
+
+    public function productionOrderVariants(Request $request, GoogleSheetCatalogWriter $writer)
+    {
+        $data = $request->validate([
+            'production_order' => 'required|string|max:120',
+            'apply' => 'nullable|boolean',
+            'sizes' => 'nullable|array|max:100',
+            'sizes.*' => 'required|string|max:100',
+            'variants' => 'nullable|array|max:100',
+            'variants.*.order_id' => 'required|integer',
+            'variants.*.variant_key' => 'required|string|max:220',
+            'variants.*.new_code' => 'required|string|max:200',
+        ]);
+        $orderCode = trim((string) $data['production_order']);
+        $orders = InternalProductionOrder::query()
+            ->where('is_active', true)
+            ->where('production_order', $orderCode)
+            ->orderBy('source_row')
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return response()->json(['message' => 'Không tìm thấy lệnh sản xuất ' . $orderCode . '.'], 404);
+        }
+
+        $manualSizes = collect($data['sizes'] ?? [])->map(fn ($size) => trim((string) $size))->filter()->unique()->values();
+        $plans = $this->buildProductionVariantPlans($orders, $manualSizes);
+        $catalogByCode = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereNotNull('item_code')
+            ->whereIn('item_code', $plans->pluck('proposed_code')->all())
+            ->get()
+            ->keyBy(fn ($row) => mb_strtoupper(trim((string) $row->item_code)));
+        $plans = $plans->map(function ($plan) use ($catalogByCode) {
+            $catalog = $catalogByCode->get(mb_strtoupper($plan['proposed_code']));
+            $plan['exists'] = (bool) $catalog;
+            $plan['catalog_id'] = $catalog ? (int) $catalog->id : null;
+            return $plan;
+        })->values();
+
+        if (!$request->boolean('apply')) {
+            return response()->json([
+                'data' => $plans,
+                'summary' => [
+                    'total' => $plans->count(),
+                    'existing' => $plans->where('exists', true)->count(),
+                    'missing' => $plans->where('exists', false)->count(),
+                    'write_configured' => $writer->isConfigured(),
+                    'source_variant_count' => $orders->count(),
+                    'manual_size_count' => $manualSizes->count(),
+                    'requires_size_input' => $orders->count() === 1 && $manualSizes->isEmpty(),
+                ],
+            ]);
+        }
+        if (!$writer->isConfigured()) {
+            return response()->json(['message' => 'Chưa cấu hình quyền ghi Google Sheet.'], 503);
+        }
+
+        $submitted = collect($data['variants'] ?? [])->keyBy(fn ($row) => (string) $row['variant_key']);
+        $missingPlans = $plans->where('exists', false)->map(function ($plan) use ($submitted) {
+            $input = $submitted->get((string) $plan['variant_key']);
+            $plan['new_code'] = mb_strtoupper(trim((string) ($input['new_code'] ?? $plan['proposed_code'])));
+            return $plan;
+        })->values();
+        $newCodes = $missingPlans->pluck('new_code')->filter();
+
+        if ($newCodes->count() !== $newCodes->unique()->count()) {
+            return response()->json(['message' => 'Mã biến thể mới đang bị trùng nhau.'], 422);
+        }
+        $conflictingCodes = InternalItemCatalog::query()
+            ->whereNotNull('item_code')
+            ->whereIn('item_code', $newCodes->all())
+            ->pluck('item_code')
+            ->filter()
+            ->values();
+        if ($conflictingCodes->isNotEmpty()) {
+            return response()->json([
+                'message' => 'Một số mã đã có trong danh mục: ' . $conflictingCodes->implode(', '),
+            ], 422);
+        }
+
+        $sheetRows = $missingPlans->map(fn ($plan) => [
+            'MA HANG' => $plan['new_code'],
+            'TEN HANG' => $plan['item_name'],
+            'DVT' => $plan['unit'],
+            'SIZE' => $plan['size'],
+            'MAU' => $plan['color'],
+            'LOAI' => 'TP',
+            'KE' => '',
+            'TON DAU' => 0,
+        ])->all();
+        $sourceRows = $writer->appendRows(self::SPREADSHEET_ID, self::SHEET_NAME, $sheetRows);
+        $batch = (string) Str::uuid();
+        $createdCatalogs = collect();
+
+        DB::connection('internal')->transaction(function () use ($missingPlans, $sourceRows, $batch, &$createdCatalogs) {
+            foreach ($missingPlans as $index => $plan) {
+                $rawData = [
+                    'ma hang' => $plan['new_code'],
+                    'ten hang' => $plan['item_name'],
+                    'dvt' => $plan['unit'],
+                    'size' => $plan['size'],
+                    'mau' => $plan['color'],
+                    'loai' => 'TP',
+                    'ke' => '',
+                    'ton dau' => 0,
+                ];
+                $catalog = InternalItemCatalog::query()->updateOrCreate(
+                    ['source_row' => (int) $sourceRows[$index]],
+                    [
+                        'item_code' => $plan['new_code'],
+                        'item_name' => $plan['item_name'],
+                        'unit' => $plan['unit'],
+                        'size' => $plan['size'],
+                        'color' => $plan['color'],
+                        'logo_color' => '',
+                        'side' => '',
+                        'shelf_code' => '',
+                        'opening_quantity' => 0,
+                        'raw_data' => $rawData,
+                        'source_hash' => null,
+                        'sync_batch' => $batch,
+                        'is_active' => true,
+                    ]
+                );
+                $createdCatalogs->put((int) $plan['order_id'], $catalog);
+            }
+        });
+
+        $allCatalogsByCode = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereIn('item_code', $plans->pluck('proposed_code')->merge($newCodes)->all())
+            ->get()
+            ->keyBy(fn ($row) => mb_strtoupper(trim((string) $row->item_code)));
+        $resultPlans = $plans->map(function ($plan) use ($submitted, $allCatalogsByCode) {
+            $input = $submitted->get((string) $plan['variant_key']);
+            $finalCode = $plan['exists']
+                ? $plan['proposed_code']
+                : mb_strtoupper(trim((string) ($input['new_code'] ?? $plan['proposed_code'])));
+            $catalog = $allCatalogsByCode->get(mb_strtoupper($finalCode));
+            if ($catalog && empty($plan['manual'])) {
+                InternalProductionOrder::query()->whereKey($plan['order_id'])->update([
+                    'standard_catalog_id' => $catalog->id,
+                    'standard_item_code' => $catalog->item_code,
+                ]);
+            }
+            $plan['final_code'] = $finalCode;
+            $plan['catalog_id'] = $catalog ? (int) $catalog->id : null;
+            $plan['exists'] = true;
+            return $plan;
+        })->values();
+        Cache::forget('internal_catalog_customer_map_v1');
+
+        return response()->json([
+            'message' => 'Đã thêm ' . $missingPlans->count() . ' mã biến thể vào Google Sheet DANH MỤC.',
+            'data' => $resultPlans,
+            'summary' => [
+                'total' => $resultPlans->count(),
+                'created' => $missingPlans->count(),
+                'linked' => $resultPlans->whereNotNull('catalog_id')->count(),
+            ],
+        ]);
+    }
+
+    private function buildProductionVariantPlans($orders, $manualSizes = null)
+    {
+        $manualSizes = collect($manualSizes ?: []);
+        if ($manualSizes->isNotEmpty()) {
+            $template = $orders->first();
+            $baseCode = trim((string) ($template->item_code ?: $template->standard_item_code));
+            $basePlans = $manualSizes->map(function ($size) use ($template, $baseCode) {
+                return [
+                    'order_id' => (int) $template->id,
+                    'variant_key' => 'SIZE:' . mb_strtoupper($size),
+                    'production_order' => trim((string) $template->production_order),
+                    'base_code' => $baseCode,
+                    'candidate' => $this->catalogCodePart($baseCode) . '-' . $this->catalogCodePart($size),
+                    'color_part' => $this->catalogCodePart($template->color),
+                    'item_name' => trim((string) ($template->description ?: $template->specification ?: $baseCode)),
+                    'size' => $size,
+                    'color' => trim((string) $template->color),
+                    'unit' => trim((string) $template->unit) ?: 'Cái',
+                    'manual' => true,
+                ];
+            });
+        } else {
+            $basePlans = $orders->map(function ($order) {
+            $baseCode = trim((string) ($order->item_code ?: $order->standard_item_code));
+            $sizePart = $this->catalogCodePart($order->size);
+            $colorPart = $this->catalogCodePart($order->color);
+            $candidate = $this->catalogCodePart($baseCode);
+            if ($sizePart !== '') {
+                $candidate .= '-' . $sizePart;
+            }
+            return [
+                'order_id' => (int) $order->id,
+                'variant_key' => 'ORDER:' . (int) $order->id,
+                'production_order' => trim((string) $order->production_order),
+                'base_code' => $baseCode,
+                'candidate' => $candidate,
+                'color_part' => $colorPart,
+                'item_name' => trim((string) ($order->description ?: $order->specification ?: $baseCode)),
+                'size' => trim((string) $order->size),
+                'color' => trim((string) $order->color),
+                'unit' => trim((string) $order->unit) ?: 'Cái',
+                'manual' => false,
+            ];
+            });
+        }
+
+        $basePlans = $basePlans->unique(fn ($plan) => implode('|', [
+            mb_strtoupper($plan['base_code']),
+            mb_strtoupper($plan['size']),
+            mb_strtoupper($plan['color']),
+            mb_strtoupper($plan['item_name']),
+        ]))->values();
+        $candidateCounts = $basePlans->countBy('candidate');
+
+        return $basePlans->map(function ($plan) use ($candidateCounts) {
+            $proposed = $plan['candidate'];
+            if (($candidateCounts[$proposed] ?? 0) > 1 && $plan['color_part'] !== '') {
+                $proposed .= '-' . $plan['color_part'];
+            }
+            $plan['proposed_code'] = $proposed;
+            unset($plan['candidate'], $plan['color_part']);
+            return $plan;
+        });
+    }
+
+    private function catalogCodePart($value): string
+    {
+        return trim(preg_replace('/-+/', '-', preg_replace('/[^A-Z0-9]+/', '-', mb_strtoupper(Str::ascii(trim((string) $value))))), '-');
+    }
+
+    public function splitDuplicateCodes(Request $request, GoogleSheetCatalogWriter $writer)
+    {
+        $data = $request->validate([
+            'code' => 'required|string|max:200',
+            'changes' => 'nullable|array',
+            'changes.*.id' => 'required|integer',
+            'changes.*.new_code' => 'required|string|max:200',
+        ]);
+        $apply = $request->boolean('apply');
+        $preview = $this->duplicateCodeSplitPreview($data['code']);
+
+        if ($apply && !empty($data['changes'])) {
+            $editableIds = collect($preview['changes'])->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $submitted = collect($data['changes'])->keyBy(fn ($change) => (int) $change['id']);
+
+            if ($submitted->keys()->diff($editableIds)->isNotEmpty() || count($editableIds) !== $submitted->count()) {
+                return response()->json([
+                    'message' => 'Danh sách dòng đã thay đổi. Hãy đóng cửa sổ và xem trước lại.',
+                    'data' => $preview,
+                    'write_configured' => $writer->isConfigured(),
+                ], 422);
+            }
+
+            $newCodes = [];
+
+            foreach ($preview['changes'] as &$change) {
+                $newCode = trim((string) $submitted->get((int) $change['id'])['new_code']);
+                $normalized = mb_strtoupper($newCode);
+                $alreadyExists = $newCode !== '' && InternalItemCatalog::query()
+                    ->where('is_active', true)
+                    ->whereNotIn('id', $editableIds)
+                    ->whereRaw('UPPER(TRIM(item_code)) = ?', [$normalized])
+                    ->exists();
+                if ($newCode === '' || $alreadyExists || isset($newCodes[$normalized])) {
+                    return response()->json([
+                        'message' => "Mã mới {$newCode} đang trống hoặc đã tồn tại. Hãy nhập mã khác.",
+                        'data' => $preview,
+                        'write_configured' => $writer->isConfigured(),
+                    ], 422);
+                }
+                $change['new_code'] = $newCode;
+                $newCodes[$normalized] = true;
+            }
+            unset($change);
+        }
+
+        if (!$apply || !$preview['changes']) {
+            return response()->json([
+                'message' => $preview['changes'] ? 'Đã tạo bản xem trước tách mã.' : 'Danh mục không còn mã trùng.',
+                'data' => $preview,
+                'write_configured' => $writer->isConfigured(),
+            ]);
+        }
+
+        if (!$writer->isConfigured()) {
+            return response()->json([
+                'message' => 'Chưa cấu hình quyền ghi Google Sheet. Chưa có dữ liệu nào được thay đổi.',
+                'data' => $preview,
+                'write_configured' => false,
+            ], 503);
+        }
+
+        $writer->writeItemCodes(self::SPREADSHEET_ID, self::SHEET_NAME, $preview['changes']);
+
+        DB::connection('internal')->transaction(function () use ($preview) {
+            foreach ($preview['changes'] as $change) {
+                $catalog = InternalItemCatalog::query()->findOrFail($change['id']);
+                $rawData = is_array($catalog->raw_data) ? $catalog->raw_data : [];
+                $rawData[array_key_exists('mahang', $rawData) ? 'mahang' : 'ma hang'] = $change['new_code'];
+                $catalog->update([
+                    'item_code' => $change['new_code'],
+                    'raw_data' => $rawData,
+                ]);
+                DB::connection('internal')->table('internal_production_orders')
+                    ->where('standard_catalog_id', $catalog->id)
+                    ->update(['standard_item_code' => $change['new_code']]);
+            }
+        });
+        Cache::forget('internal_catalog_customer_map_v1');
+
+        return response()->json([
+            'message' => 'Đã tách mã và ghi lại tab DANH MỤC trên Google Sheet.',
+            'data' => $preview,
+            'write_configured' => true,
+        ]);
+    }
+
+    public function updateCatalogRow(Request $request, InternalItemCatalog $catalog, GoogleSheetCatalogWriter $writer)
+    {
+        if (!$catalog->is_active || (int) $catalog->source_row < 2) {
+            return response()->json(['message' => 'Dòng danh mục không còn hoạt động hoặc thiếu dòng nguồn.'], 422);
+        }
+
+        $data = $request->validate([
+            'item_code' => 'nullable|string|max:200',
+            'item_name' => 'required|string|max:500',
+            'unit' => 'nullable|string|max:50',
+            'source_type' => 'nullable|string|max:100',
+            'shelf_code' => 'nullable|string|max:150',
+            'opening_quantity' => 'nullable|numeric|min:-999999999999999|max:999999999999999',
+        ], [
+            'item_name.required' => 'Tên hàng không được để trống.',
+            'opening_quantity.numeric' => 'Tồn đầu phải là số.',
+        ]);
+
+        $itemCode = trim((string) ($data['item_code'] ?? ''));
+        if ($itemCode !== '' && InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->where('id', '<>', $catalog->id)
+            ->whereRaw('UPPER(TRIM(item_code)) = ?', [mb_strtoupper($itemCode)])
+            ->exists()) {
+            return response()->json(['message' => "Mã {$itemCode} đã tồn tại trong danh mục."], 422);
+        }
+        if (!$writer->isConfigured()) {
+            return response()->json(['message' => 'Chưa cấu hình quyền ghi Google Sheet. Chưa có dữ liệu nào được thay đổi.'], 503);
+        }
+
+        $fields = [
+            'mahang' => $itemCode,
+            'ten hang' => trim((string) $data['item_name']),
+            'dvt' => trim((string) ($data['unit'] ?? '')),
+            'loai' => trim((string) ($data['source_type'] ?? '')),
+            'ke' => trim((string) ($data['shelf_code'] ?? '')),
+            'ton dau' => (float) ($data['opening_quantity'] ?? 0),
+        ];
+
+        try {
+            $writer->writeRowFields(self::SPREADSHEET_ID, self::SHEET_NAME, (int) $catalog->source_row, $fields);
+        } catch (\Throwable $error) {
+            report($error);
+            return response()->json([
+                'message' => 'Không ghi được Google Sheet: ' . $error->getMessage() . ' Database nội bộ chưa thay đổi.',
+            ], 502);
+        }
+
+        DB::connection('internal')->transaction(function () use ($catalog, $fields) {
+            $raw = is_array($catalog->raw_data) ? $catalog->raw_data : [];
+            foreach ($fields as $key => $value) {
+                $raw[$key] = (string) $value;
+            }
+            $catalog->update([
+                'item_code' => $fields['mahang'] !== '' ? $fields['mahang'] : null,
+                'item_name' => $fields['ten hang'],
+                'unit' => $fields['dvt'],
+                'shelf_code' => $fields['ke'],
+                'opening_quantity' => $fields['ton dau'],
+                'raw_data' => $raw,
+            ]);
+            DB::connection('internal')->table('internal_production_orders')
+                ->where('standard_catalog_id', $catalog->id)
+                ->update(['standard_item_code' => $catalog->item_code]);
+        });
+        Cache::forget('internal_catalog_customer_map_v1');
+
+        return response()->json([
+            'message' => 'Đã cập nhật đúng dòng ' . (int) $catalog->source_row . ' trên Google Sheet.',
         ]);
     }
 
@@ -582,6 +1015,100 @@ class InternalItemCatalogController extends Controller
         ]);
     }
 
+    private function duplicateCodeSplitPreview(string $requestedCode): array
+    {
+        $requestedCode = mb_strtoupper(trim($requestedCode));
+        $rows = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereNotNull('item_code')
+            ->where('item_code', '<>', '')
+            ->orderBy('source_row')
+            ->get();
+        $usedCodes = $rows->pluck('item_code')
+            ->map(fn ($code) => mb_strtoupper(trim((string) $code)))
+            ->filter()
+            ->flip()
+            ->all();
+        $changes = [];
+        $groupCount = 0;
+
+        $rows->filter(fn ($row) => mb_strtoupper(trim((string) $row->item_code)) === $requestedCode)
+            ->groupBy(fn ($row) => mb_strtoupper(trim((string) $row->item_code)))
+            ->filter(fn ($group) => $group->count() > 1)
+            ->each(function ($group, $normalizedCode) use (&$changes, &$groupCount, &$usedCodes) {
+                $groupCount++;
+                $sorted = $group->sortBy(function ($row) {
+                    return ($this->catalogVariantSuffix($row) === '' ? '0' : '1') . str_pad((string) $row->source_row, 10, '0', STR_PAD_LEFT);
+                })->values();
+                $baseCode = trim((string) $sorted->first()->item_code);
+
+                $sorted->slice(1)->each(function ($row) use (&$changes, &$usedCodes, $baseCode) {
+                    $suffix = $this->catalogVariantSuffix($row);
+                    if ($suffix === '') {
+                        $suffix = 'ROW' . (int) $row->source_row;
+                    }
+                    $candidate = mb_substr($baseCode . '-' . $suffix, 0, 200);
+                    if (isset($usedCodes[mb_strtoupper($candidate)])) {
+                        $candidate = mb_substr($baseCode . '-' . $suffix . '-R' . (int) $row->source_row, 0, 200);
+                    }
+                    $sequence = 2;
+                    while (isset($usedCodes[mb_strtoupper($candidate)])) {
+                        $candidate = mb_substr($baseCode . '-' . $suffix . '-' . $sequence, 0, 200);
+                        $sequence++;
+                    }
+                    $usedCodes[mb_strtoupper($candidate)] = true;
+                    $changes[] = [
+                        'id' => (int) $row->id,
+                        'source_row' => (int) $row->source_row,
+                        'old_code' => trim((string) $row->item_code),
+                        'new_code' => $candidate,
+                        'item_name' => trim((string) $row->item_name),
+                        'color' => trim((string) $row->color),
+                    ];
+                });
+            });
+
+        return [
+            'code' => $requestedCode,
+            'duplicate_group_count' => $groupCount,
+            'change_count' => count($changes),
+            'changes' => $changes,
+        ];
+    }
+
+    private function catalogVariantSuffix($row): string
+    {
+        $text = mb_strtoupper(Str::ascii(implode(' ', [
+            $row->color,
+            $row->item_name,
+            $row->logo_color,
+        ])));
+        $colors = [
+            'BLACK' => ['BLACK', ' DEN '],
+            'WHITE' => ['WHITE', ' TRANG ', 'TAY'],
+            'PINK' => ['PINK', ' HONG '],
+            'PURPLE' => ['PURPLE', ' TIM '],
+            'NAVY' => ['NAVY'],
+            'BLUE' => ['BLUE', ' XANH DUONG '],
+            'GREEN' => ['GREEN', ' XANH LA '],
+            'GREY' => ['GREY', 'GRAY', ' XAM '],
+            'RED' => ['RED', ' DO '],
+            'YELLOW' => ['YELLOW', ' VANG '],
+            'ORANGE' => ['ORANGE', ' CAM '],
+            'BROWN' => ['BROWN', ' NAU '],
+            'BEIGE' => ['BEIGE', ' KEM '],
+        ];
+        $haystack = ' ' . preg_replace('/[^A-Z0-9]+/', ' ', $text) . ' ';
+        foreach ($colors as $suffix => $needles) {
+            foreach ($needles as $needle) {
+                if (strpos($haystack, $needle) !== false) {
+                    return $suffix;
+                }
+            }
+        }
+        return '';
+    }
+
     private function parseCsv(string $contents): array
     {
         $stream = fopen('php://temp', 'r+');
@@ -638,8 +1165,40 @@ class InternalItemCatalogController extends Controller
             $row->shelf_code,
             $row->opening_quantity,
             $row->source_row,
+            $row->item_group ?? '',
+            implode(' ', $row->customers ?? []),
             is_array($row->raw_data) ? json_encode($row->raw_data, JSON_UNESCAPED_UNICODE) : $row->raw_data,
         ]);
+    }
+
+    private function catalogCustomerMap(): array
+    {
+        return Cache::remember('internal_catalog_customer_map_v1', now()->addMinutes(5), function () {
+            $map = [];
+            DB::connection('internal')->table('internal_production_orders')
+                ->whereNotNull('customer')
+                ->where('customer', '<>', '')
+                ->select(['customer', 'item_code', 'standard_item_code'])
+                ->orderBy('id')
+                ->chunk(1000, function ($orders) use (&$map) {
+                    foreach ($orders as $order) {
+                        $code = trim((string) ($order->standard_item_code ?: $order->item_code));
+                        $customer = trim((string) $order->customer);
+                        if ($code === '' || $customer === '') {
+                            continue;
+                        }
+                        $key = mb_strtoupper($code);
+                        $map[$key][$customer] = true;
+                    }
+                });
+
+            return collect($map)->map(fn ($customers) => collect(array_keys($customers))->sort(SORT_NATURAL | SORT_FLAG_CASE)->values()->all())->all();
+        });
+    }
+
+    private function catalogItemGroup($row): string
+    {
+        return app(InternalItemGroupResolver::class)->resolve($row);
     }
 
     private function documentLineSearchText($row): string
