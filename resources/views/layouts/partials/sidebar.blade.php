@@ -534,10 +534,11 @@
     <a class="summary-sidebar__link {{ request()->is('client/don-hang-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/don-hang-noi-bo') }}"><i data-lucide="clipboard-list"></i>Đơn hàng A/B</a>
     <a class="summary-sidebar__link {{ request()->is('client/lenh-san-xuat-trung-tam*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-san-xuat-trung-tam') }}"><i data-lucide="route"></i>Lệnh SX trung tâm</a>
     <a class="summary-sidebar__link {{ request()->is('client/lenh-san-xuat-sheet*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-san-xuat-sheet') }}"><i data-lucide="factory"></i>Lệnh sản xuất</a>
-    <details class="summary-sidebar__group" {{ request()->is('client/lenh-det*') || request()->is('client/designer-lenh-det*') ? 'open' : '' }}>
+    <details class="summary-sidebar__group" {{ request()->is('client/quan-ly-det*') ? 'open' : '' }}>
         <summary class="summary-sidebar__summary"><i data-lucide="swatch-book"></i>Quản lý dệt</summary>
-        <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/designer-lenh-det*') ? 'is-active' : '' }}" href="{{ url('/client/designer-lenh-det') }}">Dashboard designer</a>
-        <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/lenh-det*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-det') }}">Lệnh dệt / định mức</a>
+        <a class="summary-sidebar__link summary-sidebar__child {{ request()->routeIs('weaving.dashboard') ? 'is-active' : '' }}" href="{{ route('weaving.dashboard') }}">Tổng quan</a>
+        <a class="summary-sidebar__link summary-sidebar__child {{ request()->routeIs('weaving.orders.create') ? 'is-active' : '' }}" href="{{ route('weaving.orders.create') }}">Tạo lệnh</a>
+        <a class="summary-sidebar__link summary-sidebar__child {{ request()->routeIs('weaving.bom') ? 'is-active' : '' }}" href="{{ route('weaving.bom') }}">Định mức</a>
     </details>
     <a class="summary-sidebar__link {{ request()->is('client/lenh-btp*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-btp') }}"><i data-lucide="git-branch-plus"></i>Lệnh BTP</a>
     <a class="summary-sidebar__link {{ request()->is('client/danh-muc-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/danh-muc-noi-bo') }}"><i data-lucide="book-open"></i>Danh mục nội bộ</a>

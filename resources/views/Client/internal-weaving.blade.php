@@ -220,7 +220,8 @@
                 <div class="weaving-plan-actions">
                     <div id="planSummary" class="d-flex flex-wrap gap-2"></div>
                     <button id="openShelfMapBtn" class="wms-btn" type="button" disabled><i data-lucide="map-pin"></i>Xem mặt kệ</button>
-                    <button id="printWeavingTicketBtn" class="wms-btn" type="button" disabled><i data-lucide="printer"></i>In lệnh</button>
+                    <button id="editWeavingTemplateBtn" class="wms-btn" type="button" disabled><i data-lucide="settings-2"></i>Thông tin mẫu</button>
+                    <button id="exportWeavingSheetBtn" class="wms-btn" type="button" disabled><i data-lucide="file-spreadsheet"></i>Xuất mẫu Sheet</button>
                     <button id="createIssueBtn" class="wms-btn wms-btn--primary" type="button" disabled><i data-lucide="send"></i>Tạo phiếu xuất</button>
                 </div>
             </div>
@@ -259,6 +260,101 @@
     </div>
 </div>
 
+<div class="modal fade" id="weavingTemplateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title">Thông tin mẫu LENH_DET</h5>
+                    <div id="weavingTemplateMeta" class="weaving-help"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+            <div class="modal-body">
+                <div class="accordion" id="weavingTemplateAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#templateGeneral">Thông tin chung</button></h2>
+                        <div id="templateGeneral" class="accordion-collapse collapse show" data-bs-parent="#weavingTemplateAccordion">
+                            <div class="accordion-body">
+                                <div class="row g-3">
+                                    <div class="col-md-3"><label class="form-label">Khách hàng</label><input class="form-control" data-basic-field="customer"></div>
+                                    <div class="col-md-3"><label class="form-label">PO</label><input class="form-control" data-basic-field="po_number"></div>
+                                    <div class="col-md-3"><label class="form-label">Mã design</label><input class="form-control" data-basic-field="design_code"></div>
+                                    <div class="col-md-3"><label class="form-label">Job #</label><input class="form-control" data-template-field="job_number"></div>
+                                    <div class="col-md-3"><label class="form-label">Ngày ra lệnh</label><input class="form-control" type="date" data-basic-field="order_date"></div>
+                                    <div class="col-md-3"><label class="form-label">Ngày giao</label><input class="form-control" type="date" data-basic-field="due_date"></div>
+                                    <div class="col-md-2"><label class="form-label">Số lượng</label><input class="form-control" type="number" min="0" step="0.001" data-basic-field="order_quantity"></div>
+                                    <div class="col-md-2"><label class="form-label">ĐVT</label><input class="form-control" data-basic-field="unit"></div>
+                                    <div class="col-md-2"><label class="form-label">Tên label</label><input class="form-control" data-template-field="label_name"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#templateOperations">Công đoạn và quy cách</button></h2>
+                        <div id="templateOperations" class="accordion-collapse collapse" data-bs-parent="#weavingTemplateAccordion">
+                            <div class="accordion-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6"><label class="form-label">Ui keo</label><input class="form-control" data-operation-field="UI KEO"></div>
+                                    <div class="col-md-6"><label class="form-label">Loop</label><input class="form-control" data-operation-field="LOOP"></div>
+                                    <div class="col-md-6"><label class="form-label">Phần trên</label><input class="form-control" data-operation-field="PHAN TREN"></div>
+                                    <div class="col-md-6"><label class="form-label">Phần dưới</label><input class="form-control" data-operation-field="PHAN DUOI"></div>
+                                    <div class="col-md-3"><label class="form-label">Chiều dài</label><input class="form-control" data-template-field="length"></div>
+                                    <div class="col-md-3"><label class="form-label">Hoàn chỉnh</label><input class="form-control" data-template-field="finished_size"></div>
+                                    <div class="col-md-2"><label class="form-label">Mã số hộp</label><input class="form-control" data-template-field="box_code"></div>
+                                    <div class="col-md-2"><label class="form-label">SL/hộp</label><input class="form-control" data-template-field="quantity_per_box"></div>
+                                    <div class="col-md-2"><label class="form-label">Sợi dọc (g)</label><input class="form-control" type="number" min="0" step="0.001" data-template-field="warp_grams"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#templateMachine">Máy, cuộn và cộng 10%</button></h2>
+                        <div id="templateMachine" class="accordion-collapse collapse" data-bs-parent="#weavingTemplateAccordion">
+                            <div class="accordion-body">
+                                <div class="row g-3">
+                                    <div class="col-md-2"><label class="form-label">Số pick</label><input class="form-control" data-template-field="pick"></div>
+                                    <div class="col-md-2"><label class="form-label">Mật độ</label><input class="form-control" data-template-field="density"></div>
+                                    <div class="col-md-2"><label class="form-label">Máy</label><input class="form-control" data-template-field="machine"></div>
+                                    <div class="col-md-3"><label class="form-label">Máy cuộn nhỏ</label><input class="form-control" data-template-field="roll_machine_small"></div>
+                                    <div class="col-md-3"><label class="form-label">Số cuộn nhỏ</label><input class="form-control" type="number" min="0" step="0.001" data-template-field="roll_count_small"></div>
+                                    <div class="col-md-3"><label class="form-label">Máy cuộn lớn</label><input class="form-control" data-template-field="roll_machine_large"></div>
+                                    <div class="col-md-3"><label class="form-label">Số cuộn lớn</label><input class="form-control" type="number" min="0" step="0.001" data-template-field="roll_count_large"></div>
+                                    <div class="col-md-3"><label class="form-label">Số lượng +10%</label><input class="form-control" type="number" min="0" step="0.001" data-template-field="quantity_plus_10"></div>
+                                    <div class="col-md-3"><label class="form-label">Số dòng</label><input class="form-control" type="number" min="0" step="1" data-template-field="row_count"></div>
+                                    <div class="col-md-3"><label class="form-label">Máy dòng nhỏ</label><input class="form-control" data-template-field="row_machine_small"></div>
+                                    <div class="col-md-3"><label class="form-label">Số dòng +10% nhỏ</label><input class="form-control" type="number" min="0" step="0.001" data-template-field="row_count_plus_10"></div>
+                                    <div class="col-md-3"><label class="form-label">Máy dòng lớn</label><input class="form-control" data-template-field="row_machine_large"></div>
+                                    <div class="col-md-3"><label class="form-label">Số dòng +10% lớn</label><input class="form-control" type="number" min="0" step="0.001" data-template-field="row_count_plus_10_large"></div>
+                                    <div class="col-md-3"><label class="form-label">Ca nhỏ</label><input class="form-control" data-template-field="shift"></div>
+                                    <div class="col-md-3"><label class="form-label">Ca lớn</label><input class="form-control" data-template-field="shift_large"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#templateFiles">File và USB</button></h2>
+                        <div id="templateFiles" class="accordion-collapse collapse" data-bs-parent="#weavingTemplateAccordion">
+                            <div class="accordion-body">
+                                <div class="row g-3">
+                                    <div class="col-md-4"><label class="form-label">Tên file</label><input class="form-control" data-template-field="file_name"></div>
+                                    <div class="col-md-4"><label class="form-label">USB máy nhỏ</label><input class="form-control" data-template-field="usb_small"></div>
+                                    <div class="col-md-4"><label class="form-label">USB máy lớn</label><input class="form-control" data-template-field="usb_large"></div>
+                                </div>
+                                <div class="weaving-help mt-2">Ảnh lấy theo mã hàng trong Danh mục nội bộ. QR được tạo tự động từ số lệnh.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="wms-btn" data-bs-dismiss="modal">Hủy</button>
+                <button id="saveWeavingTemplateBtn" type="button" class="wms-btn wms-btn--primary"><i data-lucide="save"></i>Lưu thông tin</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
 <script>
@@ -288,6 +384,7 @@ const rowShelfLocations = row => {
 let orderPage = 1, orderTotalPages = 1, itemPage = 1, itemTotalPages = 1, currentProductionOrder = null, timer = null;
 let bomQuickItem = null, bomQuickModal = null, catalogTimer = null;
 let currentSourceItems = [], currentPlanResult = null, bomSaveTimers = {};
+let weavingTemplateModal = null;
 
 function jsonOrError(response, fallback) {
     return response.json().catch(() => ({})).then(result => {
@@ -404,9 +501,10 @@ function loadPlan(code) {
     document.getElementById('sourceItemRows').innerHTML = '<div class="wms-loading">Đang đọc BOM theo từng mã hàng...</div>';
     document.getElementById('weavingTicket').classList.remove('is-visible');
     document.getElementById('createIssueBtn').disabled = true;
-    document.getElementById('printWeavingTicketBtn').disabled = true;
+    document.getElementById('editWeavingTemplateBtn').disabled = true;
+    document.getElementById('exportWeavingSheetBtn').disabled = true;
     document.getElementById('openShelfMapBtn').disabled = true;
-    api(`/api/lenh-det/production-order-plan?production_order=${encodeURIComponent(code)}`).then(result => {
+    return api(`/api/lenh-det/production-order-plan?production_order=${encodeURIComponent(code)}`).then(result => {
         currentPlanResult = result;
         const summary = result.summary || {};
         document.getElementById('planSummary').innerHTML = `
@@ -421,7 +519,8 @@ function loadPlan(code) {
         if (window.lucide) lucide.createIcons();
         const hasMissingCatalog = (result.data || []).some(row => !row.catalog_exists);
         document.getElementById('createIssueBtn').disabled = !(result.data || []).length || hasMissingCatalog;
-        document.getElementById('printWeavingTicketBtn').disabled = !(result.data || []).length;
+        document.getElementById('editWeavingTemplateBtn').disabled = false;
+        document.getElementById('exportWeavingSheetBtn').disabled = !(result.data || []).length;
         document.getElementById('openShelfMapBtn').disabled = false;
         document.getElementById('planRows').innerHTML = (result.data || []).map(row => {
             const locations = rowShelfLocations(row).slice(0, 6).map(location => `
@@ -447,7 +546,8 @@ function loadPlan(code) {
     }).catch(error => {
         currentPlanResult = null;
         document.getElementById('weavingTicket').classList.remove('is-visible');
-        document.getElementById('printWeavingTicketBtn').disabled = true;
+        document.getElementById('editWeavingTemplateBtn').disabled = true;
+        document.getElementById('exportWeavingSheetBtn').disabled = true;
         document.getElementById('openShelfMapBtn').disabled = true;
         document.getElementById('sourceItemRows').innerHTML = '';
         document.getElementById('planRows').innerHTML = `<tr><td colspan="6" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
@@ -460,7 +560,7 @@ function renderWeavingTicket(result) {
     const sourceItem = (result.source_items || [])[0] || {};
     const metadata = order.metadata || sourceItem.metadata || {};
     const operations = metadata.operations || {};
-    const lines = result.data || [];
+    const lines = sourceItem.materials?.length ? sourceItem.materials : (result.data || []);
     const ticketImage = imageUrl(order.image_url || sourceItem.image_url || metadata.image_url || '');
     const operationRows = [
         ['Tên label', metadata.label_name || sourceItem.item_name || '-'],
@@ -500,10 +600,10 @@ function renderWeavingTicket(result) {
                             <tr>
                                 <td>${esc(row.type || '')}</td>
                                 <td class="wms-code">${esc(row.material_code || '')}</td>
-                                <td>${esc(row.shelf_hint || row.catalog_shelf_code || row.first_location || '')}</td>
+                                <td>${esc(row.first_location || row.catalog_shelf_code || row.shelf_hint || '')}</td>
                                 <td>${esc(row.catalog_name || row.material_name || '')}</td>
                                 <td class="text-end">${num(row.consumption_per_unit || 0)}</td>
-                                <td class="text-end">${num(row.total_grams || row.required_quantity_raw || 0)}</td>
+                                <td class="text-end">${num(Number(row.total_grams) > 0 ? row.total_grams : (row.required_quantity_raw || row.required_quantity || 0))}</td>
                             </tr>
                         `).join('') || '<tr><td colspan="6" class="text-center text-secondary">Chưa có định mức</td></tr>'}
                     </tbody>
@@ -527,6 +627,65 @@ function renderWeavingTicket(result) {
 
 function ticketCell(label, value) {
     return `<div class="weaving-ticket-cell"><span class="weaving-ticket-label">${esc(label)}</span><span class="weaving-ticket-value">${esc(value || '-')}</span></div>`;
+}
+
+function metadataOperation(operations, name) {
+    const normalize = value => String(value || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]+/g, ' ').trim();
+    const wanted = normalize(name);
+    const entry = Object.entries(operations || {}).find(([key]) => normalize(key) === wanted);
+    return entry ? entry[1] : '';
+}
+
+function openWeavingTemplateEditor() {
+    if (!currentPlanResult) return;
+    const order = currentPlanResult.order || {};
+    const sourceItem = (currentPlanResult.source_items || [])[0] || {};
+    const metadata = {...(sourceItem.metadata || {}), ...(order.metadata || {})};
+    const operations = metadata.operations || {};
+    document.getElementById('weavingTemplateMeta').textContent = `${order.production_order || currentProductionOrder} · ${order.item_code || sourceItem.item_code || ''}`;
+
+    document.querySelectorAll('[data-basic-field]').forEach(input => {
+        const key = input.dataset.basicField;
+        input.value = order[key] ?? sourceItem[key] ?? '';
+    });
+    document.querySelectorAll('[data-template-field]').forEach(input => {
+        input.value = metadata[input.dataset.templateField] ?? '';
+    });
+    document.querySelectorAll('[data-operation-field]').forEach(input => {
+        input.value = metadataOperation(operations, input.dataset.operationField);
+    });
+    weavingTemplateModal.show();
+}
+
+function saveWeavingTemplateDetails() {
+    if (!currentProductionOrder || !currentPlanResult) return;
+    const order = currentPlanResult.order || {};
+    const sourceItem = (currentPlanResult.source_items || [])[0] || {};
+    const payload = {
+        production_order: currentProductionOrder,
+        item_code: order.item_code || sourceItem.item_code || '',
+        metadata: {operations: {}},
+    };
+    document.querySelectorAll('[data-basic-field]').forEach(input => {
+        payload[input.dataset.basicField] = input.value.trim();
+    });
+    document.querySelectorAll('[data-template-field]').forEach(input => {
+        payload.metadata[input.dataset.templateField] = input.value.trim();
+    });
+    document.querySelectorAll('[data-operation-field]').forEach(input => {
+        payload.metadata.operations[input.dataset.operationField.replace(/\s+/g, '_')] = input.value.trim();
+    });
+
+    const button = document.getElementById('saveWeavingTemplateBtn');
+    button.disabled = true;
+    api('/api/lenh-det/template-details', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    }).then(result => {
+        weavingTemplateModal.hide();
+        return loadPlan(currentProductionOrder);
+    }).catch(error => alert(error.message))
+      .finally(() => { button.disabled = false; });
 }
 
 function printWeavingTicket() {
@@ -1000,7 +1159,29 @@ document.getElementById('createIssueBtn').addEventListener('click', () => {
         })
         .catch(error => alert(error.message));
 });
-document.getElementById('printWeavingTicketBtn').addEventListener('click', printWeavingTicket);
+document.getElementById('editWeavingTemplateBtn').addEventListener('click', openWeavingTemplateEditor);
+document.getElementById('saveWeavingTemplateBtn').addEventListener('click', saveWeavingTemplateDetails);
+document.getElementById('exportWeavingSheetBtn').addEventListener('click', () => {
+    if (!currentProductionOrder || !currentPlanResult) return;
+    const button = document.getElementById('exportWeavingSheetBtn');
+    const sheetWindow = window.open('about:blank', '_blank');
+    button.disabled = true;
+    api('/api/lenh-det/export-sheet', {
+        method: 'POST',
+        body: JSON.stringify({production_order: currentProductionOrder}),
+    }).then(result => {
+        if (sheetWindow) {
+            sheetWindow.location.href = result.sheet_url;
+        } else {
+            window.location.href = result.sheet_url;
+        }
+    }).catch(error => {
+        if (sheetWindow) sheetWindow.close();
+        alert(error.message);
+    }).finally(() => {
+        button.disabled = false;
+    });
+});
 document.getElementById('openShelfMapBtn').addEventListener('click', () => {
     if (!currentProductionOrder || !currentPlanResult) return;
     const firstLocation = (currentPlanResult.data || []).flatMap(rowShelfLocations)[0]?.location_code || '';
@@ -1030,6 +1211,7 @@ document.getElementById('itemNext').addEventListener('click', () => { if (itemPa
 document.getElementById('reloadBtn').addEventListener('click', () => { loadItems(); loadOrders(); if (currentProductionOrder) loadPlan(currentProductionOrder); });
 
 const requestedOrder = new URLSearchParams(window.location.search).get('order');
+weavingTemplateModal = new bootstrap.Modal(document.getElementById('weavingTemplateModal'));
 if (requestedOrder) {
     document.getElementById('orderKeyword').value = requestedOrder;
     document.getElementById('topKeyword').value = requestedOrder;

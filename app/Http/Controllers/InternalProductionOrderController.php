@@ -103,7 +103,7 @@ class InternalProductionOrderController extends Controller
                 $first = $lines->first();
                 $receipt = $receiptRows->get($productionOrder);
                 $issue = $issueRows->get($productionOrder);
-                $plannedQuantity = (float) $lines->sum('order_quantity');
+                $plannedQuantity = $this->plannedQuantityForOrderLines($lines);
                 $receivedQuantity = (float) ($receipt->quantity ?? 0);
                 $issuedProduction = (float) ($issue->production_quantity ?? 0);
                 $issuedCustomer = (float) ($issue->customer_quantity ?? 0);
@@ -240,6 +240,12 @@ class InternalProductionOrderController extends Controller
                 WHERE receipt_line.production_order = internal_production_orders.production_order
                   AND receipt.source = 'Phieu nhap thanh pham'
             ), 0) < COALESCE((
+                SELECT MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(planned_variant.raw_data, '$._internal_variant.source_quantity')) AS DECIMAL(18, 3)))
+                FROM internal_production_orders AS planned_variant
+                WHERE planned_variant.production_order = internal_production_orders.production_order
+                  AND planned_variant.is_active = 1
+                  AND planned_variant.is_manual_variant = 1
+            ), (
                 SELECT SUM(planned_order.order_quantity)
                 FROM internal_production_orders AS planned_order
                 WHERE planned_order.production_order = internal_production_orders.production_order
@@ -307,14 +313,14 @@ class InternalProductionOrderController extends Controller
             : $rowsQuery->limit($limit)->get();
         $totalRows = (clone $summaryQuery)->count();
 
-        if ($request->boolean('unfinished') && $rows->isNotEmpty()) {
+        if (($request->boolean('unfinished') || $request->boolean('with_progress')) && $rows->isNotEmpty()) {
             $orderCodes = $rows->pluck('production_order')->filter()->unique()->values();
             $plannedByOrder = InternalProductionOrder::query()
                 ->where('is_active', true)
                 ->whereIn('production_order', $orderCodes)
-                ->select('production_order', DB::raw('SUM(order_quantity) as planned_quantity'))
+                ->get()
                 ->groupBy('production_order')
-                ->pluck('planned_quantity', 'production_order');
+                ->map(fn ($lines) => $this->plannedQuantityForOrderLines($lines));
             $receivedByOrder = DB::connection('internal')
                 ->table('internal_material_receipt_lines as receipt_line')
                 ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'receipt_line.receipt_id')
@@ -354,7 +360,7 @@ class InternalProductionOrderController extends Controller
 
         $receiptProgress = null;
         if ($productionOrder !== '') {
-            $plannedQuantity = (float) (clone $summaryQuery)->sum('order_quantity');
+            $plannedQuantity = $this->plannedQuantityForOrderLines($rows);
             $orderDate = optional((clone $summaryQuery)->orderBy('received_date')->first())->received_date;
             // Count every finished-goods receipt, including lots later consumed by FIFO.
             $linkedReceiptQuery = DB::connection('internal')
@@ -464,7 +470,7 @@ class InternalProductionOrderController extends Controller
                     ->first();
                 $sourceHash = hash('sha256', json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                 if ($existing && hash_equals((string) ($existing->source_hash ?? ''), $sourceHash)) {
-                    if (!$existing->is_active) {
+                    if (!$existing->is_active && !$existing->is_variant_parent) {
                         $existing->update(['is_active' => true]);
                     }
                     $unchanged++;
@@ -495,14 +501,16 @@ class InternalProductionOrderController extends Controller
                         'raw_data' => $row,
                         'source_hash' => $sourceHash,
                         'sync_batch' => $batch,
-                        'is_active' => true,
+                        'is_active' => !($existing && $existing->is_variant_parent),
                     ]
                 );
 
                 $existing ? $updated++ : $created++;
             }
 
-            $archiveQuery = InternalProductionOrder::query()->where('is_active', true);
+            $archiveQuery = InternalProductionOrder::query()
+                ->where('is_active', true)
+                ->where('is_manual_variant', false);
             if ($activeKeys) {
                 $archiveQuery->whereNotIn('row_key', array_unique($activeKeys));
             }
@@ -560,6 +568,20 @@ class InternalProductionOrderController extends Controller
             'production_done_count' => $rows->where('status', 'production_done')->count(),
             'shipped_customer_count' => $rows->where('status', 'shipped_customer')->count(),
         ];
+    }
+
+    private function plannedQuantityForOrderLines($lines): float
+    {
+        $sourceQuantities = collect($lines)
+            ->map(function ($line) {
+                $rawData = is_array($line->raw_data) ? $line->raw_data : [];
+                return (float) ($rawData['_internal_variant']['source_quantity'] ?? 0);
+            })
+            ->filter(fn ($quantity) => $quantity > 0);
+
+        return $sourceQuantities->isNotEmpty()
+            ? (float) $sourceQuantities->max()
+            : (float) collect($lines)->sum('order_quantity');
     }
 
     private function splitCodes($value): array

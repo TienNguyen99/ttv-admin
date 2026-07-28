@@ -19,5 +19,7 @@ class InternalProductionOrder extends Model
         'order_quantity' => 'float',
         'raw_data' => 'array',
         'is_active' => 'boolean',
+        'is_variant_parent' => 'boolean',
+        'is_manual_variant' => 'boolean',
     ];
 }

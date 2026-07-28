@@ -218,6 +218,39 @@
             border-bottom: 1px solid #eef2f7;
         }
 
+        .quick-export-panel {
+            display: grid;
+            grid-template-columns: minmax(230px, .7fr) minmax(220px, 1fr) 190px;
+            gap: 12px;
+            align-items: end;
+            padding: 12px 14px;
+            border-bottom: 1px solid #dbeafe;
+            background: #f8fbff;
+        }
+
+        .quick-export-switch {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 40px;
+            padding: 8px 12px;
+            border: 1px solid #bfdbfe;
+            border-radius: 10px;
+            background: #ffffff;
+        }
+
+        .quick-export-switch .form-check-input {
+            width: 2.5rem;
+            height: 1.35rem;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .quick-export-switch label {
+            margin: 0;
+            cursor: pointer;
+        }
+
         label {
             margin-bottom: 6px;
             color: #334155;
@@ -396,6 +429,7 @@
             .quick-actions { justify-content: stretch; }
             .quick-btn { flex: 1 1 auto; }
             .quick-form-row { grid-template-columns: 1fr; padding: 12px; }
+            .quick-export-panel { grid-template-columns: 1fr; padding: 12px; }
             .quick-panel-header { align-items: flex-start; flex-direction: column; }
             .quick-toolbar { justify-content: flex-start; }
         }
@@ -448,6 +482,20 @@
                         <input id="receiptNote" class="form-control" autocomplete="off" placeholder="KCS giao kho, ca sáng">
                     </div>
                 </div>
+                <div id="quickExportPanel" class="quick-export-panel d-none">
+                    <div class="quick-export-switch">
+                        <input id="exportImmediately" class="form-check-input" type="checkbox" role="switch">
+                        <label for="exportImmediately">Nhập + xuất thành phẩm ngay</label>
+                    </div>
+                    <div id="customerField" class="d-none">
+                        <label for="customerName">Khách hàng *</label>
+                        <input id="customerName" class="form-control" autocomplete="off" placeholder="Nhập tên khách hàng">
+                    </div>
+                    <div id="issueDateField" class="d-none">
+                        <label for="issueDate">Ngày xuất *</label>
+                        <input id="issueDate" class="form-control" type="date">
+                    </div>
+                </div>
 
                 <div class="quick-table-wrap">
                     <table class="quick-table">
@@ -478,14 +526,14 @@
 
     <dialog id="variantDialog" class="variant-dialog">
         <div class="variant-dialog__head">
-            <div><h2>Tạo mã theo size</h2><p id="variantDialogSummary"></p></div>
+            <div><h2>Tách mã theo size / màu</h2><p id="variantDialogSummary"></p></div>
             <button id="closeVariantDialog" class="quick-btn" type="button" aria-label="Đóng"><i data-lucide="x"></i></button>
         </div>
         <div class="variant-dialog__body">
             <div id="variantSizeEntry" class="variant-size-entry d-none">
                 <input id="variantSizeInput" class="form-control" autocomplete="off" placeholder="Dán danh sách size: 35, 36, 37, 38...">
                 <button id="previewVariantSizesBtn" class="quick-btn" type="button">Tách size</button>
-                <small>Lệnh nguồn chưa tách size. Có thể dán từ Excel, ngăn cách bằng dấu phẩy, tab hoặc xuống dòng.</small>
+                <small>Lệnh nguồn chưa tách biến thể. Có thể dán size từ Excel; màu được lấy theo từng dòng phiếu.</small>
             </div>
             <div class="table-responsive">
                 <table class="variant-table">
@@ -521,6 +569,11 @@
         let pendingVariantOrder = '';
         let pendingVariantPlans = [];
         let pendingVariantSizes = [];
+        let pendingVariantInputs = [];
+        let pendingCrossOrderVariants = [];
+        let pendingVariantNeedsLink = false;
+        let variantCheckPromise = Promise.resolve();
+        let variantCheckError = null;
 
         function localIsoDate() {
             const date = new Date();
@@ -555,6 +608,16 @@
             return `/api/lenh-san-xuat-sheet?${params.toString()}`;
         }
 
+        function allOrderQuery(keyword, limit) {
+            const params = new URLSearchParams({
+                keyword,
+                with_progress: '1',
+                order_date_to: selectedReceiptDate(),
+                limit: String(limit),
+            });
+            return `/api/lenh-san-xuat-sheet?${params.toString()}`;
+        }
+
         function setStatus(message, type = '') {
             const status = document.getElementById('formStatus');
             status.className = `quick-status ${type ? 'is-' + type : ''}`;
@@ -565,7 +628,7 @@
             return response.json().catch(() => ({})).then(result => {
                 if (!response.ok) {
                     const errors = result.errors ? Object.values(result.errors).flat().join('\n') : '';
-                    throw new Error(result.message || errors || fallback);
+                    throw new Error(errors || result.message || `${fallback} (HTTP ${response.status})`);
                 }
                 return result;
             });
@@ -691,13 +754,35 @@
             if (keyword.length < 2) return;
 
             productionOrderSearchTimer = setTimeout(() => {
-                fetch(openOrderQuery(keyword, 20))
+                fetch(allOrderQuery(keyword, 20))
                     .then(response => jsonOrError(response, 'Không tải được lệnh sản xuất'))
                     .then(result => {
-                        productionOrderOptions = result.data || [];
+                        const uniqueOrders = new Map();
+                        (result.data || []).forEach(order => {
+                            const code = String(order.production_order || '').trim();
+                            if (!code || uniqueOrders.has(code)) return;
+                            uniqueOrders.set(code, {
+                                ...order,
+                                suggestion_state: Number(order.remaining_quantity || 0) > 0
+                                    ? 'unfinished'
+                                    : 'completed',
+                            });
+                        });
+                        const upperKeyword = keyword.toUpperCase();
+                        productionOrderOptions = Array.from(uniqueOrders.values()).sort((left, right) => {
+                            const leftMatchesOrder = String(left.production_order || '').toUpperCase().includes(upperKeyword) ? 0 : 1;
+                            const rightMatchesOrder = String(right.production_order || '').toUpperCase().includes(upperKeyword) ? 0 : 1;
+                            if (leftMatchesOrder !== rightMatchesOrder) return leftMatchesOrder - rightMatchesOrder;
+                            return left.suggestion_state === right.suggestion_state
+                                ? 0
+                                : (left.suggestion_state === 'unfinished' ? -1 : 1);
+                        });
                         document.getElementById('productionOrderOptions').innerHTML = productionOrderOptions.map(order => {
+                            const progressLabel = order.suggestion_state === 'completed'
+                                ? 'Đã nhập đủ/dư - chọn để kiểm tra'
+                                : `C\u00f2n ${fmt(order.remaining_quantity || 0)}`;
                             const label = [
-                                `C\u00f2n ${fmt(order.remaining_quantity || 0)}`,
+                                progressLabel,
                                 order.received_date ? `Nh\u1eadn l\u1ec7nh ${String(order.received_date).split('-').reverse().join('/')}` : '',
                                 order.customer,
                                 order.item_code,
@@ -741,7 +826,12 @@
                     }
                     expandProductionOrder(input, variants, progress);
                     if (selectedReceiptKind === 'finished') {
-                        prepareProductionVariants(input.value.trim()).catch(error => setStatus(error.message, 'error'));
+                        variantCheckError = null;
+                        variantCheckPromise = prepareProductionVariants(input.value.trim())
+                            .catch(error => {
+                                variantCheckError = error;
+                                setStatus(error.message, 'error');
+                            });
                     }
                     const excess = Number(progress.excess_quantity || 0);
                     if (excess > 0.0001) {
@@ -810,28 +900,35 @@
 
         function applyVariantPlansToRows(plans, final = false) {
             (plans || []).forEach(plan => {
-                const row = Array.from(document.querySelectorAll('#quickRows tr')).find(item => {
+                const matchingRows = Array.from(document.querySelectorAll('#quickRows tr')).filter(item => {
                     if (plan.manual) {
                         return item.dataset.variantKey === String(plan.variant_key);
                     }
                     return Number(item.querySelector('.production-order')?.dataset.productionOrderId || 0) === Number(plan.order_id);
                 });
-                if (!row) return;
+                if (!matchingRows.length) return;
                 const code = final ? plan.final_code : (plan.exists ? plan.proposed_code : '');
                 if (!code) {
-                    const state = row.querySelector('.row-state');
-                    state.className = 'row-state is-warn';
-                    state.textContent = `Chưa có mã riêng cho size ${plan.size || '-'}`;
+                    matchingRows.forEach(row => {
+                        const state = row.querySelector('.row-state');
+                        state.className = 'row-state is-warn';
+                        state.textContent = `Chưa có mã riêng cho size/màu ${plan.size || '-'} / ${plan.color || '-'}`;
+                    });
                     return;
                 }
-                row.querySelector('.internal-code').value = code;
-                row.querySelector('.item-name').value = plan.item_name || row.querySelector('.item-name').value;
-                row.querySelector('.item-size').value = plan.size || row.querySelector('.item-size').value;
-                row.querySelector('.item-color').value = plan.color || row.querySelector('.item-color').value;
-                row.querySelector('.item-unit').value = plan.unit || row.querySelector('.item-unit').value;
-                const state = row.querySelector('.row-state');
-                state.className = 'row-state is-ok';
-                state.textContent = final ? 'Đã tạo và liên kết danh mục' : 'Đã có trong danh mục';
+                matchingRows.forEach(row => {
+                    row.querySelector('.internal-code').value = code;
+                    if (final && plan.production_order_variant_id) {
+                        row.querySelector('.production-order').dataset.productionOrderId = plan.production_order_variant_id;
+                    }
+                    row.querySelector('.item-name').value = plan.item_name || row.querySelector('.item-name').value;
+                    row.querySelector('.item-size').value = plan.size || row.querySelector('.item-size').value;
+                    row.querySelector('.item-color').value = plan.color || row.querySelector('.item-color').value;
+                    row.querySelector('.item-unit').value = plan.unit || row.querySelector('.item-unit').value;
+                    const state = row.querySelector('.row-state');
+                    state.className = 'row-state is-ok';
+                    state.textContent = final ? 'Đã tạo và liên kết danh mục' : 'Đã có trong danh mục';
+                });
             });
         }
 
@@ -867,24 +964,37 @@
             });
         }
 
-        async function prepareProductionVariants(orderCode, sizes = []) {
+        async function prepareProductionVariants(orderCode, sizes = [], manualVariants = [], expandRows = true, crossOrderVariants = []) {
             const response = await fetch('/api/danh-muc-noi-bo/bien-the-lenh-san-xuat', {
                 method: 'POST',
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
-                body: JSON.stringify({production_order:orderCode,apply:false,sizes}),
+                body: JSON.stringify({
+                    production_order:orderCode,
+                    apply:false,
+                    sizes,
+                    manual_variants:manualVariants,
+                    cross_order_variants:crossOrderVariants
+                }),
             });
             const result = await jsonOrError(response, 'Không kiểm tra được biến thể danh mục');
             const plans = result.data || [];
             pendingVariantSizes = sizes;
-            if (Number(result.summary?.manual_size_count || 0) > 0) {
+            pendingVariantInputs = manualVariants;
+            pendingCrossOrderVariants = crossOrderVariants;
+            if (expandRows && Number(result.summary?.manual_size_count || 0) > 0) {
                 expandManualVariantPlans(plans);
             }
             applyVariantPlansToRows(plans, false);
             const missing = plans.filter(plan => !plan.exists);
-            if (!missing.length) {
+            const needsProductionLink = Boolean(result.summary?.needs_production_link);
+            pendingVariantNeedsLink = needsProductionLink;
+            if (!missing.length && !needsProductionLink) {
                 pendingVariantOrder = '';
                 pendingVariantPlans = [];
                 pendingVariantSizes = [];
+                pendingVariantInputs = [];
+                pendingCrossOrderVariants = [];
+                pendingVariantNeedsLink = false;
                 if (document.getElementById('variantDialog').open) {
                     document.getElementById('variantDialog').close();
                 }
@@ -892,9 +1002,26 @@
                 return;
             }
 
+            const splitRequired = Number(result.summary?.split_required || 0) > 0;
+            if (!splitRequired && !needsProductionLink) {
+                pendingVariantOrder = '';
+                pendingVariantPlans = [];
+                pendingVariantSizes = [];
+                pendingVariantInputs = [];
+                pendingCrossOrderVariants = [];
+                pendingVariantNeedsLink = false;
+                if (document.getElementById('variantDialog').open) {
+                    document.getElementById('variantDialog').close();
+                }
+                setStatus(`Mã từ lệnh ${orderCode} chưa khớp DANH MỤC. Chọn mã đúng ở cột Mã nội bộ rồi nhập bình thường.`, 'error');
+                return;
+            }
+
             pendingVariantOrder = orderCode;
             pendingVariantPlans = plans;
-            document.getElementById('variantDialogSummary').textContent = `${orderCode} · ${plans.length} biến thể · thiếu ${missing.length} mã`;
+            document.getElementById('variantDialogSummary').textContent = missing.length
+                ? `${orderCode} · ${plans.length} biến thể · thiếu ${missing.length} mã`
+                : `${orderCode} · ${plans.length} biến thể · cần liên kết vào lệnh trung tâm`;
             const requiresSizes = Boolean(result.summary?.requires_size_input);
             const showSizeEntry = requiresSizes || Number(result.summary?.manual_size_count || 0) > 0;
             document.getElementById('variantSizeEntry').classList.toggle('d-none', !showSizeEntry);
@@ -911,13 +1038,17 @@
                 </tr>`).join('');
             document.getElementById('variantDialogNote').textContent = requiresSizes
                 ? 'Dán danh sách size để tạo đúng biến thể; hệ thống không tự đoán size.'
+                : !missing.length && needsProductionLink
+                ? 'Các mã đã có trong danh mục. Bấm liên kết để tạo đủ dòng trong lệnh trung tâm.'
                 : result.summary?.write_configured
                 ? 'Chỉ các dòng “Sẽ tạo” được append vào Google Sheet.'
                 : 'Chưa cấu hình quyền ghi Google Sheet.';
-            document.getElementById('applyVariantsBtn').disabled = requiresSizes || !result.summary?.write_configured;
-            if (!document.getElementById('variantDialog').open) {
-                document.getElementById('variantDialog').showModal();
-            }
+            document.getElementById('applyVariantsBtn').disabled = requiresSizes
+                || (missing.length > 0 && !result.summary?.write_configured);
+            updateVariantApplyButtonLabel();
+            setStatus(missing.length
+                ? `Lệnh ${orderCode} có ${missing.length} mã size/màu cần tách. Bấm Lưu + in để kiểm tra và tạo mã.`
+                : `Lệnh ${orderCode} đã có mã size/màu nhưng chưa tách dòng ở lệnh trung tâm.`, 'error');
             if (window.lucide) lucide.createIcons();
         }
 
@@ -933,9 +1064,21 @@
             prepareProductionVariants(pendingVariantOrder, sizes).catch(error => setStatus(error.message, 'error'));
         }
 
+        function updateVariantApplyButtonLabel() {
+            const button = document.getElementById('applyVariantsBtn');
+            const missingCount = pendingVariantPlans.filter(plan => !plan.exists).length;
+            if (missingCount > 0) {
+                button.innerHTML = `<i data-lucide="list-plus"></i>Tạo ${missingCount} mã + liên kết`;
+            } else {
+                button.innerHTML = `<i data-lucide="link-2"></i>Liên kết ${pendingVariantPlans.length} dòng`;
+            }
+            if (window.lucide) lucide.createIcons();
+        }
+
         async function applyProductionVariants() {
             if (!pendingVariantOrder) return;
             const button = document.getElementById('applyVariantsBtn');
+            const missingCount = pendingVariantPlans.filter(plan => !plan.exists).length;
             const variants = Array.from(document.querySelectorAll('#variantPreviewRows tr')).map(row => {
                 const input = row.querySelector('.variant-code-input');
                 return input ? {
@@ -949,12 +1092,19 @@
                 return;
             }
             button.disabled = true;
-            button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>Đang tạo...';
+            button.innerHTML = `<span class="spinner-border spinner-border-sm"></span>${missingCount > 0 ? 'Đang tạo và liên kết...' : 'Đang liên kết...'}`;
             try {
                 const response = await fetch('/api/danh-muc-noi-bo/bien-the-lenh-san-xuat', {
                     method:'POST',
                     headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
-                    body:JSON.stringify({production_order:pendingVariantOrder,apply:true,sizes:pendingVariantSizes,variants}),
+                    body:JSON.stringify({
+                        production_order:pendingVariantOrder,
+                        apply:true,
+                        sizes:pendingVariantSizes,
+                        manual_variants:pendingVariantInputs,
+                        cross_order_variants:pendingCrossOrderVariants,
+                        variants
+                    }),
                 });
                 const result = await jsonOrError(response, 'Không tạo được mã biến thể');
                 applyVariantPlansToRows(result.data || [], true);
@@ -972,14 +1122,16 @@
                 pendingVariantOrder = '';
                 pendingVariantPlans = [];
                 pendingVariantSizes = [];
+                pendingVariantInputs = [];
+                pendingCrossOrderVariants = [];
+                pendingVariantNeedsLink = false;
                 document.getElementById('variantDialog').close();
                 setStatus(`Đã tạo ${created} mã mới và liên kết ${linked} biến thể của lệnh. Nhập số lượng theo từng size.`, 'ok');
             } catch (error) {
                 setStatus(error.message, 'error');
             } finally {
                 button.disabled = false;
-                button.innerHTML = '<i data-lucide="list-plus"></i>Tạo mã còn thiếu';
-                if (window.lucide) lucide.createIcons();
+                updateVariantApplyButtonLabel();
             }
         }
 
@@ -1164,6 +1316,99 @@
             return collectLines().filter(line => line.internal_item_code && line.quantity > 0);
         }
 
+        async function prepareFormVariantSplit() {
+            if (selectedReceiptKind !== 'finished'
+                || pendingVariantNeedsLink
+                || pendingVariantPlans.some(plan => plan.requires_split && !plan.exists)) {
+                return false;
+            }
+
+            const groups = new Map();
+            Array.from(document.querySelectorAll('#quickRows tr')).forEach(row => {
+                const quantity = num(row.querySelector('.quantity').value);
+                const orderInput = row.querySelector('.production-order');
+                const order = orderInput.value.trim();
+                const orderId = Number(orderInput.dataset.productionOrderId || 0);
+                const code = row.querySelector('.internal-code').value.trim();
+                const size = row.querySelector('.item-size').value.trim();
+                const color = row.querySelector('.item-color').value.trim();
+                if (quantity <= 0 || !order || !code) return;
+                const key = catalogKey(code);
+                if (!groups.has(key)) groups.set(key, {code, rows:[]});
+                groups.get(key).rows.push({row, order, orderId, size, color, quantity});
+            });
+
+            const variantGroups = Array.from(groups.values()).filter(item => {
+                const signatures = new Set(item.rows.map(entry => `${catalogKey(entry.size)}|${catalogKey(entry.color)}`));
+                return signatures.size > 1;
+            });
+            const sameOrderGroup = variantGroups.map(group => {
+                const rowsByOrder = new Map();
+                group.rows.forEach(entry => {
+                    const key = entry.orderId || catalogKey(entry.order);
+                    if (!rowsByOrder.has(key)) rowsByOrder.set(key, []);
+                    rowsByOrder.get(key).push(entry);
+                });
+                const rows = Array.from(rowsByOrder.values()).find(entries => {
+                    return new Set(entries.map(entry => `${catalogKey(entry.size)}|${catalogKey(entry.color)}`)).size > 1;
+                });
+                return rows ? {code:group.code, rows} : null;
+            }).find(Boolean);
+            const group = sameOrderGroup || variantGroups[0];
+            if (!group) return false;
+
+            const orderKeys = new Set(group.rows.map(entry => entry.orderId || catalogKey(entry.order)));
+            if (orderKeys.size > 1) {
+                const crossVariantsByOrder = new Map();
+                group.rows.forEach(entry => {
+                    const orderKey = entry.orderId || catalogKey(entry.order);
+                    if (!crossVariantsByOrder.has(orderKey)) {
+                        crossVariantsByOrder.set(orderKey, {
+                            order_id: entry.orderId || null,
+                            production_order: entry.order,
+                            variant_key: `CROSS:${orderKey}`,
+                            base_code: group.code,
+                            size: entry.size,
+                            color: entry.color,
+                            quantity: 0,
+                        });
+                    }
+                    crossVariantsByOrder.get(orderKey).quantity += entry.quantity;
+                });
+                const crossOrderVariants = Array.from(crossVariantsByOrder.values());
+                await prepareProductionVariants(
+                    group.rows[0].order,
+                    [],
+                    [],
+                    false,
+                    crossOrderVariants
+                );
+                return pendingVariantNeedsLink
+                    || pendingVariantPlans.some(plan => plan.requires_split && !plan.exists);
+            }
+
+            const variantsBySignature = new Map();
+            group.rows.forEach(entry => {
+                const signature = `${catalogKey(entry.size)}|${catalogKey(entry.color)}`;
+                if (!variantsBySignature.has(signature)) {
+                    variantsBySignature.set(signature, {
+                        variant_key: `FORM:${variantsBySignature.size + 1}`,
+                        size: entry.size,
+                        color: entry.color,
+                        quantity: 0,
+                    });
+                }
+                const variant = variantsBySignature.get(signature);
+                variant.quantity += num(entry.row.querySelector('.quantity').value);
+                entry.row.dataset.variantKey = variant.variant_key;
+            });
+
+            const manualVariants = Array.from(variantsBySignature.values());
+            await prepareProductionVariants(group.rows[0].order, [], manualVariants, false);
+            return pendingVariantNeedsLink
+                || pendingVariantPlans.some(plan => plan.requires_split && !plan.exists);
+        }
+
         function updateSummary() {
             const lines = validLines();
             document.getElementById('lineCount').textContent = fmt(lines.length);
@@ -1172,12 +1417,17 @@
 
         async function checkAllCatalog() {
             const rows = Array.from(document.querySelectorAll('#quickRows tr'));
+            const invalidCodes = [];
             for (const row of rows) {
                 const codeInput = row.querySelector('.internal-code');
                 const qty = num(row.querySelector('.quantity').value);
                 if (!codeInput.value.trim() && !qty) continue;
                 await applyInternalCatalog(codeInput, false);
+                if (qty > 0 && row.querySelector('.row-state').classList.contains('is-warn')) {
+                    invalidCodes.push(codeInput.value.trim() || `Dòng ${rows.indexOf(row) + 1}`);
+                }
             }
+            return [...new Set(invalidCodes)];
         }
 
         async function warnDuplicates(lines) {
@@ -1221,17 +1471,34 @@
             return confirm(`C\u1ea2NH B\u00c1O NH\u1eacP D\u01af THEO L\u1ec6NH\n\n${warnings.join('\n')}\n\nFIFO \u0111\u00e3 \u0111\u01b0\u1ee3c t\u00ednh trong s\u1ed1 \u0111\u00e3 nh\u1eadp. V\u1eabn l\u01b0u phi\u1ebfu?`);
         }
         async function saveAndPrint() {
-            if (pendingVariantPlans.some(plan => !plan.exists)) {
-                document.getElementById('variantDialog').showModal();
-                setStatus('Cần tạo hoặc xác nhận các mã size còn thiếu trước khi lưu phiếu.', 'error');
+            await variantCheckPromise;
+            if (variantCheckError) {
+                setStatus(`Chưa kiểm tra được size/màu: ${variantCheckError.message}`, 'error');
+                return;
+            }
+            try {
+                await prepareFormVariantSplit();
+            } catch (error) {
+                setStatus(`Không kiểm tra được size/màu trên phiếu: ${error.message}`, 'error');
+                return;
+            }
+            if (pendingVariantNeedsLink || pendingVariantPlans.some(plan => plan.requires_split && !plan.exists)) {
+                const dialog = document.getElementById('variantDialog');
+                if (!dialog.open) dialog.showModal();
+                setStatus('Cùng lệnh có nhiều size/màu. Tạo các mã còn thiếu trước khi lưu phiếu.', 'error');
                 return;
             }
             setStatus('Đang kiểm tra mã danh mục...');
-            await checkAllCatalog();
+            const invalidCatalogCodes = await checkAllCatalog();
             const lines = validLines();
             updateSummary();
             if (!lines.length) {
                 setStatus('Cần ít nhất 1 dòng có mã nội bộ và số lượng lớn hơn 0.', 'error');
+                return;
+            }
+            if (invalidCatalogCodes.length) {
+                setStatus(`Mã chưa có trong DANH MỤC: ${invalidCatalogCodes.join(', ')}. Chọn lại mã đúng trước khi lưu.`, 'error');
+                document.querySelector('#quickRows tr .row-state.is-warn')?.closest('tr')?.querySelector('.internal-code')?.focus();
                 return;
             }
             if (!await warnDuplicates(lines)) {
@@ -1244,23 +1511,38 @@
             }
 
             const isBtp = selectedReceiptKind === 'semi_finished';
+            const exportImmediately = !isBtp && document.getElementById('exportImmediately').checked;
+            const customerName = document.getElementById('customerName').value.trim();
+            const issueDate = document.getElementById('issueDate').value;
+            if (exportImmediately && (!customerName || !issueDate)) {
+                setStatus('Chọn khách hàng và ngày xuất trước khi nhập + xuất.', 'error');
+                (!customerName ? document.getElementById('customerName') : document.getElementById('issueDate')).focus();
+                return;
+            }
+
             const total = lines.reduce((sum, line) => sum + line.quantity, 0);
             const confirmation = isBtp
                 ? `Tạo 1 phiếu nhập BTP gồm ${lines.length} dòng, ${lines.length} lệnh BTP con và 1 phiếu xuất nhóm sang sản xuất?\n\nTổng số lượng: ${fmt(total)}`
-                : `Lưu 1 phiếu nhập thành phẩm gồm ${lines.length} dòng?\n\nTổng số lượng: ${fmt(total)}`;
+                : exportImmediately
+                    ? `Nhập kho và xuất ngay ${lines.length} dòng cho ${customerName}?\n\nNgày xuất: ${issueDate.split('-').reverse().join('/')}\nTổng số lượng: ${fmt(total)}`
+                    : `Lưu 1 phiếu nhập thành phẩm gồm ${lines.length} dòng?\n\nTổng số lượng: ${fmt(total)}`;
             if (!confirm(confirmation)) {
                 setStatus('Chưa lưu. Có thể bấm Chọn lại để đổi loại phiếu.');
                 return;
             }
 
-            const printWindow = window.open('', '_blank');
-            setStatus('Đang lưu phiếu nhập...');
+            const receiptPrintWindow = window.open('', '_blank');
+            const issuePrintWindow = exportImmediately ? window.open('', '_blank') : null;
+            setStatus(exportImmediately ? 'Đang nhập kho và tạo phiếu xuất...' : 'Đang lưu phiếu nhập...');
             fetch('/api/kiem-ton-kho/phieu-nhap-tp', {
                 method: 'POST',
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({
                     receipt_kind: selectedReceiptKind,
                     send_to_production: isBtp,
+                    export_to_customer: exportImmediately,
+                    customer_name: exportImmediately ? customerName : null,
+                    issue_date: exportImmediately ? issueDate : null,
                     location_code: 'CHUA-XEP',
                     ma_ko: '',
                     checked_at: document.getElementById('receiptDate').value,
@@ -1274,16 +1556,30 @@
                         ? [...new Set(result.production_issue.lines.map(line => line.production_order).filter(Boolean))]
                         : [];
                     const suffix = productionCodes.length ? ` Đã tạo ${productionCodes.length} lệnh BTP và gửi sản xuất.` : '';
-                    setStatus(`Đã lưu ${result.data?.receipt_code || 'phiếu nhập'}.${suffix} Đang mở phiếu in...`, 'ok');
-                    if (result.receipt_print_url && printWindow) {
-                        printWindow.location.href = result.receipt_print_url;
-                    } else if (printWindow) {
-                        printWindow.close();
+                    const receiptCode = result.data?.receipt_code || 'phiếu nhập';
+                    if (result.customer_issue_failed) {
+                        setStatus(`${result.message} Mở Danh sách phiếu để bấm Xuất TP lại.`, 'error');
+                        alert(`${result.message}\n\nPhiếu nhập ${receiptCode} đã được lưu. Vào Danh sách phiếu để tạo lại phiếu xuất.`);
+                    } else if (result.customer_issue) {
+                        setStatus(`Đã tạo ${receiptCode} và ${result.customer_issue.issue_code || 'phiếu xuất thành phẩm'}.`, 'ok');
+                    } else {
+                        setStatus(`Đã lưu ${receiptCode}.${suffix} Đang mở phiếu in...`, 'ok');
+                    }
+                    if (result.receipt_print_url && receiptPrintWindow) {
+                        receiptPrintWindow.location.href = result.receipt_print_url;
+                    } else if (receiptPrintWindow) {
+                        receiptPrintWindow.close();
+                    }
+                    if (result.customer_issue_print_url && issuePrintWindow) {
+                        issuePrintWindow.location.href = result.customer_issue_print_url;
+                    } else if (issuePrintWindow) {
+                        issuePrintWindow.close();
                     }
                     returnToChooser();
                 })
                 .catch(error => {
-                    if (printWindow) printWindow.close();
+                    if (receiptPrintWindow) receiptPrintWindow.close();
+                    if (issuePrintWindow) issuePrintWindow.close();
                     setStatus(error.message, 'error');
                     alert(error.message);
                 });
@@ -1293,6 +1589,11 @@
             pendingVariantOrder = '';
             pendingVariantPlans = [];
             pendingVariantSizes = [];
+            pendingVariantInputs = [];
+            pendingCrossOrderVariants = [];
+            pendingVariantNeedsLink = false;
+            variantCheckPromise = Promise.resolve();
+            variantCheckError = null;
             document.getElementById('variantSizeInput').value = '';
             if (clearHeader) document.getElementById('receiptNote').value = '';
             renderRows();
@@ -1305,6 +1606,9 @@
             const isBtp = kind === 'semi_finished';
             document.getElementById('modeChooser').classList.add('d-none');
             document.getElementById('receiptWorkspace').classList.remove('d-none');
+            document.getElementById('quickExportPanel').classList.toggle('d-none', isBtp);
+            document.getElementById('exportImmediately').checked = false;
+            toggleImmediateExportFields();
             document.getElementById('workspaceTitle').textContent = isBtp ? 'Nhập bán thành phẩm' : 'Nhập thành phẩm';
             document.getElementById('savePrintBtn').innerHTML = isBtp
                 ? '<i data-lucide="send"></i>Lưu + gửi sản xuất'
@@ -1321,12 +1625,35 @@
             pendingVariantOrder = '';
             pendingVariantPlans = [];
             pendingVariantSizes = [];
+            pendingVariantInputs = [];
+            pendingCrossOrderVariants = [];
+            pendingVariantNeedsLink = false;
+            variantCheckPromise = Promise.resolve();
+            variantCheckError = null;
             document.getElementById('variantSizeInput').value = '';
             document.getElementById('receiptWorkspace').classList.add('d-none');
             document.getElementById('modeChooser').classList.remove('d-none');
             document.getElementById('receiptNote').value = '';
+            document.getElementById('exportImmediately').checked = false;
+            document.getElementById('customerName').value = '';
+            document.getElementById('issueDate').value = document.getElementById('receiptDate').value || localIsoDate();
+            delete document.getElementById('issueDate').dataset.changedByUser;
+            toggleImmediateExportFields();
             renderRows();
             updateSummary();
+        }
+
+        function toggleImmediateExportFields() {
+            const enabled = selectedReceiptKind === 'finished'
+                && document.getElementById('exportImmediately').checked;
+            document.getElementById('customerField').classList.toggle('d-none', !enabled);
+            document.getElementById('issueDateField').classList.toggle('d-none', !enabled);
+            document.getElementById('savePrintBtn').innerHTML = enabled
+                ? '<i data-lucide="send"></i>Nhập + xuất + in'
+                : (selectedReceiptKind === 'semi_finished'
+                    ? '<i data-lucide="send"></i>Lưu + gửi sản xuất'
+                    : '<i data-lucide="printer"></i>Lưu + in');
+            if (window.lucide) lucide.createIcons();
         }
 
         function loadRecentReceipts() {
@@ -1357,7 +1684,23 @@
         document.getElementById('closeVariantDialog').addEventListener('click', () => document.getElementById('variantDialog').close());
         document.getElementById('cancelVariantDialog').addEventListener('click', () => document.getElementById('variantDialog').close());
         document.getElementById('clearFormBtn').addEventListener('click', () => resetRows(true));
+        document.getElementById('exportImmediately').addEventListener('change', () => {
+            if (!document.getElementById('issueDate').value) {
+                document.getElementById('issueDate').value = document.getElementById('receiptDate').value || localIsoDate();
+            }
+            toggleImmediateExportFields();
+            if (document.getElementById('exportImmediately').checked) {
+                document.getElementById('customerName').focus();
+            }
+        });
+        document.getElementById('issueDate').addEventListener('change', event => {
+            event.currentTarget.dataset.changedByUser = '1';
+        });
         document.getElementById('receiptDate').addEventListener('change', () => {
+            const issueDateInput = document.getElementById('issueDate');
+            if (issueDateInput.dataset.changedByUser !== '1') {
+                issueDateInput.value = document.getElementById('receiptDate').value;
+            }
             document.getElementById('productionOrderOptions').innerHTML = '';
             document.querySelectorAll('.order-suggestions').forEach(select => {
                 select.innerHTML = '';
@@ -1377,6 +1720,7 @@
         });
 
         document.getElementById('receiptDate').value = localIsoDate();
+        document.getElementById('issueDate').value = document.getElementById('receiptDate').value;
         renderRows();
         loadProductionOrderFromQuery();
         updateSummary();

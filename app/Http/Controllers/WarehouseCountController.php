@@ -500,9 +500,19 @@ class WarehouseCountController extends Controller
             ->limit(3000)
             ->get();
 
+        $shelfCatalogs = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereNotNull('item_code')
+            ->whereRaw("TRIM(COALESCE(shelf_code, '')) <> ''")
+            ->orderBy('source_row')
+            ->limit(3000)
+            ->get();
+
         $locationCodes = $rows
             ->pluck('location_code')
             ->map(fn ($code) => strtoupper(trim((string) $code)) ?: 'CHUA-XEP')
+            ->merge($shelfCatalogs->pluck('shelf_code')->map(fn ($code) => strtoupper(trim((string) $code))))
+            ->filter()
             ->unique()
             ->values();
 
@@ -513,7 +523,14 @@ class WarehouseCountController extends Controller
 
         $catalogsByItemCode = InternalItemCatalog::query()
             ->where('is_active', true)
-            ->whereIn('item_code', $rows->pluck('internal_item_code')->filter()->unique()->values())
+            ->whereIn(
+                'item_code',
+                $rows->pluck('internal_item_code')
+                    ->merge($shelfCatalogs->pluck('item_code'))
+                    ->filter()
+                    ->unique()
+                    ->values()
+            )
             ->get()
             ->keyBy(fn ($item) => mb_strtoupper(trim((string) $item->item_code)));
 
@@ -555,8 +572,69 @@ class WarehouseCountController extends Controller
                 'pantone_hex' => $match['hex'],
                 'color_name' => $match['name'] ?? '',
                 'pantone_source' => $match['source'],
+                'catalog_only' => false,
             ];
         });
+
+        $stockKeys = $data->mapWithKeys(function ($row) {
+            $key = mb_strtoupper(implode('|', [
+                $row['location']['location_code'] ?? '',
+                $row['internal_item_code'] ?? '',
+                $row['size'] ?? '',
+                $row['color'] ?? '',
+                $row['side'] ?? '',
+            ]));
+            return [$key => true];
+        });
+
+        $catalogOnlyRows = $shelfCatalogs
+            ->map(function ($catalog) use ($locations, $matcher, $stockKeys) {
+                $locationCode = strtoupper(trim((string) $catalog->shelf_code));
+                $key = mb_strtoupper(implode('|', [
+                    $locationCode,
+                    $catalog->item_code,
+                    $catalog->size,
+                    $catalog->color,
+                    $catalog->side,
+                ]));
+                if ($stockKeys->has($key)) {
+                    return null;
+                }
+
+                $location = $locations->get($locationCode);
+                $match = $matcher->matchCatalog($catalog);
+
+                return [
+                    'id' => 'catalog-' . $catalog->id,
+                    'package_code' => 'DANH-MUC-' . $locationCode,
+                    'warehouse_location_id' => $location ? $location->id : null,
+                    'location' => [
+                        'id' => $location ? $location->id : null,
+                        'location_code' => $locationCode,
+                    ],
+                    'ma_ko' => '',
+                    'ma_sp' => '',
+                    'internal_item_code' => $catalog->item_code,
+                    'size' => $catalog->size,
+                    'color' => $catalog->color,
+                    'side' => $catalog->side,
+                    'quantity' => 0,
+                    'opening_quantity' => 0,
+                    'receipt_quantity' => 0,
+                    'issue_quantity' => 0,
+                    'catalog_name' => $catalog->item_name,
+                    'catalog_unit' => $catalog->unit,
+                    'pantone_code' => $match['pantone'],
+                    'pantone_hex' => $match['hex'],
+                    'color_name' => $match['name'] ?? '',
+                    'pantone_source' => $match['source'],
+                    'catalog_only' => true,
+                ];
+            })
+            ->filter()
+            ->values();
+
+        $data = $data->concat($catalogOnlyRows)->values();
 
         return response()->json([
             'data' => $data,
@@ -2322,6 +2400,10 @@ class WarehouseCountController extends Controller
                 ->select('Ten_hh', 'Dvt')
                 ->first()
             : null;
+        $internalCatalogItem = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereRaw('UPPER(TRIM(item_code)) = ?', [mb_strtoupper(trim((string) $data['internal_item_code']))])
+            ->first();
 
         $attributes = [
             'ma_sp' => $accountingCode,
@@ -2335,7 +2417,7 @@ class WarehouseCountController extends Controller
 
         $entryType = $data['entry_type'] ?? 'opening';
 
-        [$package, $receipt] = DB::connection('internal')->transaction(function () use ($attributes, $data, $location, $catalogItem, $entryType) {
+        [$package, $receipt] = DB::connection('internal')->transaction(function () use ($attributes, $data, $location, $catalogItem, $internalCatalogItem, $entryType) {
             $count = InternalInventoryCount::query()->firstOrCreate(
                 [
                     'ma_sp' => $attributes['ma_sp'],
@@ -2399,8 +2481,8 @@ class WarehouseCountController extends Controller
                 $receipt->lines()->create([
                     'inventory_package_id' => $package->id,
                     'ma_hh' => $attributes['ma_sp'],
-                    'ten_hh' => $catalogItem->Ten_hh ?? '',
-                    'dvt' => $catalogItem->Dvt ?? '',
+                    'ten_hh' => $internalCatalogItem->item_name ?? ($catalogItem->Ten_hh ?? ''),
+                    'dvt' => $internalCatalogItem->unit ?? ($catalogItem->Dvt ?? ''),
                     'quantity' => $data['quantity'],
                     'location_code' => $location->location_code,
                     'internal_item_code' => $attributes['internal_item_code'],
@@ -2564,6 +2646,9 @@ class WarehouseCountController extends Controller
             'checked_at' => 'required|date',
             'note' => 'nullable|string|max:500',
             'send_to_production' => 'nullable|boolean',
+            'export_to_customer' => 'nullable|boolean',
+            'customer_name' => 'nullable|string|max:150|required_if:export_to_customer,1',
+            'issue_date' => 'nullable|date|after_or_equal:checked_at|required_if:export_to_customer,1',
             'lines' => 'required|array|min:1|max:500',
             'lines.*.category' => 'nullable|string|max:255',
             'lines.*.ma_sp' => 'nullable|string|max:100',
@@ -2582,7 +2667,13 @@ class WarehouseCountController extends Controller
             'lines.*.purchase_order' => 'nullable|string|max:1000',
             'lines.*.customer' => 'nullable|string|max:200',
         ]);
-        $data = $this->normalizeDateFields($data, ['checked_at']);
+        $data = $this->normalizeDateFields($data, ['checked_at', 'issue_date']);
+
+        if (!empty($data['export_to_customer']) && ($data['receipt_kind'] ?? 'finished') !== 'finished') {
+            return response()->json([
+                'message' => 'Chỉ phiếu nhập thành phẩm mới có thể xuất ngay cho khách hàng.',
+            ], 422);
+        }
 
         $lines = collect($data['lines'])
             ->map(function ($line) {
@@ -2849,6 +2940,32 @@ class WarehouseCountController extends Controller
                 $responseBody['production_issue'] = $issueBody['data'] ?? null;
                 $responseBody['production_issue_print_url'] = $issueBody['print_url'] ?? null;
                 $responseBody['production_message'] = $issueBody['message'] ?? null;
+            }
+        }
+
+        if (!empty($data['export_to_customer'])) {
+            $customerName = trim((string) ($data['customer_name'] ?? ''));
+            $issueRequest = Request::create('/api/xuat-vat-tu-noi-bo/tu-phieu-nhap/' . $receipt->id, 'POST', [
+                'issue_date' => $data['issue_date'] ?? $data['checked_at'],
+                'receiver_name' => $customerName,
+                'department' => 'Kinh doanh',
+                'purpose' => 'Xuat thanh pham cho khach hang',
+                'note' => 'Tao tu dong sau khi nhap kho - phieu ' . $receipt->receipt_code
+                    . ($customerName !== '' ? ' - Khach hang: ' . $customerName : ''),
+            ]);
+            $issueRequest->setUserResolver($request->getUserResolver());
+
+            $issueResponse = app(InternalMaterialIssueController::class)->createFromReceipt($issueRequest, $receipt);
+            $issueBody = json_decode($issueResponse->getContent(), true) ?: [];
+            if ($issueResponse->getStatusCode() >= 400) {
+                $responseBody['message'] = 'Đã lưu phiếu nhập nhưng chưa tạo được phiếu xuất: '
+                    . ($issueBody['message'] ?? 'Lỗi không rõ.');
+                $responseBody['customer_issue_failed'] = true;
+                $responseBody['customer_issue_error'] = $issueBody;
+            } else {
+                $responseBody['message'] = 'Đã nhập kho và xuất thành phẩm cho ' . $customerName . '.';
+                $responseBody['customer_issue'] = $issueBody['data'] ?? null;
+                $responseBody['customer_issue_print_url'] = $issueBody['print_url'] ?? null;
             }
         }
 

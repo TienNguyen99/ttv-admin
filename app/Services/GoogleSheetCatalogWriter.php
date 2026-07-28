@@ -44,25 +44,40 @@ class GoogleSheetCatalogWriter
 
     public function writeRowFields(string $spreadsheetId, string $sheetName, int $sourceRow, array $fields): void
     {
+        $this->writeRowsFields($spreadsheetId, $sheetName, [[
+            'source_row' => $sourceRow,
+            'fields' => $fields,
+        ]]);
+    }
+
+    public function writeRowsFields(string $spreadsheetId, string $sheetName, array $changes): void
+    {
         if (!$this->isConfigured()) {
             throw new RuntimeException('Chưa cấu hình quyền ghi Google Sheet bằng service account.');
         }
-        if ($sourceRow < 2 || !$fields) {
-            throw new RuntimeException('Dòng nguồn hoặc dữ liệu cập nhật không hợp lệ.');
+        if (!$changes) {
+            return;
         }
 
         $service = new Sheets($this->client());
         $columns = $this->headerColumns($service, $spreadsheetId, $sheetName);
         $data = [];
-        foreach ($fields as $header => $value) {
-            $normalized = $this->normalizeHeader($header);
-            if (!isset($columns[$normalized])) {
-                throw new RuntimeException("Không tìm thấy cột {$header} trong tab {$sheetName}.");
+        foreach ($changes as $change) {
+            $sourceRow = (int) ($change['source_row'] ?? 0);
+            $fields = (array) ($change['fields'] ?? []);
+            if ($sourceRow < 2 || !$fields) {
+                throw new RuntimeException('Dòng nguồn hoặc dữ liệu cập nhật không hợp lệ.');
             }
-            $data[] = new ValueRange([
-                'range' => sprintf("'%s'!%s%d", str_replace("'", "''", $sheetName), $columns[$normalized], $sourceRow),
-                'values' => [[$value]],
-            ]);
+            foreach ($fields as $header => $value) {
+                $normalized = $this->normalizeHeader($header);
+                if (!isset($columns[$normalized])) {
+                    throw new RuntimeException("Không tìm thấy cột {$header} trong tab {$sheetName}.");
+                }
+                $data[] = new ValueRange([
+                    'range' => sprintf("'%s'!%s%d", str_replace("'", "''", $sheetName), $columns[$normalized], $sourceRow),
+                    'values' => [[$value]],
+                ]);
+            }
         }
 
         $service->spreadsheets_values->batchUpdate($spreadsheetId, new BatchUpdateValuesRequest([
@@ -93,10 +108,11 @@ class GoogleSheetCatalogWriter
             $sheetRow = array_fill(0, $maxColumn, '');
             foreach ($row as $header => $value) {
                 $normalized = $this->normalizeHeader($header);
-                if (!isset($columnIndexes[$normalized])) {
+                $columnIndex = $this->matchingColumnIndex($columnIndexes, $normalized);
+                if ($columnIndex === null) {
                     continue;
                 }
-                $sheetRow[$columnIndexes[$normalized] - 1] = $value;
+                $sheetRow[$columnIndex - 1] = $value;
             }
             $values[] = $sheetRow;
         }
@@ -118,6 +134,41 @@ class GoogleSheetCatalogWriter
         $firstRow = (int) $matches[1];
 
         return array_map(fn ($offset) => $firstRow + $offset, array_keys($rows));
+    }
+
+    public function findItemRows(string $spreadsheetId, string $sheetName, array $itemCodes): array
+    {
+        if (!$this->isConfigured()) {
+            throw new RuntimeException('Chưa cấu hình quyền ghi Google Sheet bằng service account.');
+        }
+
+        $wanted = collect($itemCodes)
+            ->map(fn ($code) => mb_strtoupper(trim((string) $code)))
+            ->filter()
+            ->unique()
+            ->flip();
+        if ($wanted->isEmpty()) {
+            return [];
+        }
+
+        $service = new Sheets($this->client());
+        $column = $this->findItemCodeColumn($service, $spreadsheetId, $sheetName);
+        $escapedSheet = str_replace("'", "''", $sheetName);
+        $response = $service->spreadsheets_values->get(
+            $spreadsheetId,
+            "'{$escapedSheet}'!{$column}2:{$column}"
+        );
+
+        $rows = [];
+        foreach ($response->getValues() ?: [] as $offset => $values) {
+            $code = mb_strtoupper(trim((string) ($values[0] ?? '')));
+            if ($code === '' || !$wanted->has($code)) {
+                continue;
+            }
+            $rows[$code][] = $offset + 2;
+        }
+
+        return $rows;
     }
 
     private function client(): Client
@@ -159,6 +210,27 @@ class GoogleSheetCatalogWriter
     private function normalizeHeader($value): string
     {
         return trim(preg_replace('/\s+/', ' ', preg_replace('/[^a-z0-9]+/', ' ', Str::ascii(mb_strtolower(trim((string) $value))))));
+    }
+
+    private function matchingColumnIndex(array $columnIndexes, string $normalizedHeader): ?int
+    {
+        if (isset($columnIndexes[$normalizedHeader])) {
+            return $columnIndexes[$normalizedHeader];
+        }
+
+        $aliases = [
+            'ma hang' => ['mahang'],
+            'mahang' => ['ma hang'],
+            'ten hang' => ['tenhang'],
+            'tenhang' => ['ten hang'],
+        ];
+        foreach ($aliases[$normalizedHeader] ?? [] as $alias) {
+            if (isset($columnIndexes[$alias])) {
+                return $columnIndexes[$alias];
+            }
+        }
+
+        return null;
     }
 
     private function columnLetter(int $number): string

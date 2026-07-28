@@ -10,6 +10,7 @@ use App\Models\InternalWeavingItem;
 use App\Models\InternalWeavingOrder;
 use App\Models\InventoryPackage;
 use App\Services\InternalUnitConverter;
+use App\Services\GoogleSheetWeavingTemplateWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -18,26 +19,37 @@ class InternalWeavingController extends Controller
 {
     use NormalizesDateInput;
 
-    public function index()
-    {
-        return view('client.internal-weaving');
-    }
-
-    public function designerDashboardIndex()
-    {
-        return view('client.weaving-designer-dashboard');
-    }
+    private const SPREADSHEET_ID = '1nd9sOnKCq-hDf44Uo7_002qT7zoznrx7mcQoRw0oEcs';
 
     public function designerDashboard(Request $request)
     {
         $keyword = mb_strtolower(trim((string) $request->query('keyword', '')));
         $customer = trim((string) $request->query('customer', ''));
         $status = trim((string) $request->query('status', ''));
+        $currentYear = (int) now('Asia/Ho_Chi_Minh')->format('Y');
+        $year = (int) $request->query('year', $currentYear);
+        if ($year < 2000 || $year > 2099) {
+            $year = $currentYear;
+        }
+        $orderYearSuffix = '/' . str_pad((string) ($year % 100), 2, '0', STR_PAD_LEFT);
         $page = max((int) $request->query('page', 1), 1);
         $perPage = min(max((int) $request->query('per_page', 50), 25), 200);
 
+        $availableYears = InternalWeavingOrder::query()
+            ->pluck('order_code')
+            ->map(function ($orderCode) {
+                return preg_match('/\/(\d{2})\s*$/', trim((string) $orderCode), $matches)
+                    ? 2000 + (int) $matches[1]
+                    : null;
+            })
+            ->filter()
+            ->unique()
+            ->sortDesc()
+            ->values();
+
         $orders = InternalWeavingOrder::query()
             ->with('item:id,item_code,item_name')
+            ->whereRaw('TRIM(order_code) LIKE ?', ['%' . $orderYearSuffix])
             ->orderByDesc('order_date')
             ->orderByDesc('id')
             ->get();
@@ -141,6 +153,10 @@ class InternalWeavingController extends Controller
             'summary' => $summary,
             'charts' => $this->designerChartData($scopeRows),
             'customers' => $customers,
+            'filters' => [
+                'year' => $year,
+                'years' => $availableYears,
+            ],
             'pagination' => $this->pagination($page, $perPage, $total),
         ]);
     }
@@ -716,10 +732,15 @@ class InternalWeavingController extends Controller
     {
         $keyword = mb_strtoupper(trim((string) $request->query('keyword', '')));
         $status = trim((string) $request->query('status', ''));
+        $year = (int) $request->query('year', 0);
         $page = max((int) $request->query('page', 1), 1);
         $perPage = min(max((int) $request->query('per_page', 50), 25), 200);
 
         $baseQuery = InternalProductionOrder::query()->where('is_active', true);
+        if ($year >= 2000 && $year <= 2099) {
+            $suffix = '/' . str_pad((string) ($year % 100), 2, '0', STR_PAD_LEFT);
+            $baseQuery->whereRaw('TRIM(production_order) LIKE ?', ['%' . $suffix]);
+        }
         if ($keyword !== '') {
             $baseQuery->where(function ($sub) use ($keyword) {
                 $like = '%' . $keyword . '%';
@@ -783,11 +804,44 @@ class InternalWeavingController extends Controller
         return response()->json([
             'data' => $rows,
             'summary' => [
-                'order_count' => InternalProductionOrder::query()->where('is_active', true)->distinct()->count('production_order'),
-                'line_count' => InternalProductionOrder::query()->where('is_active', true)->count(),
-                'total_quantity' => (float) InternalProductionOrder::query()->where('is_active', true)->sum('order_quantity'),
+                'order_count' => (clone $baseQuery)->distinct()->count('production_order'),
+                'line_count' => (clone $baseQuery)->count(),
+                'total_quantity' => (float) (clone $baseQuery)->sum('order_quantity'),
             ],
             'pagination' => $this->pagination($page, $perPage, $total),
+        ]);
+    }
+
+    public function materialSuggestions(Request $request)
+    {
+        $keyword = mb_strtoupper(trim((string) $request->query('keyword', '')));
+        if (mb_strlen($keyword) < 1) {
+            return response()->json(['data' => []]);
+        }
+
+        $rows = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereNotNull('item_code')
+            ->where('item_code', '<>', '')
+            ->where(function ($query) use ($keyword) {
+                $like = '%' . $keyword . '%';
+                $query->whereRaw('UPPER(item_code) LIKE ?', [$like])
+                    ->orWhereRaw('UPPER(item_name) LIKE ?', [$like])
+                    ->orWhereRaw('UPPER(color) LIKE ?', [$like]);
+            })
+            ->orderByRaw('CASE WHEN UPPER(item_code) = ? THEN 0 WHEN UPPER(item_code) LIKE ? THEN 1 ELSE 2 END', [$keyword, $keyword . '%'])
+            ->orderBy('item_code')
+            ->limit(20)
+            ->get(['item_code', 'item_name', 'unit', 'shelf_code', 'color']);
+
+        return response()->json([
+            'data' => $rows->map(fn ($row) => [
+                'item_code' => trim((string) $row->item_code),
+                'item_name' => trim((string) $row->item_name),
+                'unit' => trim((string) $row->unit),
+                'shelf_code' => trim((string) $row->shelf_code),
+                'color' => trim((string) $row->color),
+            ])->values(),
         ]);
     }
 
@@ -982,15 +1036,20 @@ class InternalWeavingController extends Controller
             return response()->json(['message' => 'Thiếu lệnh sản xuất.'], 422);
         }
 
+        $normalizedOrderCode = $this->cleanCode($productionOrder);
+        $weavingOrder = InternalWeavingOrder::query()
+            ->with('item')
+            ->whereRaw('UPPER(TRIM(order_code)) = ?', [$normalizedOrderCode])
+            ->first();
         $sourceLines = InternalProductionOrder::query()
             ->where('is_active', true)
-            ->where('production_order', $productionOrder)
+            ->whereRaw('UPPER(TRIM(production_order)) = ?', [$normalizedOrderCode])
             ->orderBy('id')
             ->get();
 
         if ($sourceLines->isEmpty()) {
             $internalOrder = InternalWeavingOrder::query()
-                ->where('order_code', $this->cleanCode($productionOrder))
+                ->whereRaw('UPPER(TRIM(order_code)) = ?', [$normalizedOrderCode])
                 ->first();
             if ($internalOrder) {
                 return $this->plan($request, $internalOrder);
@@ -1010,6 +1069,7 @@ class InternalWeavingController extends Controller
             ->where('is_active', true)
             ->get()
             ->keyBy(fn ($row) => $this->cleanCode($row->item_code));
+        $weavingOrderMetadata = json_decode((string) ($weavingOrder->metadata_json ?? ''), true) ?: [];
 
         $materialRequirements = [];
         $missingBomItems = [];
@@ -1019,11 +1079,15 @@ class InternalWeavingController extends Controller
             $itemCode = $this->cleanCode($sourceLine->item_code);
             $item = $items[$itemCode] ?? null;
             $sourceCatalog = $sourceCatalogs[$itemCode] ?? null;
+            $itemMetadata = json_decode((string) ($item->metadata_json ?? ''), true) ?: [];
             $sourceItem = [
                 'item_code' => $itemCode,
-                'item_name' => trim((string) $sourceLine->description),
+                'item_name' => trim((string) ($item->item_name ?? $sourceLine->description)),
                 'image_url' => $sourceCatalog->image_url ?? '',
-                'customer' => trim((string) $sourceLine->customer),
+                'design_code' => trim((string) ($item->design_code ?? $weavingOrder->design_code ?? '')),
+                'po_number' => trim((string) ($weavingOrder->po_number ?? $sourceLine->purchase_order ?? '')),
+                'metadata' => $itemMetadata,
+                'customer' => trim((string) ($weavingOrder->customer ?? $sourceLine->customer)),
                 'size' => trim((string) $sourceLine->size),
                 'color' => trim((string) $sourceLine->color),
                 'order_quantity' => (float) $sourceLine->order_quantity,
@@ -1041,6 +1105,7 @@ class InternalWeavingController extends Controller
             foreach ($item->boms as $bom) {
                 $materialCode = $this->cleanCode($bom->material_code);
                 if ($materialCode === '') continue;
+                $bomMetadata = json_decode((string) ($bom->metadata_json ?? ''), true) ?: [];
                 $required = round((float) $sourceLine->order_quantity * (float) $bom->consumption_per_unit * (1 + ((float) $bom->waste_percent / 100)), 3);
                 $sourceItem['materials'][] = [
                     'material_code' => $materialCode,
@@ -1050,6 +1115,9 @@ class InternalWeavingController extends Controller
                     'consumption_per_unit' => (float) $bom->consumption_per_unit,
                     'waste_percent' => (float) $bom->waste_percent,
                     'required_quantity' => $required,
+                    'type' => $bomMetadata['type'] ?? '',
+                    'shelf_hint' => $bomMetadata['shelf_hint'] ?? '',
+                    'total_grams' => (float) ($bomMetadata['total_grams'] ?? 0),
                     'note' => trim((string) $bom->note),
                 ];
                 if (!isset($materialRequirements[$materialCode])) {
@@ -1161,10 +1229,29 @@ class InternalWeavingController extends Controller
         return response()->json([
             'order' => [
                 'production_order' => $productionOrder,
-                'customer' => trim((string) $sourceLines->pluck('customer')->filter()->first()),
+                'weaving_order_id' => $weavingOrder ? (int) $weavingOrder->id : null,
+                'customer' => trim((string) ($weavingOrder->customer ?? $sourceLines->pluck('customer')->filter()->first())),
+                'item_code' => $itemCodes->count() === 1 ? (string) $itemCodes->first() : '',
                 'line_count' => $sourceLines->count(),
                 'item_count' => $itemCodes->count(),
                 'planned_quantity' => (float) $sourceLines->sum('order_quantity'),
+                'unit' => trim((string) ($weavingOrder->unit ?? $sourceLines->pluck('unit')->filter()->first())),
+                'po_number' => trim((string) ($weavingOrder->po_number ?? $sourceLines->pluck('purchase_order')->filter()->first())),
+                'design_code' => trim((string) ($weavingOrder->design_code ?? '')),
+                'order_date' => optional($weavingOrder->order_date ?? null)->format('Y-m-d')
+                    ?: optional($sourceLines->pluck('received_date')->filter()->sort()->first())->format('Y-m-d'),
+                'due_date' => optional($weavingOrder->due_date ?? null)->format('Y-m-d')
+                    ?: optional($sourceLines->pluck('promised_date')->filter()->sort()->first())->format('Y-m-d'),
+                'note' => trim((string) ($weavingOrder->note ?? '')),
+                'image_url' => $itemCodes->count() === 1
+                    ? (string) (($sourceCatalogs[$itemCodes->first()]->image_url ?? ''))
+                    : '',
+                'metadata' => array_merge(
+                    $itemCodes->count() === 1
+                        ? (json_decode((string) (($items[$itemCodes->first()]->metadata_json ?? '')), true) ?: [])
+                        : [],
+                    $weavingOrderMetadata
+                ),
             ],
             'source_items' => $sourceItems,
             'data' => $lines,
@@ -1177,6 +1264,352 @@ class InternalWeavingController extends Controller
                 'missing_bom_count' => count($missingBomItems),
                 'missing_bom_items' => array_keys($missingBomItems),
             ],
+        ]);
+    }
+
+    public function exportSheet(Request $request, GoogleSheetWeavingTemplateWriter $writer)
+    {
+        $data = $request->validate([
+            'production_order' => 'required|string|max:120',
+        ]);
+
+        $planRequest = Request::create('/api/lenh-det/production-order-plan', 'GET', [
+            'production_order' => trim($data['production_order']),
+        ]);
+        $response = $this->productionPlan($planRequest);
+        $plan = $response->getData(true);
+
+        if ($response->getStatusCode() >= 400) {
+            return response()->json($plan, $response->getStatusCode());
+        }
+
+        $sourceItems = collect($plan['source_items'] ?? []);
+        $sourceItemCodes = $sourceItems
+            ->pluck('item_code')
+            ->map(fn ($code) => $this->cleanCode($code))
+            ->filter()
+            ->unique()
+            ->values();
+        $lines = collect($plan['data'] ?? []);
+        if ($sourceItemCodes->count() !== 1) {
+            return response()->json([
+                'message' => 'Mẫu LENH_DET chỉ nhận một mã hàng. Lệnh này có ' . $sourceItemCodes->count() . ' mã hàng.',
+            ], 422);
+        }
+        if ($lines->isEmpty()) {
+            return response()->json([
+                'message' => 'Lệnh chưa có định mức sợi nên chưa thể xuất mẫu.',
+            ], 422);
+        }
+        $templateLineCount = $sourceItems
+            ->flatMap(fn ($item) => (array) ($item['materials'] ?? []))
+            ->count();
+        if ($templateLineCount > 7) {
+            return response()->json([
+                'message' => 'Lệnh có ' . $templateLineCount . ' dòng sợi, vượt 7 dòng có đủ cột của mẫu LENH_DET.',
+            ], 422);
+        }
+
+        try {
+            $sheetUrl = $writer->write(self::SPREADSHEET_ID, $plan);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'Không ghi được mẫu LENH_DET: ' . $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'Đã ghi lệnh ' . ($plan['order']['production_order'] ?? $data['production_order']) . ' vào mẫu LENH_DET.',
+            'sheet_url' => $sheetUrl,
+            'sheet_name' => GoogleSheetWeavingTemplateWriter::SHEET_NAME,
+            'line_count' => $templateLineCount,
+        ]);
+    }
+
+    public function saveTemplateDetails(Request $request)
+    {
+        $data = $request->validate([
+            'production_order' => 'required|string|max:120',
+            'item_code' => 'nullable|string|max:120',
+            'customer' => 'nullable|string|max:200',
+            'po_number' => 'nullable|string|max:200',
+            'design_code' => 'nullable|string|max:200',
+            'order_quantity' => 'nullable|numeric|min:0',
+            'unit' => 'nullable|string|max:50',
+            'order_date' => 'nullable|date',
+            'due_date' => 'nullable|date',
+            'metadata' => 'nullable|array',
+            'metadata.job_number' => 'nullable|string|max:200',
+            'metadata.label_name' => 'nullable|string|max:500',
+            'metadata.length' => 'nullable|string|max:200',
+            'metadata.finished_size' => 'nullable|string|max:200',
+            'metadata.box_code' => 'nullable|string|max:200',
+            'metadata.quantity_per_box' => 'nullable|string|max:100',
+            'metadata.warp_grams' => 'nullable|numeric|min:0',
+            'metadata.pick' => 'nullable|string|max:100',
+            'metadata.density' => 'nullable|string|max:100',
+            'metadata.machine' => 'nullable|string|max:100',
+            'metadata.roll_machine_small' => 'nullable|string|max:100',
+            'metadata.roll_count_small' => 'nullable|numeric|min:0',
+            'metadata.roll_machine_large' => 'nullable|string|max:100',
+            'metadata.roll_count_large' => 'nullable|numeric|min:0',
+            'metadata.quantity_plus_10' => 'nullable|numeric|min:0',
+            'metadata.row_machine_small' => 'nullable|string|max:100',
+            'metadata.row_count_plus_10' => 'nullable|numeric|min:0',
+            'metadata.row_machine_large' => 'nullable|string|max:100',
+            'metadata.row_count_plus_10_large' => 'nullable|numeric|min:0',
+            'metadata.shift' => 'nullable|string|max:100',
+            'metadata.shift_large' => 'nullable|string|max:100',
+            'metadata.file_name' => 'nullable|string|max:300',
+            'metadata.usb_small' => 'nullable|string|max:200',
+            'metadata.usb_large' => 'nullable|string|max:200',
+            'metadata.row_count' => 'nullable|numeric|min:0',
+            'metadata.operations' => 'nullable|array',
+            'metadata.operations.*' => 'nullable|string|max:1000',
+        ]);
+        $data = $this->normalizeDateFields($data, ['order_date', 'due_date']);
+
+        $orderCode = $this->cleanCode($data['production_order']);
+        $existingOrder = InternalWeavingOrder::query()
+            ->whereRaw('UPPER(TRIM(order_code)) = ?', [$orderCode])
+            ->first();
+        $sourceLines = InternalProductionOrder::query()
+            ->where('is_active', true)
+            ->whereRaw('UPPER(TRIM(production_order)) = ?', [$orderCode])
+            ->get();
+        $sourceItemCodes = $sourceLines->pluck('item_code')
+            ->map(fn ($code) => $this->cleanCode($code))
+            ->filter()
+            ->unique()
+            ->values();
+        $itemCode = $this->cleanCode($data['item_code'] ?? $existingOrder->item_code ?? ($sourceItemCodes->count() === 1 ? $sourceItemCodes->first() : ''));
+        if ($itemCode === '') {
+            return response()->json(['message' => 'Không xác định được mã hàng của lệnh dệt.'], 422);
+        }
+        if ($sourceItemCodes->count() > 1) {
+            return response()->json(['message' => 'Lệnh có nhiều mã hàng, cần tách lệnh trước khi lưu mẫu.'], 422);
+        }
+
+        $item = InternalWeavingItem::query()->firstOrCreate(
+            ['item_code' => $itemCode],
+            [
+                'item_name' => trim((string) ($sourceLines->pluck('description')->filter()->first() ?? $itemCode)),
+                'customer' => trim((string) ($sourceLines->pluck('customer')->filter()->first() ?? '')),
+                'unit' => trim((string) ($sourceLines->pluck('unit')->filter()->first() ?? 'PCS')),
+            ]
+        );
+        $existingMetadata = json_decode((string) ($existingOrder->metadata_json ?? ''), true) ?: [];
+        $incomingMetadata = (array) ($data['metadata'] ?? []);
+        $incomingOperations = (array) ($incomingMetadata['operations'] ?? []);
+        unset($incomingMetadata['operations']);
+        $metadata = array_replace($existingMetadata, $incomingMetadata);
+        $metadata['operations'] = array_replace(
+            (array) ($existingMetadata['operations'] ?? []),
+            $incomingOperations
+        );
+
+        $order = InternalWeavingOrder::query()->updateOrCreate(
+            ['order_code' => $orderCode],
+            [
+                'weaving_item_id' => $item->id,
+                'item_code' => $itemCode,
+                'customer' => trim((string) ($data['customer'] ?? $existingOrder->customer ?? $sourceLines->pluck('customer')->filter()->first() ?? '')),
+                'po_number' => trim((string) ($data['po_number'] ?? $existingOrder->po_number ?? $sourceLines->pluck('purchase_order')->filter()->first() ?? '')) ?: null,
+                'design_code' => trim((string) ($data['design_code'] ?? $existingOrder->design_code ?? '')) ?: null,
+                'order_quantity' => (float) ($data['order_quantity'] ?? $existingOrder->order_quantity ?? $sourceLines->sum('order_quantity')),
+                'unit' => trim((string) ($data['unit'] ?? $existingOrder->unit ?? $sourceLines->pluck('unit')->filter()->first() ?? 'PCS')),
+                'order_date' => $data['order_date'] ?? optional($existingOrder->order_date ?? null)->format('Y-m-d')
+                    ?? optional($sourceLines->pluck('received_date')->filter()->sort()->first())->format('Y-m-d'),
+                'due_date' => $data['due_date'] ?? optional($existingOrder->due_date ?? null)->format('Y-m-d')
+                    ?? optional($sourceLines->pluck('promised_date')->filter()->sort()->first())->format('Y-m-d'),
+                'status' => $existingOrder->status ?? 'draft',
+                'note' => $existingOrder->note ?? '',
+                'metadata_json' => json_encode($metadata, JSON_UNESCAPED_UNICODE),
+            ]
+        );
+
+        return response()->json([
+            'message' => 'Đã lưu đầy đủ thông tin mẫu cho lệnh ' . $order->order_code . '.',
+            'data' => $order->fresh('item'),
+        ]);
+    }
+
+    public function saveDesignerOrder(Request $request)
+    {
+        $data = $request->validate([
+            'action' => 'required|in:draft,issued',
+            'production_order' => 'required|string|max:120',
+            'item_code' => 'required|string|max:120',
+            'item_name' => 'nullable|string|max:500',
+            'customer' => 'nullable|string|max:200',
+            'po_number' => 'nullable|string|max:200',
+            'design_code' => 'nullable|string|max:200',
+            'order_quantity' => 'required|numeric|min:0.001',
+            'unit' => 'nullable|string|max:50',
+            'order_date' => ['nullable', 'string', 'regex:/^(\d{2}[\/-]\d{2}[\/-]\d{4}|\d{4}-\d{2}-\d{2})$/'],
+            'due_date' => ['nullable', 'string', 'regex:/^(\d{2}[\/-]\d{2}[\/-]\d{4}|\d{4}-\d{2}-\d{2})$/'],
+            'metadata' => 'nullable|array',
+            'metadata.job_number' => 'nullable|string|max:200',
+            'metadata.label_name' => 'nullable|string|max:500',
+            'metadata.length' => 'nullable|string|max:200',
+            'metadata.finished_size' => 'nullable|string|max:200',
+            'metadata.box_code' => 'nullable|string|max:200',
+            'metadata.quantity_per_box' => 'nullable|string|max:100',
+            'metadata.warp_grams' => 'nullable|numeric|min:0',
+            'metadata.pick' => 'nullable|string|max:100',
+            'metadata.density' => 'nullable|string|max:100',
+            'metadata.machine' => 'nullable|string|max:100',
+            'metadata.roll_machine_small' => 'nullable|string|max:100',
+            'metadata.roll_count_small' => 'nullable|numeric|min:0',
+            'metadata.roll_machine_large' => 'nullable|string|max:100',
+            'metadata.roll_count_large' => 'nullable|numeric|min:0',
+            'metadata.quantity_plus_10' => 'nullable|numeric|min:0',
+            'metadata.row_machine_small' => 'nullable|string|max:100',
+            'metadata.row_count_plus_10' => 'nullable|numeric|min:0',
+            'metadata.row_machine_large' => 'nullable|string|max:100',
+            'metadata.row_count_plus_10_large' => 'nullable|numeric|min:0',
+            'metadata.shift' => 'nullable|string|max:100',
+            'metadata.shift_large' => 'nullable|string|max:100',
+            'metadata.file_name' => 'nullable|string|max:300',
+            'metadata.usb_small' => 'nullable|string|max:200',
+            'metadata.usb_large' => 'nullable|string|max:200',
+            'metadata.row_count' => 'nullable|numeric|min:0',
+            'metadata.operations' => 'nullable|array',
+            'metadata.operations.*' => 'nullable|string|max:1000',
+            'lines' => 'required|array|min:1|max:7',
+            'lines.*.material_code' => 'required|string|max:120',
+            'lines.*.line_role' => 'nullable|string|max:120',
+            'lines.*.type' => 'nullable|string|max:100',
+            'lines.*.material_name' => 'nullable|string|max:500',
+            'lines.*.unit' => 'nullable|string|max:50',
+            'lines.*.consumption_per_unit' => 'required|numeric|min:0.000001',
+            'lines.*.waste_percent' => 'nullable|numeric|min:0|max:999',
+            'lines.*.shelf_hint' => 'nullable|string|max:100',
+            'lines.*.total_grams' => 'nullable|numeric|min:0',
+            'lines.*.note' => 'nullable|string|max:1000',
+        ]);
+        $data = $this->normalizeDateFields($data, ['order_date', 'due_date']);
+
+        $orderCode = $this->cleanCode($data['production_order']);
+        $itemCode = $this->cleanCode($data['item_code']);
+        $sourceLines = InternalProductionOrder::query()
+            ->where('is_active', true)
+            ->whereRaw('UPPER(TRIM(production_order)) = ?', [$orderCode])
+            ->get();
+        if ($sourceLines->isEmpty()) {
+            return response()->json(['message' => 'Lệnh không còn trong Lệnh sản xuất trung tâm.'], 422);
+        }
+        $sourceItemCodes = $sourceLines->pluck('item_code')
+            ->map(fn ($code) => $this->cleanCode($code))
+            ->filter()
+            ->unique()
+            ->values();
+        if ($sourceItemCodes->count() !== 1 || $sourceItemCodes->first() !== $itemCode) {
+            return response()->json([
+                'message' => 'Mã hàng không khớp Lệnh sản xuất trung tâm. Hãy tải lại lệnh trước khi lưu.',
+            ], 422);
+        }
+
+        $missingCatalog = $this->missingCatalogCodes(collect($data['lines'])->pluck('material_code')->all());
+        if (!empty($missingCatalog)) {
+            return response()->json([
+                'message' => 'Mã sợi chưa có trong DANH MỤC nội bộ: ' . implode(', ', array_slice($missingCatalog, 0, 20)),
+                'missing_catalog' => $missingCatalog,
+            ], 422);
+        }
+
+        $order = DB::connection('internal')->transaction(function () use ($data, $orderCode, $itemCode, $sourceLines) {
+            $existingOrder = InternalWeavingOrder::query()
+                ->whereRaw('UPPER(TRIM(order_code)) = ?', [$orderCode])
+                ->first();
+            $item = InternalWeavingItem::query()->updateOrCreate(
+                ['item_code' => $itemCode],
+                [
+                    'item_name' => trim((string) ($data['item_name'] ?? $sourceLines->pluck('description')->filter()->first() ?? $itemCode)),
+                    'design_code' => trim((string) ($data['design_code'] ?? '')) ?: null,
+                    'customer' => trim((string) ($data['customer'] ?? $sourceLines->pluck('customer')->filter()->first() ?? '')),
+                    'unit' => trim((string) ($data['unit'] ?? $sourceLines->pluck('unit')->filter()->first() ?? 'PCS')),
+                ]
+            );
+
+            $item->boms()->delete();
+            foreach ($data['lines'] as $index => $line) {
+                $lineRole = $this->cleanCode($line['line_role'] ?? '') ?: ('DONG-' . ($index + 1));
+                $lineMetadata = [
+                    'type' => trim((string) ($line['type'] ?? '')),
+                    'shelf_hint' => trim((string) ($line['shelf_hint'] ?? '')),
+                    'total_grams' => (float) ($line['total_grams'] ?? 0),
+                ];
+                $item->boms()->create([
+                    'material_code' => $this->cleanCode($line['material_code']),
+                    'line_role' => $lineRole,
+                    'material_name' => trim((string) ($line['material_name'] ?? '')),
+                    'unit' => trim((string) ($line['unit'] ?? 'gam')) ?: 'gam',
+                    'consumption_per_unit' => (float) $line['consumption_per_unit'],
+                    'waste_percent' => (float) ($line['waste_percent'] ?? 0),
+                    'note' => trim((string) ($line['note'] ?? '')),
+                    'metadata_json' => json_encode($lineMetadata, JSON_UNESCAPED_UNICODE),
+                ]);
+            }
+
+            $existingMetadata = json_decode((string) ($existingOrder->metadata_json ?? ''), true) ?: [];
+            $incomingMetadata = (array) ($data['metadata'] ?? []);
+            $metadata = array_replace($existingMetadata, $incomingMetadata);
+            $metadata['operations'] = array_replace(
+                (array) ($existingMetadata['operations'] ?? []),
+                (array) ($incomingMetadata['operations'] ?? [])
+            );
+            $metadata['designer_source'] = 'web';
+            $metadata['designer_saved_at'] = now('Asia/Ho_Chi_Minh')->toIso8601String();
+
+            $status = $data['action'] === 'issued' || ($existingOrder && $existingOrder->status === 'issued')
+                ? 'issued'
+                : 'draft';
+            if ($data['action'] === 'issued') {
+                $metadata['bom_snapshot'] = collect($data['lines'])->values()->all();
+                $metadata['bom_snapshot_at'] = now('Asia/Ho_Chi_Minh')->toIso8601String();
+                if (empty($metadata['sent_to_production_at'])) {
+                    $receiptBaseline = DB::connection('internal')->table('internal_material_receipt_lines as line')
+                        ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'line.receipt_id')
+                        ->where('line.production_order', $orderCode)
+                        ->where(function ($query) {
+                            $query->whereNull('receipt.status')->orWhere('receipt.status', '<>', 'cancelled');
+                        })
+                        ->selectRaw('COALESCE(SUM(line.quantity), 0) as received_quantity')
+                        ->selectRaw('COUNT(DISTINCT line.receipt_id) as receipt_count')
+                        ->first();
+                    $metadata['sent_to_production_at'] = now('Asia/Ho_Chi_Minh')->toIso8601String();
+                    $metadata['receipt_quantity_baseline'] = (float) ($receiptBaseline->received_quantity ?? 0);
+                    $metadata['receipt_count_baseline'] = (int) ($receiptBaseline->receipt_count ?? 0);
+                }
+            }
+
+            return InternalWeavingOrder::query()->updateOrCreate(
+                ['order_code' => $orderCode],
+                [
+                    'weaving_item_id' => $item->id,
+                    'item_code' => $itemCode,
+                    'customer' => trim((string) ($data['customer'] ?? '')),
+                    'po_number' => trim((string) ($data['po_number'] ?? '')) ?: null,
+                    'design_code' => trim((string) ($data['design_code'] ?? '')) ?: null,
+                    'order_quantity' => (float) $data['order_quantity'],
+                    'unit' => trim((string) ($data['unit'] ?? 'PCS')) ?: 'PCS',
+                    'order_date' => $data['order_date'] ?? null,
+                    'due_date' => $data['due_date'] ?? null,
+                    'status' => $status,
+                    'note' => trim((string) ($existingOrder->note ?? '')),
+                    'metadata_json' => json_encode($metadata, JSON_UNESCAPED_UNICODE),
+                ]
+            );
+        });
+
+        return response()->json([
+            'message' => $data['action'] === 'issued'
+                ? 'Đã lưu và gửi lệnh ' . $orderCode . ' xuống sản xuất.'
+                : 'Đã lưu nháp lệnh ' . $orderCode . '.',
+            'data' => $order->fresh('item'),
         ]);
     }
 

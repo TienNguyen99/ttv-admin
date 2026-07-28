@@ -9,7 +9,7 @@
     <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
     <style>
         .designer-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }
-        .designer-filter { display:grid; grid-template-columns:minmax(260px,1fr) minmax(170px,220px) minmax(170px,220px) auto; gap:10px; align-items:end; }
+        .designer-filter { display:grid; grid-template-columns:minmax(240px,1fr) minmax(110px,140px) minmax(160px,210px) minmax(160px,210px) auto; gap:10px; align-items:end; }
         .designer-table { min-width:1320px; }
         .designer-order { font-family:Menlo,Consolas,monospace; font-weight:900; color:#175ca8; }
         .designer-progress { min-width:130px; }
@@ -46,13 +46,16 @@
         <i data-lucide="search"></i>
         <input id="topKeyword" aria-label="Tìm lệnh dệt" placeholder="Tìm lệnh, mã hàng, PO hoặc design...">
     </form>
-    <a class="wms-btn" href="{{ url('/client/lenh-det') }}"><i data-lucide="list-tree"></i>Định mức</a>
+    <a class="wms-btn" href="{{ route('weaving.bom') }}"><i data-lucide="list-tree"></i>Định mức</a>
 </header>
 
 <main class="wms-page">
     <div class="wms-heading">
         <div><h1>Theo dõi lệnh dệt</h1><p>Designer theo dõi lệnh đã gửi sản xuất và lượng thành phẩm đã nhập kho.</p></div>
-        <button id="reloadBtn" class="wms-btn" type="button"><i data-lucide="refresh-cw"></i>Tải lại</button>
+        <div class="d-flex gap-2">
+            <button id="reloadBtn" class="wms-btn" type="button"><i data-lucide="refresh-cw"></i>Tải lại</button>
+            <a class="wms-btn wms-btn--primary" href="{{ route('weaving.orders.create') }}"><i data-lucide="plus"></i>Tạo lệnh dệt</a>
+        </div>
     </div>
 
     <section class="designer-kpis mb-3">
@@ -90,6 +93,7 @@
     <section class="wms-panel">
         <div class="designer-filter mb-3">
             <div><label for="keyword">Tìm kiếm</label><input id="keyword" class="form-control" placeholder="Lệnh, mã hàng, khách, PO, design..."></div>
+            <div><label for="year">Năm lệnh</label><select id="year" class="form-select"><option value="{{ now('Asia/Ho_Chi_Minh')->format('Y') }}">{{ now('Asia/Ho_Chi_Minh')->format('Y') }}</option></select></div>
             <div><label for="customer">Khách hàng</label><select id="customer" class="form-select"><option value="">Tất cả khách hàng</option></select></div>
             <div><label for="status">Trạng thái</label><select id="status" class="form-select"><option value="">Tất cả trạng thái</option><option value="waiting">Chờ sản xuất</option><option value="producing">Đang sản xuất</option><option value="partial">Nhập một phần</option><option value="completed">Đã nhập kho</option><option value="overdue">Trễ hạn</option></select></div>
             <button id="clearFilter" class="wms-btn" type="button"><i data-lucide="filter-x"></i>Xóa lọc</button>
@@ -114,6 +118,7 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 const rowsEl = document.getElementById('rows');
 const keywordEl = document.getElementById('keyword');
 const topKeywordEl = document.getElementById('topKeyword');
+const yearEl = document.getElementById('year');
 const customerEl = document.getElementById('customer');
 const statusEl = document.getElementById('status');
 let page = 1;
@@ -204,8 +209,17 @@ function updateCustomers(values) {
     if (Array.from(customerEl.options).some(option => option.value === selected)) customerEl.value = selected;
 }
 
+function updateYears(filters) {
+    const selected = String(filters?.year || yearEl.value);
+    const years = (filters?.years || []).map(String);
+    if (!years.includes(selected)) years.unshift(selected);
+    yearEl.innerHTML = years.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join('');
+    yearEl.value = selected;
+}
+
 async function loadData() {
     const params = new URLSearchParams({page, per_page:50});
+    params.set('year', yearEl.value);
     if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
     if (customerEl.value) params.set('customer', customerEl.value);
     if (statusEl.value) params.set('status', statusEl.value);
@@ -221,6 +235,7 @@ async function loadData() {
         document.getElementById('kpiCompleted').textContent = num(summary.completed);
         document.getElementById('kpiOverdue').textContent = num(summary.overdue);
         renderCharts(result.charts || {});
+        updateYears(result.filters || {});
         updateCustomers(result.customers);
         page = Number(result.pagination?.page || 1);
         totalPages = Math.max(1, Number(result.pagination?.total_pages || 1));
@@ -234,7 +249,7 @@ async function loadData() {
             <td class="text-end fw-bold">${num(row.order_quantity)} ${esc(row.unit || '')}</td><td class="text-end text-success fw-bold">${num(row.received_quantity)}</td><td class="text-end">${num(row.remaining_quantity)}</td>
             <td><div class="designer-progress"><div class="progress"><div class="progress-bar" style="width:${Math.max(0,Math.min(100,Number(row.progress || 0)))}%"></div></div><small>${num(row.progress)}% · ${num(row.receipt_count)} phiếu nhập</small></div></td>
             <td>${statusHtml(row)}</td>
-            <td><div class="d-flex gap-1">${row.workflow_status === 'waiting' ? `<button class="wms-btn wms-btn--primary" type="button" data-send="${esc(row.id)}">Gửi SX</button>` : ''}<a class="wms-btn" href="/client/lenh-det?order=${encodeURIComponent(row.order_code)}">Xem lệnh</a></div></td>
+            <td><div class="d-flex gap-1">${row.workflow_status === 'waiting' ? `<button class="wms-btn wms-btn--primary" type="button" data-send="${esc(row.id)}">Gửi SX</button>` : ''}<a class="wms-btn" href="{{ route('weaving.orders.create') }}?order=${encodeURIComponent(row.order_code)}">Mở lệnh</a></div></td>
         </tr>`).join('') || '<tr><td colspan="11" class="wms-empty">Không có lệnh phù hợp.</td></tr>';
         if (window.lucide) lucide.createIcons();
     } catch (error) {
@@ -251,6 +266,7 @@ keywordEl.addEventListener('input', () => queueSearch(keywordEl));
 topKeywordEl.addEventListener('input', () => queueSearch(topKeywordEl));
 customerEl.addEventListener('change', () => { page=1; loadData(); });
 statusEl.addEventListener('change', () => { page=1; loadData(); });
+yearEl.addEventListener('change', () => { page=1; customerEl.value=''; loadData(); });
 document.getElementById('clearFilter').addEventListener('click', () => { keywordEl.value=''; topKeywordEl.value=''; customerEl.value=''; statusEl.value=''; page=1; loadData(); });
 document.getElementById('reloadBtn').addEventListener('click', loadData);
 document.getElementById('prevBtn').addEventListener('click', () => { if(page>1){page--;loadData();} });

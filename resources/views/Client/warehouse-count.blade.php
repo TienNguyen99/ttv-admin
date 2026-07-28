@@ -190,6 +190,7 @@
         .layout-block:hover { border-color: #f97316; box-shadow: 0 0 0 3px rgba(249, 115, 22, .16), 0 8px 18px rgba(15, 23, 42, .14); }
         .layout-block.is-dragging { opacity: 0.72; z-index: 5; }
         .layout-block.is-selected { border-color: #16a34a; background: #ecfdf5; color: #14532d; box-shadow: 0 0 0 3px #bbf7d0; }
+        .layout-block:not(.has-stock) { border-style: dashed; border-color: #cbd5e1; background: #f8fafc; color: #64748b; box-shadow: none; }
         .layout-block.has-stock { border-color: #60a5fa; background: #eff6ff; }
         .layout-block.is-filter-match { border-color: #22c55e; background: #dcfce7; color: #14532d; box-shadow: 0 0 0 3px #bbf7d0, 0 8px 18px rgba(22, 163, 74, .16); }
         .layout-block.is-tier-stack { transform: translate(calc(var(--tier-offset, 0) * 7px), calc(var(--tier-offset, 0) * -7px)); box-shadow: calc(var(--tier-offset, 0) * -1px) calc(var(--tier-offset, 0) * 1px) 0 rgba(15,23,42,.08), 0 3px 8px rgba(37, 99, 235, 0.12); }
@@ -246,6 +247,12 @@
         .rack-tier-row + .rack-tier-row { margin-top: 6px; }
         .rack-tier { position: relative; display: grid; grid-template-rows: auto 1fr auto; gap: 4px; align-items: start; min-height: 74px; padding: 6px; border: 1px solid #94a3b8; border-bottom-width: 3px; background: #fff; transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease; cursor: pointer; }
         .rack-tier + .rack-tier { margin-top: 6px; }
+        .rack-tier:not(.has-stock) { border-style: dashed; border-color: #cbd5e1; background: #f1f5f9; }
+        .rack-tier:not(.has-stock) .rack-tier-code { color: #64748b; }
+        .rack-tier:not(.has-stock) .rack-tier-qty { color: #94a3b8; }
+        .rack-tier.has-assignment { border-style: solid; border-color: #f59e0b; background: #fffbeb; }
+        .rack-tier.has-assignment .rack-tier-code { color: #92400e; }
+        .rack-tier.has-assignment .rack-tier-qty { color: #b45309; }
         .rack-tier.has-stock { background: #eff6ff; border-color: #60a5fa; }
         .rack-tier.is-selected { background: #ecfdf5; border-color: #16a34a; box-shadow: inset 0 0 0 2px #86efac; }
         .rack-tier.is-filter-match { background: #dcfce7; border-color: #22c55e; animation: rackMatchGlow 1.15s ease-in-out infinite; }
@@ -402,7 +409,7 @@
                 <input id="layoutBackgroundInput" type="file" accept="image/*" class="d-none">
                 <button type="button" class="btn btn-outline-primary btn-icon" id="uploadLayoutBackgroundBtn"><i data-lucide="image-plus"></i>Thêm background sơ đồ</button>
                 <button type="button" class="btn btn-outline-secondary btn-icon" id="clearLayoutBackgroundBtn"><i data-lucide="image-off"></i>Xóa nn</button>
-                <label class="d-flex align-items-center gap-2 small text-secondary mb-0"><input id="showEmptyLocations" type="checkbox" class="form-check-input mt-0">Hiện vị trí trống</label>
+                <label class="d-flex align-items-center gap-2 small text-secondary mb-0"><input id="showEmptyLocations" type="checkbox" class="form-check-input mt-0" checked>Hiện vị trí trống</label>
                 <label class="d-flex align-items-center gap-2 small text-secondary mb-0">ộ m nn <input id="layoutBackgroundOpacity" type="range" class="form-range" min="10" max="90" value="36"></label>
                 <label class="d-flex align-items-center gap-2 small text-secondary mb-0">Zoom
                     <select id="layoutZoom" class="form-select form-select-sm" style="width:92px">
@@ -741,7 +748,7 @@
                         </div>
                         <div class="col-lg-3 col-md-4">
                             <label class="form-label">Tên hàng</label>
-                            <input id="rackCrudItemName" class="form-control" readonly>
+                            <input id="rackCrudItemName" class="form-control" maxlength="500" placeholder="Tự điền hoặc nhập tên mã mới">
                         </div>
                         <div class="col-lg-2 col-md-4">
                             <label class="form-label">Số lượng</label>
@@ -749,7 +756,7 @@
                         </div>
                         <div class="col-lg-1 col-md-4">
                             <label class="form-label">ĐVT</label>
-                            <input id="rackCrudUnit" class="form-control" readonly>
+                            <input id="rackCrudUnit" class="form-control text-uppercase" maxlength="50" placeholder="KG">
                         </div>
                         <div class="col-lg-1 col-md-4">
                             <label class="form-label">Size</label>
@@ -759,9 +766,12 @@
                             <label class="form-label">Màu</label>
                             <input id="rackCrudColor" class="form-control">
                         </div>
-                        <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+                        <div class="col-12 d-flex align-items-center justify-content-between gap-2 mt-2 flex-wrap">
+                            <div id="rackCrudCatalogState" class="small text-muted">Gõ mã để kiểm tra DANH MỤC.</div>
+                            <div class="d-flex gap-2">
                             <button type="button" class="btn btn-outline-secondary" onclick="resetRackCrudForm()">Hủy sửa</button>
-                            <button type="submit" class="btn btn-primary btn-icon"><i data-lucide="save"></i>Lưu hàng</button>
+                            <button id="rackCrudSaveBtn" type="submit" class="btn btn-primary btn-icon"><i data-lucide="save"></i>Lưu hàng</button>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -917,6 +927,7 @@
         let rackCrudLocationCode = '';
         let rackCrudItems = [];
         let rackCrudSearchTimer = null;
+        let rackCrudLookupPending = false;
         let rackHoverTarget = null;
         let rackProductionOrderTimer = null;
         let rackProductionOrderRequest = 0;
@@ -1772,7 +1783,8 @@
                     <div><div class="layout-stock-code">${escapeHtml(item.code)}</div><div class="layout-stock-color">${escapeHtml(item.color || 'Chưa có màu')}</div></div>
                     <div class="layout-stock-qty">${formatNumber(item.quantity)}${item.unit ? ` ${escapeHtml(item.unit)}` : ''}</div>
                 </div>`).join('');
-                return `<div class="layout-block ${isTierStackLocation(location) ? 'is-tier-stack' : ''} ${packages.length ? 'has-stock' : ''} ${isMatch ? 'is-filter-match' : ''} ${location.location_code === selectedCode ? 'is-selected' : ''}" data-location-id="${location.id}" style="grid-column:${layout.x} / span ${layout.w}; grid-row:${layout.y} / span ${layout.h}; --tier-offset:${tierOffset}; z-index:${10 + tierOffset};">
+                const stockClass = totalQuantity > 0 ? 'has-stock' : (packages.length ? 'has-assignment' : '');
+                return `<div class="layout-block ${isTierStackLocation(location) ? 'is-tier-stack' : ''} ${stockClass} ${isMatch ? 'is-filter-match' : ''} ${location.location_code === selectedCode ? 'is-selected' : ''}" data-location-id="${location.id}" style="grid-column:${layout.x} / span ${layout.w}; grid-row:${layout.y} / span ${layout.h}; --tier-offset:${tierOffset}; z-index:${10 + tierOffset};">
                     <div class="layout-block-code">${escapeHtml(location.location_code)}</div>
                     <div class="layout-block-meta">Line ${escapeHtml(lineForLocation(location))} - Kệ ${escapeHtml(shelfForLocation(location))} - Tầng ${escapeHtml(tierForLocationModel(location))}${bayCodeForLocation(location) ? ` - Ô ${escapeHtml(bayCodeForLocation(location))}` : ''}</div>
                     ${packages.length ? `<div class="layout-block-count">${packages.length}</div><div class="layout-block-stock">SL ${formatNumber(totalQuantity)}</div><div class="layout-stock-hover"><div class="layout-stock-title"><span>${escapeHtml(location.location_code)}</span><span>${formatNumber(totalQuantity)}</span></div>${hoverRows}</div>` : ''}
@@ -2063,8 +2075,14 @@
                         `).join('');
                         const hoverTitle = `${locationCode} - ${summaries.length} mã hàng`;
                         const hoverMeta = tierData ? `Tổng ${formatNumber(tierData.totalQuantity)}` : '';
+                        const stockClass = Number(tierData?.totalQuantity || 0) > 0
+                            ? 'has-stock'
+                            : (summaries.length ? 'has-assignment' : '');
+                        const quantityLabel = Number(tierData?.totalQuantity || 0) > 0
+                            ? formatNumber(tierData.totalQuantity)
+                            : (summaries.length ? 'Chưa nhập SL' : '-');
                         return `
-                            <button type="button" class="rack-tier ${tierData?.packages?.length ? 'has-stock' : ''} ${tierData?.isSelected ? 'is-selected' : ''} ${tierData?.isMatch ? 'is-filter-match' : ''} ${tierData?.isOrderMatch ? 'is-order-match' : ''}"
+                            <button type="button" class="rack-tier ${stockClass} ${tierData?.isSelected ? 'is-selected' : ''} ${tierData?.isMatch ? 'is-filter-match' : ''} ${tierData?.isOrderMatch ? 'is-order-match' : ''}"
                                 data-rack-location="${escapeHtml(locationCode)}"
                                 data-rack-hover-title="${escapeHtml(hoverTitle)}"
                                 data-rack-hover-meta="${escapeHtml(hoverMeta)}"
@@ -2074,7 +2092,7 @@
                                     <span class="rack-tier-code">${escapeHtml(locationCode)}</span>
                                     <span class="rack-tier-items">${colorBoard}</span>
                                 </span>
-                                <span class="rack-tier-qty">${tierData ? formatNumber(tierData.totalQuantity) : '-'}</span>
+                                <span class="rack-tier-qty">${quantityLabel}</span>
                                 ${detailRows ? `<span class="rack-tier-detail">${detailRows}</span>` : ''}
                             </button>
                         `;
@@ -2702,34 +2720,89 @@
             });
         }
 
+        function setRackCatalogState(item = null, pending = false) {
+            const state = document.getElementById('rackCrudCatalogState');
+            const saveButton = document.getElementById('rackCrudSaveBtn');
+            const packageId = value('rackCrudPackageId');
+            if (pending) {
+                state.className = 'small text-primary';
+                state.textContent = 'Đang kiểm tra DANH MỤC...';
+                if (!packageId) saveButton.innerHTML = '<i data-lucide="loader-circle"></i>Đang kiểm tra';
+            } else if (item) {
+                state.className = 'small text-success';
+                state.textContent = `Đã có trong DANH MỤC${item.shelf ? ` · Kệ khai báo ${item.shelf}` : ''}.`;
+                if (!packageId) saveButton.innerHTML = '<i data-lucide="package-plus"></i>Lưu tồn đầu';
+            } else if (value('rackCrudItemCode').trim()) {
+                state.className = 'small text-warning-emphasis';
+                state.textContent = 'Mã mới: sẽ append mã, kệ và tồn đầu vào Google Sheet DANH MỤC.';
+                if (!packageId) saveButton.innerHTML = '<i data-lucide="cloud-upload"></i>Append + lưu tồn đầu';
+            } else {
+                state.className = 'small text-muted';
+                state.textContent = 'Gõ mã để kiểm tra DANH MỤC.';
+                if (!packageId) saveButton.innerHTML = '<i data-lucide="save"></i>Lưu hàng';
+            }
+            if (packageId) {
+                saveButton.innerHTML = '<i data-lucide="save"></i>Cập nhật';
+            }
+            refreshIcons();
+        }
+
         function searchRackCatalog() {
             const keyword = value('rackCrudItemCode').trim();
             clearTimeout(rackCrudSearchTimer);
-            if (!keyword) return;
+            if (!keyword) {
+                rackCrudLookupPending = false;
+                setRackCatalogState();
+                return;
+            }
+            rackCrudLookupPending = true;
+            setRackCatalogState(null, true);
             rackCrudSearchTimer = setTimeout(() => {
                 fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(keyword)}&limit=50`)
                     .then(r => jsonOrError(r, 'Không tải được DANH MỤC'))
                     .then(result => {
                         internalCatalogItems = [...(result.data || []), ...internalCatalogItems];
                         renderRackCatalogOptions(result.data || []);
+                        rackCrudLookupPending = false;
                         applyRackCatalogSelection();
                     })
-                    .catch(() => {});
+                    .catch(error => {
+                        rackCrudLookupPending = false;
+                        document.getElementById('rackCrudCatalogState').className = 'small text-danger';
+                        document.getElementById('rackCrudCatalogState').textContent = error.message;
+                    });
             }, 180);
         }
 
         function applyRackCatalogSelection() {
             const item = findRackCatalogItem(value('rackCrudItemCode'));
+            const nameInput = document.getElementById('rackCrudItemName');
+            const unitInput = document.getElementById('rackCrudUnit');
             if (!item) {
-                document.getElementById('rackCrudItemName').value = '';
-                document.getElementById('rackCrudUnit').value = '';
-                return;
+                const previousCode = String(nameInput.dataset.catalogCode || '').toUpperCase();
+                const currentCode = value('rackCrudItemCode').trim().toUpperCase();
+                if (previousCode && previousCode !== currentCode) {
+                    nameInput.value = '';
+                    unitInput.value = '';
+                    document.getElementById('rackCrudSize').value = '';
+                    document.getElementById('rackCrudColor').value = '';
+                }
+                delete nameInput.dataset.catalogCode;
+                nameInput.readOnly = false;
+                unitInput.readOnly = false;
+                setRackCatalogState();
+                return null;
             }
             document.getElementById('rackCrudItemCode').value = item.code || item.value || '';
-            document.getElementById('rackCrudItemName').value = item.name || '';
-            document.getElementById('rackCrudUnit').value = item.unit || '';
+            nameInput.value = item.name || '';
+            unitInput.value = item.unit || '';
+            nameInput.dataset.catalogCode = String(item.code || item.value || '').toUpperCase();
+            nameInput.readOnly = true;
+            unitInput.readOnly = true;
             if (!value('rackCrudSize')) document.getElementById('rackCrudSize').value = item.size || '';
             if (!value('rackCrudColor')) document.getElementById('rackCrudColor').value = item.color || '';
+            setRackCatalogState(item);
+            return item;
         }
 
         function resetRackCrudForm() {
@@ -2738,8 +2811,15 @@
                 const el = document.getElementById(id);
                 if (el) el.value = '';
             });
+            const nameInput = document.getElementById('rackCrudItemName');
+            const unitInput = document.getElementById('rackCrudUnit');
+            delete nameInput.dataset.catalogCode;
+            nameInput.readOnly = false;
+            unitInput.readOnly = false;
+            rackCrudLookupPending = false;
             document.getElementById('rackCrudLocationCode').value = keepLocation || '';
             document.getElementById('rackCrudStatus').textContent = '';
+            setRackCatalogState();
         }
 
         function loadRackInventoryRows() {
@@ -2827,6 +2907,7 @@
             document.getElementById('rackCrudSize').value = item.size || '';
             document.getElementById('rackCrudColor').value = item.color || '';
             document.getElementById('rackCrudStatus').textContent = `Đang sửa ${item.package_code || ''}`;
+            applyRackCatalogSelection();
         }
 
         function copyRackInventoryLedgerItem(index) {
@@ -2841,6 +2922,7 @@
             document.getElementById('rackCrudSize').value = item.size || '';
             document.getElementById('rackCrudColor').value = item.color || '';
             document.getElementById('rackCrudStatus').textContent = 'Đang tạo dòng điều chỉnh từ tồn tổng hợp.';
+            applyRackCatalogSelection();
         }
 
         function rackCrudPayload() {
@@ -2854,34 +2936,112 @@
                 color: value('rackCrudColor'),
                 side: '',
                 quantity: Number(value('rackCrudQuantity') || 0),
-                checked_at: value('checkedAt') || new Date().toISOString().slice(0, 10),
-                entry_type: 'opening',
+                checked_at: dateVnToIso(value('checkedAt')) || localIsoDate(),
+                entry_type: 'receipt',
                 note: item?.name || value('rackCrudItemName') || ''
             };
         }
 
-        function saveRackInventoryItem(event) {
+        async function resolveRackCatalogItem(code) {
+            const localItem = findRackCatalogItem(code);
+            if (localItem) return localItem;
+            const result = await fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(code)}&limit=50`)
+                .then(r => jsonOrError(r, 'Không kiểm tra được DANH MỤC'));
+            internalCatalogItems = [...(result.data || []), ...internalCatalogItems];
+            renderRackCatalogOptions(result.data || []);
+            return findRackCatalogItem(code) || null;
+        }
+
+        async function saveRackInventoryItem(event) {
             event.preventDefault();
-            applyRackCatalogSelection();
-            const payload = rackCrudPayload();
-            if (!payload.internal_item_code) return alert('Nhập mã hàng hóa từ DANH MỤC.');
-            if (!(payload.quantity > 0)) return alert('Nhập số lượng lớn hơn 0.');
             const packageId = value('rackCrudPackageId');
-            fetch(packageId ? `/api/kiem-ton-kho/kien/${packageId}` : '/api/kiem-ton-kho/kien', {
-                method: packageId ? 'PATCH' : 'POST',
-                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
-                body: JSON.stringify(payload)
-            }).then(r => jsonOrError(r, packageId ? 'Không cập nhật được hàng trong kệ' : 'Không thêm được hàng vào kệ'))
-              .then(() => {
-                  resetRackCrudForm();
-                  loadRackInventoryRows();
-                  loadPackages();
-                  loadLocations();
-                  loadWarehouseStats();
-                  loadWarehouseMap();
-                  loadLocationContents();
-              })
-              .catch(error => alert(error.message));
+            const code = value('rackCrudItemCode').trim().toUpperCase();
+            const quantity = Number(value('rackCrudQuantity') || 0);
+            if (!code) {
+                showWarehouseToast('Thiếu mã hàng', 'Nhập mã hàng hóa trước khi lưu.');
+                return;
+            }
+            if (!(quantity > 0)) {
+                showWarehouseToast('Thiếu số lượng', 'Số lượng phải lớn hơn 0.');
+                return;
+            }
+
+            const saveButton = document.getElementById('rackCrudSaveBtn');
+            saveButton.disabled = true;
+            saveButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span>Đang lưu';
+            try {
+                rackCrudLookupPending = true;
+                const item = await resolveRackCatalogItem(code);
+                rackCrudLookupPending = false;
+                applyRackCatalogSelection();
+
+                if (!packageId) {
+                    const itemName = (item?.name || value('rackCrudItemName')).trim();
+                    const unit = (item?.unit || value('rackCrudUnit')).trim().toUpperCase();
+                    if (!itemName || !unit) {
+                        throw new Error('Cần nhập Tên hàng và ĐVT trước khi lưu tồn đầu.');
+                    }
+                    const response = await fetch('/api/danh-muc-noi-bo/nhap-ke-hang-loat', {
+                        method: 'POST',
+                        headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                        body: JSON.stringify({
+                            apply: true,
+                            receipt_date: dateVnToIso(value('checkedAt')) || localIsoDate(),
+                            item_group: 'SỢI',
+                            note: `Nhập mã mới tại kệ ${rackCrudLocationCode}`,
+                            lines: [{
+                                item_code: code,
+                                item_name: itemName,
+                                quantity,
+                                unit,
+                                shelf_code: rackCrudLocationCode,
+                                size: value('rackCrudSize').trim(),
+                                color: value('rackCrudColor').trim() || itemName,
+                            }],
+                        }),
+                    });
+                    await jsonOrError(response, 'Không lưu được tồn đầu vào DANH MỤC');
+                    const cachedItem = item || {};
+                    Object.assign(cachedItem, {
+                        code,
+                        value: code,
+                        name: itemName,
+                        unit,
+                        shelf: rackCrudLocationCode,
+                        size: value('rackCrudSize'),
+                        color: value('rackCrudColor').trim() || itemName,
+                        opening_quantity: quantity,
+                    });
+                    if (!item) internalCatalogItems.unshift(cachedItem);
+                    showWarehouseToast('Đã lưu tồn đầu', `${code} · ${formatNumber(quantity)} ${unit} · kệ ${rackCrudLocationCode}`);
+                    document.getElementById('rackCrudStatus').textContent = 'Đã cập nhật TỒN ĐẦU trên Google Sheet.';
+                } else {
+                    const payload = rackCrudPayload();
+                    const response = await fetch(`/api/kiem-ton-kho/kien/${packageId}`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                        body: JSON.stringify(payload)
+                    });
+                    await jsonOrError(response, 'Không cập nhật được hàng trong kệ');
+                    showWarehouseToast('Đã cập nhật', `${payload.internal_item_code} · ${formatNumber(payload.quantity)} · kệ ${rackCrudLocationCode}`);
+                }
+
+                resetRackCrudForm();
+                loadRackInventoryRows();
+                loadPackages();
+                loadLocations();
+                loadWarehouseStats();
+                loadWarehouseMap();
+                loadLocationContents();
+                document.getElementById('rackCrudItemCode').focus();
+            } catch (error) {
+                rackCrudLookupPending = false;
+                document.getElementById('rackCrudStatus').textContent = error.message;
+                showWarehouseToast('Không lưu được', error.message);
+            } finally {
+                saveButton.disabled = false;
+                setRackCatalogState(findRackCatalogItem(value('rackCrudItemCode')));
+            }
         }
 
         function deleteRackInventoryItem(packageId) {
