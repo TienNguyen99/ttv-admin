@@ -42,6 +42,7 @@
         .item-chip { padding: 5px 7px; border: 1px solid #d7e5f4; border-radius: 8px; background: #f8fbff; color: #14314f; font-size: 12px; }
         .item-chip__edit { padding: 0 3px; border: 0; background: transparent; color: #2563eb; font-weight: 800; }
         .item-chip__source { display: block; margin-top: 2px; color: #64748b; font-size: 10px; }
+        .item-chip__image { margin-left:4px; vertical-align:middle; }
         .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 850; white-space: nowrap; }
         .status-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
         .status-planned { background: #eef4fb; color: #45627f; }
@@ -116,7 +117,7 @@
         </div>
 
         <section class="kpi-grid">
-            <article class="kpi-card"><div class="kpi-icon"><i data-lucide="clipboard-list"></i></div><div><div class="kpi-label">Tổng lệnh</div><div id="kpiOrders" class="kpi-value">0</div></div></article>
+            <article class="kpi-card"><div class="kpi-icon"><i data-lucide="clipboard-list"></i></div><div><div class="kpi-label">Lệnh đang tải</div><div id="kpiOrders" class="kpi-value">0</div><div class="muted">Tối đa 100, tìm kiếm toàn bộ</div></div></article>
             <article class="kpi-card"><div class="kpi-icon"><i data-lucide="package-check"></i></div><div><div class="kpi-label">Đã nhập</div><div id="kpiReceived" class="kpi-value">0</div></div></article>
             <article class="kpi-card"><div class="kpi-icon"><i data-lucide="send"></i></div><div><div class="kpi-label">Đang SX</div><div id="kpiProduction" class="kpi-value">0</div></div></article>
             <article class="kpi-card"><div class="kpi-icon"><i data-lucide="badge-check"></i></div><div><div class="kpi-label">SX xong</div><div id="kpiDone" class="kpi-value">0</div></div></article>
@@ -190,6 +191,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    @include('layouts.partials.catalog-image-paste-modal')
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <script>
         const groupsEl = document.getElementById('groups');
@@ -224,14 +226,26 @@
 
         function chips(items) {
             if (!items.length) return '<span class="muted">Chưa có dòng hàng</span>';
-            return `<div class="item-stack">${items.map(item => `<span class="item-chip">
+            return `<div class="item-stack">${items.map(item => {
+                const image = imageUrl(item.image_url || '');
+                const imageAction = item.item_code ? `<button type="button" class="catalog-image-trigger item-chip__image" title="${image ? 'Xem hoặc thay ảnh danh mục' : 'Paste ảnh vào danh mục'}" data-catalog-image-open data-catalog-id="${esc(item.catalog_id || '')}" data-item-code="${esc(item.item_code || '')}" data-item-name="${esc(item.description || '')}" data-unit="${esc(item.unit || '')}" data-size="${esc(item.size || '')}" data-color="${esc(item.color || '')}" data-image-url="${esc(image)}">
+                    ${image ? `<img loading="lazy" src="${esc(image)}" alt="${esc(item.item_code || 'Ảnh danh mục')}">` : '<i data-lucide="image-plus"></i> Ảnh'}
+                </button>` : '';
+                return `<span class="item-chip">
                 <strong>${esc(item.item_code || 'Mã trống')}</strong>
                 <button type="button" class="item-chip__edit" title="Sửa mã chuẩn" data-edit-standard="${esc(item.id)}" data-production-order="${esc(item.production_order || '')}" data-source-code="${esc(item.source_item_code || '')}" data-standard-code="${esc(item.standard_item_code || '')}" data-standard-catalog-id="${esc(item.standard_catalog_id || '')}">&#9998;</button>
+                ${imageAction}
                 ${item.standard_item_code ? `<span class="item-chip__source">Gốc: ${esc(item.source_item_code || '-')}</span>` : ''}
                 ${item.size ? ` · Size ${esc(item.size)}` : ''}
                 ${item.color ? ` · ${esc(item.color)}` : ''}
                 ${item.quantity ? ` · ${num(item.quantity)} ${esc(item.unit || '')}` : ''}
-            </span>`).join('')}</div>`;
+            </span>`;
+            }).join('')}</div>`;
+        }
+
+        function imageUrl(value) {
+            const url = String(value || '').trim();
+            return /^(https?:)?\/\//i.test(url) || url.startsWith('/') ? url : '';
         }
 
         function codeList(codes) {
@@ -390,10 +404,11 @@
                     ${groupTable(grouped[key])}
                 </details>`)
                 .join('');
+            if (window.lucide) lucide.createIcons();
         }
 
         function load() {
-            const params = new URLSearchParams({ limit: 500 });
+            const params = new URLSearchParams({ limit: 100 });
             if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
             if (statusEl.value) params.set('status', statusEl.value);
             groupsEl.innerHTML = '<div class="empty-row">Đang tải dữ liệu...</div>';
@@ -429,8 +444,41 @@
             load();
         });
         groupsEl.addEventListener('click', event => {
+            const imageButton = event.target.closest('[data-catalog-image-open]');
+            if (imageButton) {
+                window.CatalogImagePaste?.open({
+                    catalogId: imageButton.dataset.catalogId,
+                    itemCode: imageButton.dataset.itemCode,
+                    itemName: imageButton.dataset.itemName,
+                    unit: imageButton.dataset.unit,
+                    size: imageButton.dataset.size,
+                    color: imageButton.dataset.color,
+                    imageUrl: imageButton.dataset.imageUrl,
+                });
+                return;
+            }
             const button = event.target.closest('[data-edit-standard]');
             if (button) openStandardItemEditor(button);
+        });
+        document.addEventListener('catalog-image-ready', event => {
+            const data = event.detail || {};
+            document.querySelectorAll(`[data-catalog-image-open][data-item-code="${CSS.escape(String(data.item_code || ''))}"]`).forEach(button => {
+                button.dataset.catalogId = String(data.id || '');
+            });
+        });
+        document.addEventListener('catalog-image-uploaded', event => {
+            const data = event.detail || {};
+            const url = imageUrl(data.image_url || '');
+            const selector = [
+                `[data-catalog-image-open][data-catalog-id="${CSS.escape(String(data.id || ''))}"]`,
+                `[data-catalog-image-open][data-item-code="${CSS.escape(String(data.item_code || ''))}"]`,
+            ].join(',');
+            document.querySelectorAll(selector).forEach(button => {
+                button.dataset.catalogId = String(data.id || '');
+                button.dataset.imageUrl = url;
+                button.title = 'Xem hoặc thay ảnh danh mục';
+                button.innerHTML = `<img loading="lazy" src="${esc(url)}" alt="${esc(data.item_code || 'Ảnh danh mục')}">`;
+            });
         });
         standardItemCodeEl.addEventListener('input', loadCatalogOptions);
         standardCatalogResultsEl.addEventListener('change', () => {

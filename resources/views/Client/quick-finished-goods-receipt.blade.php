@@ -35,14 +35,13 @@
         }
 
         .quick-choice {
-            width: min(760px, calc(100% - 28px));
+            width: min(880px, calc(100% - 28px));
             min-height: 100vh;
             margin: 0 auto;
             display: grid;
             place-content: center;
-            gap: 18px;
+            gap: 20px;
             padding: 24px 0;
-            text-align: center;
         }
 
         .quick-choice h1 {
@@ -51,29 +50,66 @@
             font-size: 30px;
             font-weight: 800;
             letter-spacing: 0;
+            text-align: center;
+        }
+
+        .quick-choice-groups {
+            display: grid;
+            grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+            gap: 12px;
+            align-items: stretch;
+        }
+
+        .quick-choice-group {
+            padding: 14px;
+            border: 1px solid #d6e4f7;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 10px 28px rgba(37, 99, 235, 0.08);
+        }
+
+        .quick-choice-group-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0 0 10px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .quick-choice-group-title svg {
+            width: 16px;
+            height: 16px;
         }
 
         .quick-choice-actions {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
+            gap: 10px;
+        }
+
+        .quick-choice-actions.is-single {
+            grid-template-columns: 1fr;
+            height: calc(100% - 28px);
         }
 
         .quick-choice-btn {
-            min-height: 132px;
+            min-height: 116px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 12px;
-            padding: 20px;
-            border: 2px solid #bfdbfe;
-            border-radius: 16px;
-            background: #ffffff;
+            gap: 8px;
+            padding: 16px;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            background: #f8fbff;
             color: #0f2f63;
-            font-size: 18px;
-            font-weight: 800;
             cursor: pointer;
+            text-align: center;
+            text-decoration: none;
             transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease, transform 180ms ease;
         }
 
@@ -86,7 +122,16 @@
             outline: none;
         }
 
-        .quick-choice-btn svg { width: 34px; height: 34px; }
+        .quick-choice-btn svg { width: 30px; height: 30px; }
+        .quick-choice-btn strong { font-size: 17px; font-weight: 800; }
+        .quick-choice-btn small { color: #64748b; font-size: 12px; font-weight: 600; }
+
+        .quick-choice-btn.is-issue {
+            height: 100%;
+            border-color: #93c5fd;
+            background: #eaf4ff;
+            color: #1d4ed8;
+        }
 
         .quick-header {
             display: grid;
@@ -222,10 +267,10 @@
             display: grid;
             grid-template-columns: minmax(230px, .7fr) minmax(220px, 1fr) 190px;
             gap: 12px;
-            align-items: end;
+            align-items: center;
             padding: 12px 14px;
             border-bottom: 1px solid #dbeafe;
-            background: #f8fbff;
+            background: #eef7ff;
         }
 
         .quick-export-switch {
@@ -234,8 +279,8 @@
             gap: 10px;
             min-height: 40px;
             padding: 8px 12px;
-            border: 1px solid #bfdbfe;
-            border-radius: 10px;
+            border: 1px solid #93c5fd;
+            border-radius: 8px;
             background: #ffffff;
         }
 
@@ -249,6 +294,14 @@
         .quick-export-switch label {
             margin: 0;
             cursor: pointer;
+            color: #0f2f63;
+            font-size: 14px;
+        }
+
+        .quick-export-switch.is-active {
+            border-color: #2563eb;
+            background: #dbeafe;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         label {
@@ -421,6 +474,7 @@
         }
 
         @media (max-width: 720px) {
+            .quick-choice-groups { grid-template-columns: 1fr; }
             .quick-choice-actions { grid-template-columns: 1fr; }
             .quick-choice-btn { min-height: 104px; }
             .quick-shell { width: min(100% - 16px, 1440px); padding-top: 8px; }
@@ -437,16 +491,33 @@
 </head>
 <body>
     <section id="modeChooser" class="quick-choice">
-        <h1>Chọn loại phiếu nhập</h1>
-        <div class="quick-choice-actions">
-            <button class="quick-choice-btn" type="button" data-receipt-kind="finished">
-                <i data-lucide="package-check"></i>
-                Nhập thành phẩm
-            </button>
-            <button class="quick-choice-btn" type="button" data-receipt-kind="semi_finished">
-                <i data-lucide="factory"></i>
-                Nhập bán thành phẩm
-            </button>
+        <h1>Chọn nghiệp vụ kho</h1>
+        <div class="quick-choice-groups">
+            <section class="quick-choice-group" aria-labelledby="receiptGroupTitle">
+                <h2 id="receiptGroupTitle" class="quick-choice-group-title"><i data-lucide="package-plus"></i>Nhập kho</h2>
+                <div class="quick-choice-actions">
+                    <button class="quick-choice-btn" type="button" data-receipt-kind="finished">
+                        <i data-lucide="package-check"></i>
+                        <strong>Nhập thành phẩm</strong>
+                        <small>Lưu phiếu và in giao kế toán</small>
+                    </button>
+                    <button class="quick-choice-btn" type="button" data-receipt-kind="semi_finished">
+                        <i data-lucide="factory"></i>
+                        <strong>Nhập bán thành phẩm</strong>
+                        <small>Tạo lệnh BTP và gửi sản xuất</small>
+                    </button>
+                </div>
+            </section>
+            <section class="quick-choice-group" aria-labelledby="issueGroupTitle">
+                <h2 id="issueGroupTitle" class="quick-choice-group-title"><i data-lucide="package-minus"></i>Xuất kho</h2>
+                <div class="quick-choice-actions is-single">
+                    <a class="quick-choice-btn is-issue" href="{{ url('/client/xuat-thanh-pham-nhanh') }}">
+                        <i data-lucide="truck"></i>
+                        <strong>Xuất thành phẩm</strong>
+                        <small>Soạn hàng, trừ tồn và in phiếu xuất</small>
+                    </a>
+                </div>
+            </section>
         </div>
     </section>
 
@@ -483,9 +554,9 @@
                     </div>
                 </div>
                 <div id="quickExportPanel" class="quick-export-panel d-none">
-                    <div class="quick-export-switch">
+                    <div id="quickExportSwitch" class="quick-export-switch">
                         <input id="exportImmediately" class="form-check-input" type="checkbox" role="switch">
-                        <label for="exportImmediately">Nhập + xuất thành phẩm ngay</label>
+                        <label for="exportImmediately">Xuất ngay sau khi nhập</label>
                     </div>
                     <div id="customerField" class="d-none">
                         <label for="customerName">Khách hàng *</label>
@@ -1646,6 +1717,7 @@
         function toggleImmediateExportFields() {
             const enabled = selectedReceiptKind === 'finished'
                 && document.getElementById('exportImmediately').checked;
+            document.getElementById('quickExportSwitch').classList.toggle('is-active', enabled);
             document.getElementById('customerField').classList.toggle('d-none', !enabled);
             document.getElementById('issueDateField').classList.toggle('d-none', !enabled);
             document.getElementById('savePrintBtn').innerHTML = enabled

@@ -54,10 +54,31 @@ class InternalProductionOrderController extends Controller
             ->get();
 
         $orderCodes = $orders->pluck('production_order')->filter()->unique()->values();
-        $catalogsById = InternalItemCatalog::query()
-            ->whereIn('id', $orders->pluck('standard_catalog_id')->filter()->unique()->values())
-            ->get()
-            ->keyBy('id');
+        $catalogIds = $orders->pluck('standard_catalog_id')->filter()->unique()->values();
+        $catalogCodes = $orders->flatMap(function ($order) {
+            return [$order->standard_item_code, $order->item_code];
+        })->map(fn ($code) => trim((string) $code))->filter()->unique()->values();
+        $catalogRows = collect();
+        if ($catalogIds->isNotEmpty() || $catalogCodes->isNotEmpty()) {
+            $catalogRows = InternalItemCatalog::query()
+                ->select('id', 'item_code', 'item_name', 'unit', 'size', 'color', 'image_url', 'source_row')
+                ->where('is_active', true)
+                ->where(function ($query) use ($catalogIds, $catalogCodes) {
+                    if ($catalogIds->isNotEmpty()) {
+                        $query->whereIn('id', $catalogIds->all());
+                    }
+                    if ($catalogCodes->isNotEmpty()) {
+                        $method = $catalogIds->isNotEmpty() ? 'orWhereIn' : 'whereIn';
+                        $query->{$method}('item_code', $catalogCodes->all());
+                    }
+                })
+                ->orderBy('source_row')
+                ->get();
+        }
+        $catalogsById = $catalogRows->keyBy('id');
+        $catalogsByCode = $catalogRows->keyBy(
+            fn ($catalog) => mb_strtoupper(trim((string) $catalog->item_code))
+        );
 
         if ($orderCodes->isEmpty()) {
             return response()->json([
@@ -99,7 +120,7 @@ class InternalProductionOrderController extends Controller
 
         $rows = $orders
             ->groupBy('production_order')
-            ->map(function ($lines, $productionOrder) use ($receiptRows, $issueRows, $catalogsById) {
+            ->map(function ($lines, $productionOrder) use ($receiptRows, $issueRows, $catalogsById, $catalogsByCode) {
                 $first = $lines->first();
                 $receipt = $receiptRows->get($productionOrder);
                 $issue = $issueRows->get($productionOrder);
@@ -110,10 +131,15 @@ class InternalProductionOrderController extends Controller
                 $remainingAfterCustomer = $receivedQuantity - $issuedCustomer;
                 $status = $this->workflowStatus($plannedQuantity, $receivedQuantity, $issuedProduction, (bool) ($issue->has_completed_issue ?? false), $issuedCustomer);
 
-                $items = $lines->map(function ($line) use ($catalogsById) {
+                $items = $lines->map(function ($line) use ($catalogsById, $catalogsByCode) {
                     $sourceItemCode = trim((string) $line->item_code);
                     $standardItemCode = trim((string) $line->standard_item_code);
                     $catalog = $line->standard_catalog_id ? $catalogsById->get($line->standard_catalog_id) : null;
+                    if (!$catalog) {
+                        $catalog = $catalogsByCode->get(
+                            mb_strtoupper($standardItemCode !== '' ? $standardItemCode : $sourceItemCode)
+                        );
+                    }
                     return [
                         'id' => (int) $line->id,
                         'production_order' => trim((string) $line->production_order),
@@ -121,6 +147,8 @@ class InternalProductionOrderController extends Controller
                         'source_item_code' => $sourceItemCode,
                         'standard_item_code' => $standardItemCode,
                         'standard_catalog_id' => $catalog ? (int) $catalog->id : null,
+                        'catalog_id' => $catalog ? (int) $catalog->id : null,
+                        'image_url' => trim((string) ($catalog->image_url ?? '')),
                         'description' => trim((string) ($catalog->item_name ?? '')) ?: trim((string) $line->description),
                         'size' => trim((string) ($catalog->size ?? '')) ?: trim((string) $line->size),
                         'color' => trim((string) ($catalog->color ?? '')) ?: trim((string) $line->color),

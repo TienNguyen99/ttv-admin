@@ -1548,6 +1548,204 @@ class InternalItemCatalogController extends Controller
         ]);
     }
 
+    public function ensureFromOrder(Request $request, GoogleSheetCatalogWriter $writer)
+    {
+        $data = $request->validate([
+            'item_code' => 'required|string|max:200',
+            'item_name' => 'nullable|string|max:500',
+            'unit' => 'nullable|string|max:50',
+            'size' => 'nullable|string|max:255',
+            'color' => 'nullable|string|max:1000',
+            'item_group' => 'nullable|string|max:100',
+        ]);
+
+        $sourceItemCode = trim((string) $data['item_code']);
+        $itemCode = trim(preg_replace('/-{2,}/', '-', preg_replace('/[\s\x{00A0}]+/u', '-', $sourceItemCode)), '-');
+        $normalizedCode = mb_strtoupper($itemCode);
+        $itemName = trim((string) ($data['item_name'] ?? ''));
+        $unit = trim((string) ($data['unit'] ?? ''));
+        $size = trim((string) ($data['size'] ?? ''));
+        $color = trim((string) ($data['color'] ?? ''));
+        $itemGroup = trim((string) ($data['item_group'] ?? '')) ?: 'TP';
+
+        $catalog = InternalItemCatalog::query()
+            ->whereRaw('UPPER(TRIM(item_code)) = ?', [$normalizedCode])
+            ->first();
+
+        if ($catalog && (int) $catalog->source_row >= 2) {
+            if (!$catalog->is_active) {
+                $catalog->is_active = true;
+                $catalog->save();
+            }
+
+            return response()->json([
+                'message' => 'Mã đã có trong Danh mục nội bộ và Google Sheet.',
+                'data' => [
+                    'id' => (int) $catalog->id,
+                    'item_code' => trim((string) $catalog->item_code),
+                    'item_name' => trim((string) $catalog->item_name),
+                    'image_url' => trim((string) $catalog->image_url),
+                    'source_row' => (int) $catalog->source_row,
+                    'created_from_order' => false,
+                    'appended_to_sheet' => false,
+                ],
+            ]);
+        }
+
+        if (!$writer->isConfigured()) {
+            return response()->json([
+                'message' => 'Chưa cấu hình quyền ghi Google Sheet. Mã chưa được tạo để tránh lệch Danh mục.',
+            ], 503);
+        }
+
+        try {
+            $sheetRows = $writer->findItemRows(self::SPREADSHEET_ID, self::SHEET_NAME, [$itemCode]);
+            $matchingRows = array_values($sheetRows[$normalizedCode] ?? []);
+
+            if (count($matchingRows) > 1) {
+                return response()->json([
+                    'message' => "Mã {$itemCode} đang xuất hiện ở nhiều dòng Google Sheet. Hãy xử lý mã trùng trước.",
+                    'rows' => $matchingRows,
+                ], 409);
+            }
+
+            $appendedToSheet = false;
+            $sourceRow = (int) ($matchingRows[0] ?? 0);
+            if ($sourceRow < 2) {
+                $appendedRows = $writer->appendRows(self::SPREADSHEET_ID, self::SHEET_NAME, [[
+                    'MAHANG' => $itemCode,
+                    'TEN HANG' => $itemName,
+                    'DVT' => $unit,
+                    'SIZE' => $size,
+                    'MAU' => $color,
+                    'LOAI' => $itemGroup,
+                    'KE' => '',
+                    'TON DAU' => 0,
+                ]]);
+                $sourceRow = (int) ($appendedRows[0] ?? 0);
+                $appendedToSheet = true;
+            }
+        } catch (\Throwable $error) {
+            return response()->json([
+                'message' => 'Không append được mã vào Google Sheet DANH MỤC: ' . $error->getMessage(),
+            ], 502);
+        }
+
+        if ($sourceRow < 2) {
+            return response()->json([
+                'message' => 'Google Sheet không trả về dòng vừa append. Danh mục nội bộ chưa thay đổi.',
+            ], 502);
+        }
+
+        try {
+            $catalog = DB::connection('internal')->transaction(function () use (
+                $itemCode,
+                $sourceItemCode,
+                $normalizedCode,
+                $itemName,
+                $unit,
+                $size,
+                $color,
+                $itemGroup,
+                $sourceRow
+            ) {
+                $existing = InternalItemCatalog::query()
+                    ->whereRaw('UPPER(TRIM(item_code)) = ?', [$normalizedCode])
+                    ->lockForUpdate()
+                    ->first();
+
+                $sourceOwner = InternalItemCatalog::query()
+                    ->where('source_row', $sourceRow)
+                    ->lockForUpdate()
+                    ->first();
+                if ($sourceOwner && (!$existing || (int) $sourceOwner->id !== (int) $existing->id)) {
+                    throw new \RuntimeException(
+                        "Dòng Google Sheet {$sourceRow} đang liên kết với mã {$sourceOwner->item_code}."
+                    );
+                }
+
+                if ($existing) {
+                    $raw = is_array($existing->raw_data) ? $existing->raw_data : [];
+                    $raw = array_merge($raw, [
+                        'ma hang' => $itemCode,
+                        'ma hang nguon' => $sourceItemCode,
+                        'ten hang' => trim((string) $existing->item_name) ?: $itemName,
+                        'dvt' => trim((string) $existing->unit) ?: $unit,
+                        'size' => trim((string) $existing->size) ?: $size,
+                        'mau' => trim((string) $existing->color) ?: $color,
+                        'loai' => $raw['loai'] ?? $itemGroup,
+                        '_internal_origin' => 'production_order_image',
+                    ]);
+                    $existing->source_row = $sourceRow;
+                    $existing->item_name = trim((string) $existing->item_name) ?: $itemName;
+                    $existing->unit = trim((string) $existing->unit) ?: $unit;
+                    $existing->size = trim((string) $existing->size) ?: $size;
+                    $existing->color = trim((string) $existing->color) ?: $color;
+                    $existing->raw_data = $raw;
+                    $existing->source_hash = hash('sha256', json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                    $existing->sync_batch = 'internal-image';
+                    $existing->is_active = true;
+                    $existing->save();
+
+                    return $existing;
+                }
+
+                $raw = [
+                    'ma hang' => $itemCode,
+                    'ma hang nguon' => $sourceItemCode,
+                    'ten hang' => $itemName,
+                    'dvt' => $unit,
+                    'size' => $size,
+                    'mau' => $color,
+                    'loai' => $itemGroup,
+                    '_internal_origin' => 'production_order_image',
+                ];
+
+                return InternalItemCatalog::query()->create([
+                    'source_row' => $sourceRow,
+                    'item_code' => $itemCode,
+                    'item_name' => $itemName,
+                    'unit' => $unit,
+                    'size' => $size,
+                    'color' => $color,
+                    'opening_quantity' => 0,
+                    'raw_data' => $raw,
+                    'source_hash' => hash('sha256', json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+                    'sync_batch' => 'internal-image',
+                    'is_active' => true,
+                ]);
+            });
+
+            InternalProductionOrder::query()
+                ->whereRaw('UPPER(TRIM(item_code)) = ?', [mb_strtoupper($sourceItemCode)])
+                ->update([
+                    'standard_item_code' => $catalog->item_code,
+                    'standard_catalog_id' => $catalog->id,
+                ]);
+        } catch (\Throwable $error) {
+            return response()->json([
+                'message' => 'Google Sheet đã có mã nhưng không liên kết được database nội bộ: ' . $error->getMessage(),
+            ], 409);
+        }
+
+        Cache::forget('internal_catalog_customer_map_v1');
+
+        return response()->json([
+            'message' => $appendedToSheet
+                ? 'Đã append mã vào cuối Google Sheet DANH MỤC và liên kết database nội bộ.'
+                : 'Đã liên kết mã có sẵn trên Google Sheet với database nội bộ.',
+            'data' => [
+                'id' => (int) $catalog->id,
+                'item_code' => trim((string) $catalog->item_code),
+                'item_name' => trim((string) $catalog->item_name),
+                'image_url' => trim((string) $catalog->image_url),
+                'source_row' => (int) $catalog->source_row,
+                'created_from_order' => (bool) $catalog->wasRecentlyCreated,
+                'appended_to_sheet' => $appendedToSheet,
+            ],
+        ], $appendedToSheet || $catalog->wasRecentlyCreated ? 201 : 200);
+    }
+
     private function duplicateCodeSplitPreview(string $requestedCode): array
     {
         $requestedCode = mb_strtoupper(trim($requestedCode));

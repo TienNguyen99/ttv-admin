@@ -63,6 +63,33 @@ class GoogleSheetWeavingTemplateWriter
         if (trim((string) ($values[0][0] ?? '')) !== 'LỆNH DỆT') {
             throw new RuntimeException('Tab LENH_DET không đúng mẫu hoặc ô A1 không phải LỆNH DỆT.');
         }
+
+        $formulaResponse = $service->spreadsheets_values->get(
+            $spreadsheetId,
+            "'" . self::SHEET_NAME . "'!A1:K16",
+            ['valueRenderOption' => 'FORMULA']
+        );
+        $formulaValues = $formulaResponse->getValues() ?: [];
+        $requiredFormulaCells = [
+            'J6', 'J7', 'J8', 'J9', 'J10', 'J11', 'J12',
+            'K6', 'K7', 'K8', 'K9', 'K13',
+            'E15', 'G15', 'I15', 'K15', 'E16', 'I16', 'K16',
+        ];
+        $missingFormulaCells = collect($requiredFormulaCells)
+            ->filter(function (string $cell) use ($formulaValues) {
+                [$column, $row] = sscanf($cell, '%[A-Z]%d');
+                $columnIndex = ord($column) - ord('A');
+                $value = trim((string) ($formulaValues[$row - 1][$columnIndex] ?? ''));
+
+                return !str_starts_with($value, '=');
+            })
+            ->values()
+            ->all();
+        if (!empty($missingFormulaCells)) {
+            throw new RuntimeException(
+                'Mẫu LENH_DET đang thiếu công thức tại: ' . implode(', ', $missingFormulaCells) . '.'
+            );
+        }
     }
 
     public function buildRanges(array $plan): array
@@ -81,7 +108,7 @@ class GoogleSheetWeavingTemplateWriter
         $quantity = (float) ($order['planned_quantity'] ?? $sourceItem['order_quantity'] ?? 0);
 
         // Row 13 is reserved for the warp-yarn total in I13:K13.
-        $bomValues = array_fill(0, 7, array_fill(0, 6, ''));
+        $bomValues = array_fill(0, 7, array_fill(0, 4, ''));
         foreach (array_slice($lines, 0, 7) as $index => $line) {
             $line = (array) $line;
             $summaryLine = (array) ($summaryLines->get(mb_strtoupper(trim((string) ($line['material_code'] ?? '')))) ?? []);
@@ -99,12 +126,6 @@ class GoogleSheetWeavingTemplateWriter
                     $line['catalog_name'] ?? '',
                     $summaryLine['catalog_name'] ?? '',
                     $line['material_name'] ?? ''
-                ),
-                $this->number($line['consumption_per_unit'] ?? 0),
-                $this->number(
-                    ((float) ($line['total_grams'] ?? 0)) > 0
-                        ? $line['total_grams']
-                        : ($line['required_quantity_raw'] ?? $line['required_quantity'] ?? 0)
                 ),
             ];
         }
@@ -143,37 +164,18 @@ class GoogleSheetWeavingTemplateWriter
                 [$this->firstText($metadata['box_code'] ?? '', $this->operation($operations, 'MA SO HOP'))],
                 [$this->firstText($metadata['quantity_per_box'] ?? '', $this->operation($operations, 'SO LUONG/HOP'))],
             ]],
-            ['range' => 'F6:K12', 'values' => $bomValues],
-            ['range' => 'F13:H13', 'values' => [['', '', '']]],
-            ['range' => 'K13', 'values' => [[$this->numericOrBlank($metadata['warp_grams'] ?? '')]]],
-            ['range' => 'A15:K16', 'values' => [
-                [
-                    $metadata['pick'] ?? '',
-                    $metadata['density'] ?? '',
-                    $metadata['machine'] ?? '',
-                    $metadata['roll_machine_small'] ?? '',
-                    $this->numericOrBlank($metadata['roll_count_small'] ?? $metadata['roll_count'] ?? ''),
-                    '',
-                    $this->numericOrBlank($metadata['quantity_plus_10'] ?? ''),
-                    $metadata['row_machine_small'] ?? '',
-                    $this->numericOrBlank($metadata['row_count_plus_10'] ?? ''),
-                    '',
-                    $metadata['shift'] ?? '',
-                ],
-                [
-                    '',
-                    '',
-                    '',
-                    $metadata['roll_machine_large'] ?? '',
-                    $this->numericOrBlank($metadata['roll_count_large'] ?? ''),
-                    '',
-                    '',
-                    $metadata['row_machine_large'] ?? '',
-                    $this->numericOrBlank($metadata['row_count_plus_10_large'] ?? ''),
-                    '',
-                    $metadata['shift_large'] ?? '',
-                ],
-            ]],
+            // J6:K13 contain formulas maintained by the LENH_DET template.
+            ['range' => 'F6:I12', 'values' => $bomValues],
+            ['range' => 'A15:C15', 'values' => [[
+                $metadata['pick'] ?? '',
+                $metadata['density'] ?? '',
+                $metadata['machine'] ?? '',
+            ]]],
+            // E/G/I/K are formula cells. Only update their machine labels.
+            ['range' => 'D15', 'values' => [[$this->firstText($metadata['roll_machine_small'] ?? '', 'Muller')]]],
+            ['range' => 'D16', 'values' => [[$this->firstText($metadata['roll_machine_large'] ?? '', 'Hi-Tex')]]],
+            ['range' => 'H15', 'values' => [[$this->firstText($metadata['row_machine_small'] ?? '', 'Muller')]]],
+            ['range' => 'H16', 'values' => [[$this->firstText($metadata['row_machine_large'] ?? '', 'Hi-Tex')]]],
             ['range' => 'A20', 'values' => [[$metadata['file_name'] ?? '']]],
             ['range' => 'C20', 'values' => [[$metadata['usb_small'] ?? '']]],
             ['range' => 'E20', 'values' => [[$metadata['usb_large'] ?? '']]],

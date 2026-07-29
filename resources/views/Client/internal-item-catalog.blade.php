@@ -714,7 +714,6 @@
         document.getElementById('invalidCodeNextPage').disabled = true;
         loadCatalog();
         autoSyncCatalog();
-        setInterval(autoSyncCatalog, 30 * 60 * 1000);
     </script>
 </body>
 </html>

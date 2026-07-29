@@ -66,10 +66,19 @@
         .designer-sheet-image { display:grid; place-items:center; min-height:150px; padding:10px; border-top:1px solid #8194ad; }
         .designer-sheet-image img { max-width:100%; max-height:145px; object-fit:contain; }
         .designer-sheet-empty { color:#718096; text-align:center; }
+        .designer-sheet-image .catalog-image-trigger { width:100%; min-height:130px; justify-content:center; flex-direction:column; border:0; background:transparent; }
+        .designer-sheet-image .catalog-image-trigger img { width:auto; height:auto; max-width:100%; max-height:145px; }
         .designer-actions { position:sticky; bottom:0; z-index:20; display:flex; justify-content:flex-end; gap:8px; margin-top:14px; padding:11px; border:1px solid #c9daef; border-radius:8px; background:rgba(255,255,255,.96); box-shadow:0 -6px 22px rgba(31,73,125,.08); backdrop-filter:blur(8px); }
         .designer-toast { position:fixed; right:18px; bottom:18px; z-index:1080; max-width:420px; padding:12px 15px; border-radius:8px; background:#17375e; color:#fff; box-shadow:0 16px 40px rgba(15,42,76,.25); opacity:0; transform:translateY(12px); pointer-events:none; transition:opacity .2s ease,transform .2s ease; }
         .designer-toast.is-visible { opacity:1; transform:translateY(0); }
         .designer-toast.is-error { background:#b42335; }
+        .designer-loader { position:fixed; inset:0; z-index:2100; display:grid; place-items:center; padding:20px; background:rgba(226,239,255,.7); backdrop-filter:blur(3px); }
+        .designer-loader[hidden] { display:none; }
+        .designer-loader__panel { display:flex; align-items:center; gap:13px; min-width:min(340px,calc(100vw - 32px)); padding:15px 17px; border:1px solid #a9c8ef; border-radius:8px; background:#fff; color:#17375e; box-shadow:0 18px 50px rgba(37,99,235,.16); }
+        .designer-loader__panel .spinner-border { width:25px; height:25px; border-width:3px; color:#2563eb; flex:0 0 auto; }
+        .designer-loader__panel strong { display:block; font-size:13px; }
+        .designer-loader__panel small { display:block; margin-top:2px; color:#647b96; font-size:11px; }
+        body.is-designer-loading { overflow:hidden; }
         @media (max-width:1250px) { .designer-workspace { grid-template-columns:1fr; } .designer-preview { position:static; } }
         @media (max-width:900px) { .designer-field-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .designer-bom-row { grid-template-columns:32px 80px 1fr 1fr; } .designer-bom-row .bom-consumption,.designer-bom-row .bom-waste,.designer-bom-row .bom-total { grid-column:auto; } }
         @media (max-width:620px) {
@@ -142,7 +151,7 @@
                             <div class="designer-field"><label>Mã design</label><input id="design_code" class="form-control" data-preview></div>
                             <div class="designer-field"><label>Job #</label><input id="job_number" class="form-control" data-metadata data-preview></div>
                             <div class="designer-field"><label>Ngày ra lệnh</label><input id="order_date" inputmode="numeric" placeholder="dd/mm/yyyy" class="form-control" data-preview></div>
-                            <div class="designer-field"><label>Ngày giao</label><input id="due_date" inputmode="numeric" placeholder="dd/mm/yyyy" class="form-control" data-preview></div>
+                            <div class="designer-field"><label>Hạn giao từ Lệnh SX</label><input id="due_date" inputmode="numeric" placeholder="dd/mm/yyyy" class="form-control" data-preview readonly></div>
                             <div class="designer-field"><label>Số lượng</label><input id="order_quantity" type="number" min="0" step="0.001" class="form-control" data-preview></div>
                             <div class="designer-field"><label>ĐVT</label><input id="unit" class="form-control" data-preview></div>
                             <div class="designer-field span-2"><label>Tên label</label><input id="label_name" class="form-control" data-metadata data-preview></div>
@@ -172,26 +181,30 @@
             </div>
 
             <div class="designer-section">
-                <button class="designer-section-title collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#machineSection">
-                    <span><i data-lucide="settings"></i> Máy, cuộn và file</span><i data-lucide="chevron-down"></i>
+                <button class="designer-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#machineSection">
+                    <span><i data-lucide="settings"></i> Thông số máy và cuộn</span><i data-lucide="chevron-down"></i>
                 </button>
-                <div id="machineSection" class="collapse">
+                <div id="machineSection" class="collapse show">
                     <div class="designer-section-body">
                         <div class="designer-field-grid">
                             <div class="designer-field"><label>Số pick</label><input id="pick" class="form-control" data-metadata></div>
                             <div class="designer-field"><label>Mật độ</label><input id="density" class="form-control" data-metadata></div>
                             <div class="designer-field"><label>Máy</label><input id="machine" class="form-control" data-metadata></div>
-                            <div class="designer-field"><label>Sợi dọc (g)</label><input id="warp_grams" type="number" min="0" step="0.001" class="form-control" data-metadata></div>
-                            <div class="designer-field"><label>Máy cuộn nhỏ</label><input id="roll_machine_small" class="form-control" data-metadata></div>
-                            <div class="designer-field"><label>Số cuộn nhỏ</label><input id="roll_count_small" type="number" min="0" step="0.001" class="form-control" data-metadata></div>
-                            <div class="designer-field"><label>Máy cuộn lớn</label><input id="roll_machine_large" class="form-control" data-metadata></div>
-                            <div class="designer-field"><label>Số cuộn lớn</label><input id="roll_count_large" type="number" min="0" step="0.001" class="form-control" data-metadata></div>
-                            <div class="designer-field"><label>Số lượng +10%</label><input id="quantity_plus_10" type="number" min="0" step="0.001" class="form-control" data-metadata></div>
                             <div class="designer-field"><label>Số dòng</label><input id="row_count" type="number" min="0" step="1" class="form-control" data-metadata></div>
+                            <div class="designer-field"><label>Số lượng +10%</label><input id="quantity_plus_10" type="number" min="0" step="0.001" class="form-control" data-metadata></div>
+                            <div class="designer-field"><label>Số cuộn Muller</label><input id="roll_count_small" type="number" min="0" step="0.001" class="form-control" data-metadata></div>
+                            <div class="designer-field"><label>Số dòng +10% Muller</label><input id="row_count_plus_10" type="number" min="0" step="0.001" class="form-control" data-metadata></div>
+                            <div class="designer-field"><label>Ca Muller</label><input id="shift" class="form-control" data-metadata></div>
+                            <div class="designer-field"><label>Số cuộn Hi-Tex</label><input id="roll_count_large" type="number" min="0" step="0.001" class="form-control" data-metadata></div>
+                            <div class="designer-field"><label>Số dòng +10% Hi-Tex</label><input id="row_count_plus_10_large" type="number" min="0" step="0.001" class="form-control" data-metadata></div>
+                            <div class="designer-field"><label>Ca Hi-Tex</label><input id="shift_large" class="form-control" data-metadata></div>
+                            <input id="roll_machine_small" type="hidden" value="Muller" data-metadata>
+                            <input id="roll_machine_large" type="hidden" value="Hi-Tex" data-metadata>
+                            <input id="row_machine_small" type="hidden" value="Muller" data-metadata>
+                            <input id="row_machine_large" type="hidden" value="Hi-Tex" data-metadata>
                             <div class="designer-field"><label>Tên file</label><input id="file_name" class="form-control" data-metadata></div>
                             <div class="designer-field"><label>USB máy nhỏ</label><input id="usb_small" class="form-control" data-metadata></div>
                             <div class="designer-field"><label>USB máy lớn</label><input id="usb_large" class="form-control" data-metadata></div>
-                            <div class="designer-field"><label>Ca sản xuất</label><input id="shift" class="form-control" data-metadata></div>
                         </div>
                     </div>
                 </div>
@@ -225,26 +238,49 @@
 
     <div class="designer-actions">
         <button id="saveDraftBtn" class="wms-btn" type="button" disabled><i data-lucide="save"></i>Lưu nháp</button>
-        <button id="exportBtn" class="wms-btn" type="button" disabled><i data-lucide="file-spreadsheet"></i>Xuất Sheet</button>
+        <button id="exportBtn" class="wms-btn" type="button" disabled><i data-lucide="file-spreadsheet"></i>Xuất Excel</button>
         <button id="issueBtn" class="wms-btn wms-btn--primary" type="button" disabled><i data-lucide="send"></i>Lưu + gửi sản xuất</button>
     </div>
 </main>
 
 <div id="toast" class="designer-toast" role="status" aria-live="polite"></div>
+<div id="designerLoader" class="designer-loader" role="status" aria-live="polite" aria-busy="true" hidden>
+    <div class="designer-loader__panel">
+        <span class="spinner-border" aria-hidden="true"></span>
+        <span><strong id="designerLoaderText">Đang xử lý...</strong><small>Vui lòng không bấm lại thao tác.</small></span>
+    </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+@include('layouts.partials.catalog-image-paste-modal')
 <script src="https://unpkg.com/lucide@latest"></script>
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 const currentYear = {{ (int) now('Asia/Ho_Chi_Minh')->format('Y') }};
 const currentDateCompact = '{{ now('Asia/Ho_Chi_Minh')->format('Ymd') }}';
-const metadataFields = ['job_number','label_name','length','finished_size','box_code','quantity_per_box','pick','density','machine','warp_grams','roll_machine_small','roll_count_small','roll_machine_large','roll_count_large','quantity_plus_10','row_count','file_name','usb_small','usb_large','shift'];
+const metadataFields = ['job_number','label_name','length','finished_size','box_code','quantity_per_box','pick','density','machine','roll_machine_small','roll_count_small','roll_machine_large','roll_count_large','quantity_plus_10','row_machine_small','row_count_plus_10','row_machine_large','row_count_plus_10_large','shift','shift_large','row_count','file_name','usb_small','usb_large'];
 const operationFields = {op_ui_keo:'UI_KEO',op_loop:'LOOP',op_phan_tren:'PHAN_TREN',op_phan_duoi:'PHAN_DUOI'};
 let selectedPlan = null;
 let selectedOrderCode = '';
 let searchTimer = null;
 let materialTimer = null;
 let catalogRows = new Map();
+let loaderDepth = 0;
+
+function showLoader(message = 'Đang xử lý...') {
+    loaderDepth += 1;
+    document.getElementById('designerLoaderText').textContent = message;
+    document.getElementById('designerLoader').hidden = false;
+    document.body.classList.add('is-designer-loading');
+    document.querySelector('.designer-create')?.setAttribute('aria-busy', 'true');
+}
+function hideLoader() {
+    loaderDepth = Math.max(0, loaderDepth - 1);
+    if (loaderDepth > 0) return;
+    document.getElementById('designerLoader').hidden = true;
+    document.body.classList.remove('is-designer-loading');
+    document.querySelector('.designer-create')?.setAttribute('aria-busy', 'false');
+}
 
 function esc(value) {
     const div = document.createElement('div');
@@ -336,6 +372,7 @@ async function selectOrder(code) {
     setValue('orderSearch', code);
     document.getElementById('orderSuggestions').classList.add('d-none');
     document.getElementById('sheetPreview').innerHTML = '<div class="designer-sheet-title">LỆNH DỆT</div><div class="wms-loading p-5">Đang nạp dữ liệu...</div>';
+    showLoader(`Đang tải lệnh ${code}...`);
     try {
         const result = await api(`/api/lenh-det/production-order-plan?production_order=${encodeURIComponent(code)}`);
         selectedPlan = result;
@@ -347,6 +384,8 @@ async function selectOrder(code) {
         selectedPlan = null;
         toast(error.message, true);
         clearForm(false);
+    } finally {
+        hideLoader();
     }
 }
 
@@ -363,6 +402,10 @@ function populateForm(result) {
     setValue('due_date', dateForInput(order.due_date));
     setValue('order_quantity', order.planned_quantity ?? item.order_quantity ?? '');
     metadataFields.forEach(key => setValue(key, metadata[key] ?? ''));
+    setValue('roll_machine_small', 'Muller');
+    setValue('roll_machine_large', 'Hi-Tex');
+    setValue('row_machine_small', 'Muller');
+    setValue('row_machine_large', 'Hi-Tex');
     if (!getValue('file_name')) {
         setValue('file_name', professionalFileName(
             getValue('production_order'),
@@ -390,8 +433,8 @@ function bomRow(line = {}, index) {
             <div class="designer-field"><label>Mã sợi *</label><input class="form-control" list="materialOptions" data-bom="material_code" data-material-code value="${esc(line.material_code || '')}"></div>
             <div class="designer-field"><label>Tên màu sợi</label><input class="form-control" data-bom="material_name" value="${esc(line.catalog_name || line.material_name || '')}"></div>
             <div class="designer-field"><label>Kệ</label><input class="form-control" data-bom="shelf_hint" value="${esc(line.first_location || line.catalog_shelf_code || line.shelf_hint || '')}"></div>
-            <div class="designer-field bom-consumption"><label>TL/1PCS *</label><input type="number" min="0" step="0.000001" class="form-control" data-bom="consumption_per_unit" value="${esc(line.consumption_per_unit || '')}"></div>
-            <div class="designer-field bom-total"><label>T.L(g)</label><input type="number" min="0" step="0.001" class="form-control" data-bom="total_grams" value="${esc(total)}" readonly></div>
+            <div class="designer-field bom-consumption"><label>TL/1PCS *</label><input type="text" inputmode="decimal" class="form-control" data-bom="consumption_per_unit" value="${esc(line.consumption_per_unit || '')}" placeholder="0,38"></div>
+            <div class="designer-field bom-total"><label>T.L(g)</label><input type="text" inputmode="decimal" class="form-control" data-bom="total_grams" value="${esc(total)}" placeholder="Nhập để tính ngược" title="Nhập tổng trọng lượng để tự tính TL/1PCS"></div>
             <button class="designer-icon-btn" type="button" data-remove-row title="Xóa dòng"><i data-lucide="x"></i></button>
             <input type="hidden" data-bom="line_role" value="${esc(line.line_role || `DONG-${index + 1}`)}">
             <input type="hidden" data-bom="unit" value="${esc(line.bom_unit || line.unit || 'gam')}">
@@ -404,18 +447,47 @@ function collectBomLines() {
     return Array.from(document.querySelectorAll('[data-bom-row]')).map(row => {
         const line = {};
         row.querySelectorAll('[data-bom]').forEach(input => line[input.dataset.bom] = input.value.trim());
-        line.consumption_per_unit = Number(line.consumption_per_unit || 0);
-        line.waste_percent = Number(line.waste_percent || 0);
-        line.total_grams = Number(line.total_grams || 0);
+        line.consumption_per_unit = decimalValue(line.consumption_per_unit);
+        line.waste_percent = decimalValue(line.waste_percent);
+        line.total_grams = decimalValue(line.total_grams);
         return line;
     }).filter(line => line.material_code || line.consumption_per_unit);
 }
-function recalculateBom() {
-    const quantity = Number(getValue('order_quantity') || 0);
+function decimalValue(value) {
+    const text = String(value ?? '').trim().replace(/\s+/g, '');
+    if (!text) return 0;
+    const comma = text.lastIndexOf(',');
+    const dot = text.lastIndexOf('.');
+    let normalized = text;
+    if (comma >= 0 && dot >= 0) {
+        const decimal = comma > dot ? ',' : '.';
+        normalized = text
+            .replace(decimal === ',' ? /\./g : /,/g, '')
+            .replace(decimal, '.');
+    } else if (comma >= 0) {
+        normalized = text.replace(',', '.');
+    }
+    const number = Number(normalized);
+    return Number.isFinite(number) ? number : 0;
+}
+function calculateConsumptionFromTotal(row) {
+    const quantity = decimalValue(getValue('order_quantity'));
+    const total = decimalValue(row.querySelector('[data-bom="total_grams"]').value);
+    const waste = decimalValue(row.querySelector('[data-bom="waste_percent"]').value);
+    if (!(quantity > 0) || !(total > 0)) return;
+    const consumption = total / quantity / (1 + waste / 100);
+    row.querySelector('[data-bom="consumption_per_unit"]').value = consumption
+        .toFixed(6)
+        .replace(/\.?0+$/, '');
+}
+function recalculateBom(skipTotalRow = null) {
+    const quantity = decimalValue(getValue('order_quantity'));
     document.querySelectorAll('[data-bom-row]').forEach(row => {
-        const consumption = Number(row.querySelector('[data-bom="consumption_per_unit"]').value || 0);
-        const waste = Number(row.querySelector('[data-bom="waste_percent"]').value || 0);
-        row.querySelector('[data-bom="total_grams"]').value = consumption > 0 ? (quantity * consumption * (1 + waste / 100)).toFixed(3).replace(/\.?0+$/, '') : '';
+        const consumption = decimalValue(row.querySelector('[data-bom="consumption_per_unit"]').value);
+        const waste = decimalValue(row.querySelector('[data-bom="waste_percent"]').value);
+        if (row !== skipTotalRow) {
+            row.querySelector('[data-bom="total_grams"]').value = consumption > 0 ? (quantity * consumption * (1 + waste / 100)).toFixed(3).replace(/\.?0+$/, '') : '';
+        }
     });
 }
 
@@ -481,10 +553,15 @@ async function save(action, silent = false) {
     const data = payload(action);
     const missing = validatePayload(data);
     if (missing.length) throw new Error('Cần bổ sung: ' + missing.join(', ') + '.');
-    const result = await api('/api/lenh-det/designer-save', {method:'POST',body:JSON.stringify(data)});
-    if (!silent) toast(result.message);
-    setSteps(4);
-    return result;
+    showLoader(action === 'issued' ? 'Đang gửi lệnh xuống sản xuất...' : 'Đang lưu lệnh dệt...');
+    try {
+        const result = await api('/api/lenh-det/designer-save', {method:'POST',body:JSON.stringify(data)});
+        if (!silent) toast(result.message);
+        setSteps(4);
+        return result;
+    } finally {
+        hideLoader();
+    }
 }
 async function saveWithButton(button, action) {
     button.disabled = true;
@@ -498,9 +575,9 @@ async function saveWithButton(button, action) {
     }
 }
 
-function renderPreview() {
+function renderPreview(skipTotalRow = null) {
     if (!selectedPlan) return;
-    recalculateBom();
+    recalculateBom(skipTotalRow);
     const data = payload('draft');
     const missing = validatePayload(data);
     const badge = document.getElementById('completeness');
@@ -508,6 +585,12 @@ function renderPreview() {
     badge.classList.toggle('is-ready', !missing.length);
     const operations = data.metadata.operations;
     const image = selectedPlan.order?.image_url || selectedPlan.source_items?.[0]?.image_url || '';
+    const catalogId = selectedPlan.order?.catalog_id || selectedPlan.source_items?.[0]?.catalog_id || '';
+    const imageControl = data.item_code
+        ? `<button type="button" class="catalog-image-trigger" data-catalog-image-open data-catalog-id="${esc(catalogId)}" data-item-code="${esc(data.item_code)}" data-item-name="${esc(data.item_name)}" data-unit="${esc(data.unit)}" data-image-url="${esc(image)}" title="${image ? 'Xem hoặc thay ảnh danh mục' : 'Paste ảnh vào danh mục'}">
+            ${image ? `<img loading="lazy" src="${esc(image)}" alt="Ảnh ${esc(data.item_code)}">` : '<span><i data-lucide="image-plus"></i><strong class="d-block">Paste ảnh vào danh mục</strong></span>'}
+        </button>`
+        : '<div class="designer-sheet-empty">Mã hàng chưa có trong Danh mục nội bộ</div>';
     document.getElementById('sheetPreview').innerHTML = `
         <div class="designer-sheet-title">LỆNH DỆT</div>
         <div class="designer-sheet-meta">
@@ -532,12 +615,16 @@ function renderPreview() {
                 ${previewOp('Số pick',data.metadata.pick)}
                 ${previewOp('Mật độ',data.metadata.density)}
                 ${previewOp('Máy',data.metadata.machine)}
+                ${previewOp('Cuộn Muller',data.metadata.roll_count_small)}
+                ${previewOp('Dòng +10% Muller',data.metadata.row_count_plus_10)}
+                ${previewOp('Cuộn Hi-Tex',data.metadata.roll_count_large)}
+                ${previewOp('Dòng +10% Hi-Tex',data.metadata.row_count_plus_10_large)}
             </div>
             <div><table><thead><tr><th>Loại</th><th>Mã sợi</th><th>Kệ</th><th>Tên màu</th><th>TL/PCS</th><th>T.L(g)</th></tr></thead><tbody>
                 ${data.lines.map(line => `<tr><td>${esc(line.type)}</td><td><b>${esc(line.material_code)}</b></td><td>${esc(line.shelf_hint)}</td><td>${esc(line.material_name)}</td><td class="text-end">${num(line.consumption_per_unit)}</td><td class="text-end">${num(line.total_grams)}</td></tr>`).join('') || '<tr><td colspan="6" class="text-center">Chưa có định mức</td></tr>'}
             </tbody></table></div>
         </div>
-        <div class="designer-sheet-image">${image ? `<img src="${esc(image)}" alt="Ảnh ${esc(data.item_code)}">` : '<div class="designer-sheet-empty">Chưa có ảnh trong Danh mục nội bộ</div>'}</div>
+        <div class="designer-sheet-image">${imageControl}</div>
         <div class="p-2 d-flex justify-content-between"><b>SL: ${num(data.order_quantity)} ${esc(data.unit)}</b><span>${missing.length ? 'Còn thiếu: ' + esc(missing.slice(0,3).join(', ')) : 'Đủ thông tin bắt buộc'}</span></div>
     `;
 }
@@ -597,7 +684,11 @@ document.getElementById('bomRows').addEventListener('input', event => {
         clearTimeout(materialTimer);
         materialTimer = setTimeout(() => loadMaterialSuggestions(event.target.value.trim()), 250);
     }
-    renderPreview();
+    const totalRow = event.target.matches('[data-bom="total_grams"]')
+        ? event.target.closest('[data-bom-row]')
+        : null;
+    if (totalRow) calculateConsumptionFromTotal(totalRow);
+    renderPreview(totalRow);
 });
 document.getElementById('bomRows').addEventListener('change', event => {
     if (event.target.matches('[data-material-code]')) applyMaterial(event.target);
@@ -612,18 +703,53 @@ document.getElementById('exportBtn').addEventListener('click', async event => {
     const button = event.currentTarget;
     const sheetWindow = window.open('about:blank','_blank');
     button.disabled = true;
+    showLoader('Đang chuẩn bị file Excel...');
     try {
         await save('draft', true);
-        const result = await api('/api/lenh-det/export-sheet',{method:'POST',body:JSON.stringify({production_order:selectedOrderCode})});
-        if (sheetWindow) sheetWindow.location.href = result.sheet_url;
-        else window.location.href = result.sheet_url;
-        toast(result.message);
+        const url = `/api/lenh-det/export-excel?production_order=${encodeURIComponent(selectedOrderCode)}`;
+        if (sheetWindow) sheetWindow.location.href = url;
+        else window.location.href = url;
+        toast('Đang tải file Excel.');
     } catch (error) {
         if (sheetWindow) sheetWindow.close();
         toast(error.message,true);
     } finally {
+        hideLoader();
         button.disabled = false;
     }
+});
+document.getElementById('sheetPreview').addEventListener('click', event => {
+    const button = event.target.closest('[data-catalog-image-open]');
+    if (!button) return;
+    window.CatalogImagePaste?.open({
+        catalogId: button.dataset.catalogId,
+        itemCode: button.dataset.itemCode,
+        itemName: button.dataset.itemName,
+        unit: button.dataset.unit,
+        imageUrl: button.dataset.imageUrl,
+    });
+});
+document.addEventListener('catalog-image-ready', event => {
+    const data = event.detail || {};
+    if (!selectedPlan || !data.id) return;
+    const order = selectedPlan.order || {};
+    const item = (selectedPlan.source_items || [])[0] || {};
+    if (String(order.item_code || item.item_code || '').toUpperCase() !== String(data.item_code || '').toUpperCase()) return;
+    order.catalog_id = Number(data.id);
+    item.catalog_id = Number(data.id);
+    renderPreview();
+    if (window.lucide) lucide.createIcons();
+});
+document.addEventListener('catalog-image-uploaded', event => {
+    const data = event.detail || {};
+    if (!selectedPlan || !data.id) return;
+    const order = selectedPlan.order || {};
+    const item = (selectedPlan.source_items || [])[0] || {};
+    if (String(order.catalog_id || item.catalog_id || '') !== String(data.id)) return;
+    order.image_url = data.image_url || '';
+    item.image_url = data.image_url || '';
+    renderPreview();
+    if (window.lucide) lucide.createIcons();
 });
 
 const requestedOrder = new URLSearchParams(window.location.search).get('order');

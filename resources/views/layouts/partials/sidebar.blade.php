@@ -539,6 +539,7 @@
         <a class="summary-sidebar__link summary-sidebar__child {{ request()->routeIs('weaving.dashboard') ? 'is-active' : '' }}" href="{{ route('weaving.dashboard') }}">Tổng quan</a>
         <a class="summary-sidebar__link summary-sidebar__child {{ request()->routeIs('weaving.orders.create') ? 'is-active' : '' }}" href="{{ route('weaving.orders.create') }}">Tạo lệnh</a>
         <a class="summary-sidebar__link summary-sidebar__child {{ request()->routeIs('weaving.bom') ? 'is-active' : '' }}" href="{{ route('weaving.bom') }}">Định mức</a>
+        <a class="summary-sidebar__link summary-sidebar__child {{ request()->routeIs('weaving.exports.index') ? 'is-active' : '' }}" href="{{ route('weaving.exports.index') }}">Xuất Excel</a>
     </details>
     <a class="summary-sidebar__link {{ request()->is('client/lenh-btp*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-btp') }}"><i data-lucide="git-branch-plus"></i>Lệnh BTP</a>
     <a class="summary-sidebar__link {{ request()->is('client/danh-muc-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/danh-muc-noi-bo') }}"><i data-lucide="book-open"></i>Danh mục nội bộ</a>
@@ -548,6 +549,7 @@
     <a class="summary-sidebar__link {{ request()->is('client/ton-kho-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/ton-kho-noi-bo') }}"><i data-lucide="archive"></i>Tồn kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/canh-bao-kho*') ? 'is-active' : '' }}" href="{{ url('/client/canh-bao-kho') }}"><i data-lucide="triangle-alert"></i>Cảnh báo kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/nhap-thanh-pham-nhanh*') ? 'is-active' : '' }}" href="{{ url('/client/nhap-thanh-pham-nhanh') }}"><i data-lucide="clipboard-check"></i>Nhập TP nhanh</a>
+    <a class="summary-sidebar__link {{ request()->is('client/xuat-thanh-pham-nhanh*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-thanh-pham-nhanh') }}"><i data-lucide="truck"></i>Xuất TP nhanh</a>
     <a class="summary-sidebar__link {{ request()->is('client/kiem-ton-kho*') ? 'is-active' : '' }}" href="{{ url('/client/kiem-ton-kho') }}"><i data-lucide="map-pinned"></i>Nhập kho & vị trí</a>
     <a class="summary-sidebar__link {{ request()->is('client/mat-ke-kho*') ? 'is-active' : '' }}" href="{{ url('/client/mat-ke-kho') }}"><i data-lucide="panel-top"></i>Mặt kệ kho</a>
     <a class="summary-sidebar__link {{ request()->is('client/xuat-vat-tu-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-vat-tu-noi-bo') }}"><i data-lucide="package-minus"></i>Xuất kho</a>

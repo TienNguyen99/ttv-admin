@@ -182,6 +182,7 @@ Route::prefix('client/quan-ly-det')->name('weaving.')->controller(WeavingManagem
     Route::get('/', 'dashboard')->name('dashboard');
     Route::get('/tao-lenh', 'createOrder')->name('orders.create');
     Route::get('/dinh-muc', 'bom')->name('bom');
+    Route::get('/xuat-excel', 'exports')->name('exports.index');
 });
 Route::get('/client/designer-lenh-det', fn () => redirect()->route('weaving.dashboard', [], 301));
 Route::get('/client/designer-tao-lenh-det', function (\Illuminate\Http\Request $request) {
@@ -212,7 +213,11 @@ Route::prefix('api/lenh-det')->controller(InternalWeavingController::class)->gro
     Route::get('/production-orders', 'productionOrders');
     Route::get('/production-order-plan', 'productionPlan');
     Route::post('/template-details', 'saveTemplateDetails');
-    Route::post('/export-sheet', 'exportSheet');
+    Route::get('/export-excel', 'exportExcel');
+    Route::post('/batch-exports', 'startBatchExport');
+    Route::post('/batch-exports/{token}/process', 'processBatchExport');
+    Route::get('/batch-exports/{token}', 'batchExportStatus');
+    Route::get('/batch-exports/{token}/download', 'downloadBatchExport');
     Route::post('/production-order-issue', 'createProductionIssue');
 });
 Route::view('/client/material-calculator', 'client.material-calculator');
@@ -252,6 +257,7 @@ Route::post('/api/danh-muc-noi-bo/tu-dong-dong-bo', [InternalItemCatalogControll
 Route::post('/api/danh-muc-noi-bo/dong-bo-vi-tri', [InternalItemCatalogController::class, 'syncShelvesToLocations']);
 Route::post('/api/danh-muc-noi-bo/tach-ma-trung', [InternalItemCatalogController::class, 'splitDuplicateCodes']);
 Route::post('/api/danh-muc-noi-bo/bien-the-lenh-san-xuat', [InternalItemCatalogController::class, 'productionOrderVariants']);
+Route::post('/api/danh-muc-noi-bo/tao-tu-lenh', [InternalItemCatalogController::class, 'ensureFromOrder']);
 Route::patch('/api/danh-muc-noi-bo/{catalog}', [InternalItemCatalogController::class, 'updateCatalogRow']);
 Route::post('/api/danh-muc-noi-bo/{catalog}/anh', [InternalItemCatalogController::class, 'uploadImage']);
 Route::get('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'index']);
@@ -260,6 +266,7 @@ Route::delete('/api/quy-doi-don-vi/{unitConversion}', [InternalUnitConversionCon
 Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
 Route::get('/client/mat-ke-kho', [WarehouseCountController::class, 'shelfMapIndex']);
 Route::view('/client/nhap-thanh-pham-nhanh', 'client.quick-finished-goods-receipt');
+Route::view('/client/xuat-thanh-pham-nhanh', 'client.quick-finished-goods-issue');
 Route::get('/client/tivi-nhap-thanh-pham', [WarehouseCountController::class, 'finishedGoodsTvIndex']);
 Route::get('/api/tivi-nhap-thanh-pham', [WarehouseCountController::class, 'finishedGoodsTvData']);
 Route::get('/client/ton-kho-noi-bo', [WarehouseCountController::class, 'stockIndex']);

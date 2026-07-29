@@ -54,6 +54,7 @@
         <div><h1>Theo dõi lệnh dệt</h1><p>Designer theo dõi lệnh đã gửi sản xuất và lượng thành phẩm đã nhập kho.</p></div>
         <div class="d-flex gap-2">
             <button id="reloadBtn" class="wms-btn" type="button"><i data-lucide="refresh-cw"></i>Tải lại</button>
+            <a class="wms-btn" href="{{ route('weaving.exports.index') }}"><i data-lucide="file-archive"></i>Xuất Excel</a>
             <a class="wms-btn wms-btn--primary" href="{{ route('weaving.orders.create') }}"><i data-lucide="plus"></i>Tạo lệnh dệt</a>
         </div>
     </div>

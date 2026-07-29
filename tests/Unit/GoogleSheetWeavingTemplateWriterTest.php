@@ -62,10 +62,13 @@ class GoogleSheetWeavingTemplateWriterTest extends TestCase
         $this->assertStringContainsString('quickchart.io/qr', $ranges['J2']['values'][0][0]);
         $this->assertSame('JOB-3816', $ranges['B4']['values'][0][0]);
         $this->assertSame('28/07/2026', $ranges['D4']['values'][0][0]);
-        $this->assertSame(['75D', '15A', 'A1', '15A KEM', 0.38, 11.39], $ranges['F6:K12']['values'][0]);
-        $this->assertCount(7, $ranges['F6:K12']['values']);
-        $this->assertSame(['', '', ''], $ranges['F13:H13']['values'][0]);
-        $this->assertSame(19.31, $ranges['K13']['values'][0][0]);
+        $this->assertSame(['75D', '15A', 'A1', '15A KEM'], $ranges['F6:I12']['values'][0]);
+        $this->assertCount(7, $ranges['F6:I12']['values']);
+        $this->assertSame(['1376', '26', 'TRẮNG'], $ranges['A15:C15']['values'][0]);
+        $this->assertSame('Muller', $ranges['D15']['values'][0][0]);
+        $this->assertSame('Hi-Tex', $ranges['D16']['values'][0][0]);
+        $this->assertArrayNotHasKey('K13', $ranges);
+        $this->assertArrayNotHasKey('A15:K16', $ranges);
         $this->assertSame('USB-3816', $ranges['A20']['values'][0][0]);
         $this->assertSame(['C006463-NPOR', 30.0, '', ''], $ranges['A33:D33']['values'][0]);
     }

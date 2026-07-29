@@ -11,6 +11,7 @@ use App\Models\InternalMaterialIssueLine;
 use App\Models\InternalMaterialReceiptLine;
 use App\Models\InternalMaterialReceipt;
 use App\Models\InternalProductionOrder;
+use App\Models\InternalWeavingOrder;
 use App\Models\InternalXntRow;
 use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
@@ -43,6 +44,10 @@ class InternalMaterialIssueController extends Controller
     {
         $keyword = mb_strtoupper(trim((string) $request->query('keyword', '')));
         $aging = trim((string) $request->query('aging', ''));
+        $status = trim((string) $request->query('status', 'active'));
+        if (!in_array($status, ['active', 'completed', 'all'], true)) {
+            $status = 'active';
+        }
 
         $issueLines = DB::connection('internal')->table('internal_material_issue_lines as l')
             ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
@@ -199,7 +204,7 @@ class InternalMaterialIssueController extends Controller
             }
         }
 
-        $today = now()->startOfDay();
+        $today = now('Asia/Ho_Chi_Minh')->startOfDay();
         $rows = collect($groups)->map(function ($row) use ($today) {
             unset($row['source_receipt_ids']);
             $row['issue_ids'] = array_map('intval', array_keys($row['issue_ids'] ?? []));
@@ -217,10 +222,101 @@ class InternalMaterialIssueController extends Controller
                 : 0;
             $row['age_days'] = Carbon::parse($row['first_issue_date'])->startOfDay()->diffInDays($today);
             $row['aging_status'] = $row['age_days'] >= 8 ? 'overdue' : ($row['age_days'] >= 4 ? 'warning' : 'normal');
+            $row['workflow_status'] = $row['outstanding_quantity'] <= 0 || $row['btp_status'] === 'completed'
+                ? 'completed'
+                : 'active';
+            $row['source_type'] = 'btp';
+            $row['source_label'] = 'Bán thành phẩm';
 
             return $row;
-        })->filter(function ($row) use ($keyword, $aging) {
-            if ($row['outstanding_quantity'] <= 0 && $row['btp_status'] !== 'completed') {
+        });
+
+        $weavingOrders = InternalWeavingOrder::query()
+            ->with('item:id,item_code,item_name')
+            ->where(function ($query) {
+                $query->where('status', 'issued')
+                    ->orWhereNotNull('metadata_json');
+            })
+            ->get()
+            ->filter(function (InternalWeavingOrder $order) {
+                $metadata = json_decode((string) ($order->metadata_json ?? ''), true) ?: [];
+
+                return $order->status === 'issued' || !empty($metadata['sent_to_production_at']);
+            });
+
+        $weavingReceiptTotals = collect();
+        $weavingOrders->pluck('order_code')->filter()->unique()->chunk(500)->each(
+            function ($orderCodes) use ($weavingReceiptTotals) {
+                DB::connection('internal')->table('internal_material_receipt_lines as line')
+                    ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'line.receipt_id')
+                    ->whereIn('line.production_order', $orderCodes->values()->all())
+                    ->where(function ($query) {
+                        $query->whereNull('receipt.status')->orWhere('receipt.status', '<>', 'cancelled');
+                    })
+                    ->selectRaw('line.production_order as order_key')
+                    ->selectRaw('SUM(line.quantity) as received_quantity')
+                    ->groupBy('line.production_order')
+                    ->get()
+                    ->each(function ($receipt) use ($weavingReceiptTotals) {
+                        $weavingReceiptTotals->put(
+                            mb_strtoupper(trim((string) $receipt->order_key)),
+                            (float) $receipt->received_quantity
+                        );
+                    });
+            }
+        );
+
+        $weavingRows = $weavingOrders->map(function (InternalWeavingOrder $order) use ($today, $weavingReceiptTotals) {
+            $metadata = json_decode((string) ($order->metadata_json ?? ''), true) ?: [];
+            $planned = (float) $order->order_quantity;
+            $rawReceived = (float) $weavingReceiptTotals->get(
+                mb_strtoupper(trim((string) $order->order_code)),
+                0
+            );
+            $received = max(0, $rawReceived - (float) ($metadata['receipt_quantity_baseline'] ?? 0));
+            $outstanding = max(0, $planned - $received);
+            $sentAt = !empty($metadata['sent_to_production_at'])
+                ? Carbon::parse($metadata['sent_to_production_at'])->timezone('Asia/Ho_Chi_Minh')
+                : ($order->updated_at ?: $order->order_date);
+            $startDate = $sentAt ? Carbon::parse($sentAt)->format('Y-m-d') : $today->format('Y-m-d');
+
+            return [
+                'production_order' => trim((string) $order->order_code),
+                'purchase_order' => trim((string) $order->po_number),
+                'customer' => trim((string) $order->customer),
+                'warehouse_code' => '',
+                'receiver_name' => '',
+                'department' => 'Dệt',
+                'ma_hh' => trim((string) $order->item_code),
+                'internal_item_code' => trim((string) $order->item_code),
+                'item_name' => trim((string) ($order->item->item_name ?? '')),
+                'size' => '',
+                'color' => '',
+                'dvt' => trim((string) $order->unit),
+                'planned_quantity' => $planned,
+                'issued_quantity' => $planned,
+                'returned_quantity' => $received,
+                'outstanding_quantity' => $outstanding,
+                'progress_percent' => $planned > 0 ? min(100, round(($received / $planned) * 100, 1)) : 0,
+                'first_issue_date' => $startDate,
+                'last_issue_date' => $startDate,
+                'issue_ids' => [],
+                'issue_line_ids' => [],
+                'issue_codes' => [],
+                'btp_status' => $outstanding <= 0 ? 'completed' : 'issued',
+                'workflow_status' => $outstanding <= 0 ? 'completed' : 'active',
+                'age_days' => Carbon::parse($startDate)->startOfDay()->diffInDays($today),
+                'aging_status' => Carbon::parse($startDate)->startOfDay()->diffInDays($today) >= 8
+                    ? 'overdue'
+                    : (Carbon::parse($startDate)->startOfDay()->diffInDays($today) >= 4 ? 'warning' : 'normal'),
+                'source_type' => 'weaving',
+                'source_label' => 'Lệnh dệt',
+                'due_date' => optional($order->due_date)->format('Y-m-d'),
+            ];
+        });
+
+        $rows = $rows->concat($weavingRows)->filter(function ($row) use ($keyword, $aging, $status) {
+            if ($status !== 'all' && $row['workflow_status'] !== $status) {
                 return false;
             }
             if ($aging !== '' && $row['aging_status'] !== $aging) {
@@ -239,6 +335,7 @@ class InternalMaterialIssueController extends Controller
                 $row['internal_item_code'],
                 $row['size'],
                 $row['color'],
+                $row['source_label'],
                 implode(' ', $row['issue_codes']),
             ]));
 
@@ -251,6 +348,8 @@ class InternalMaterialIssueController extends Controller
             'data' => $rows,
             'summary' => [
                 'order_count' => $rows->pluck('production_order')->unique()->count(),
+                'active_order_count' => $rows->where('workflow_status', 'active')->pluck('production_order')->unique()->count(),
+                'completed_order_count' => $rows->where('workflow_status', 'completed')->pluck('production_order')->unique()->count(),
                 'line_count' => $rows->count(),
                 'issued_quantity' => (float) $rows->sum('issued_quantity'),
                 'returned_quantity' => (float) $rows->sum('returned_quantity'),

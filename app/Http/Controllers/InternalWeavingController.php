@@ -10,7 +10,7 @@ use App\Models\InternalWeavingItem;
 use App\Models\InternalWeavingOrder;
 use App\Models\InventoryPackage;
 use App\Services\InternalUnitConverter;
-use App\Services\GoogleSheetWeavingTemplateWriter;
+use App\Services\WeavingExcelBatchExporter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -18,8 +18,6 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 class InternalWeavingController extends Controller
 {
     use NormalizesDateInput;
-
-    private const SPREADSHEET_ID = '1nd9sOnKCq-hDf44Uo7_002qT7zoznrx7mcQoRw0oEcs';
 
     public function designerDashboard(Request $request)
     {
@@ -473,12 +471,22 @@ class InternalWeavingController extends Controller
         $data = $request->validate(['text' => 'required|string']);
         $parsed = $this->parseDesignSheet($data['text']);
 
-        if ($parsed['item_code'] === '' || empty($parsed['lines'])) {
+        if ($parsed['order_code'] === '' || empty($parsed['lines'])) {
             return response()->json([
-                'message' => 'Khong doc duoc phieu lenh det. Can co MA HANG va bang chi co TL/1PCS.',
+                'message' => 'Không đọc được phiếu lệnh dệt. Cần có LỆNH IN và bảng chỉ có TL/1PCS.',
                 'parsed' => $parsed,
             ], 422);
         }
+
+        $resolved = $this->applyCentralProductionOrder($parsed);
+        if ($resolved['error']) {
+            return response()->json([
+                'message' => $resolved['error']['message'],
+                'source_error' => $resolved['error'],
+                'parsed' => $parsed,
+            ], 422);
+        }
+        $parsed = $resolved['parsed'];
 
         $missingCatalog = $this->missingCatalogCodes(collect($parsed['lines'])->pluck('material_code')->all());
         if (!empty($missingCatalog)) {
@@ -632,6 +640,7 @@ class InternalWeavingController extends Controller
         ];
         $errors = [];
         $samples = [];
+        $centralOrders = $this->centralProductionOrderMap();
 
         foreach ($sheetNames as $sheetName) {
             try {
@@ -645,11 +654,19 @@ class InternalWeavingController extends Controller
                 unset($spreadsheet);
 
                 $parsed = $this->parseDesignSheetRows($rows, $sheetName);
-                if ($parsed['item_code'] === '' || empty($parsed['lines'])) {
+                if ($parsed['order_code'] === '' || empty($parsed['lines'])) {
                     $summary['skipped']++;
-                    $errors[] = ['sheet' => $sheetName, 'message' => 'Khong dung form lenh det hoac thieu MA HANG/BOM.'];
+                    $errors[] = ['sheet' => $sheetName, 'message' => 'Không đúng form lệnh dệt hoặc thiếu LỆNH IN/BOM.'];
                     continue;
                 }
+
+                $resolved = $this->applyCentralProductionOrder($parsed, $centralOrders);
+                if ($resolved['error']) {
+                    $summary['errors']++;
+                    $errors[] = array_merge(['sheet' => $sheetName], $resolved['error']);
+                    continue;
+                }
+                $parsed = $resolved['parsed'];
 
                 $missingCatalog = $this->missingCatalogCodes(collect($parsed['lines'])->pluck('material_code')->all());
                 if (!empty($missingCatalog)) {
@@ -731,7 +748,9 @@ class InternalWeavingController extends Controller
     public function productionOrders(Request $request)
     {
         $keyword = mb_strtoupper(trim((string) $request->query('keyword', '')));
+        $customer = mb_strtoupper(trim((string) $request->query('customer', '')));
         $status = trim((string) $request->query('status', ''));
+        $hasBom = filter_var($request->query('has_bom', false), FILTER_VALIDATE_BOOLEAN);
         $year = (int) $request->query('year', 0);
         $page = max((int) $request->query('page', 1), 1);
         $perPage = min(max((int) $request->query('per_page', 50), 25), 200);
@@ -755,6 +774,23 @@ class InternalWeavingController extends Controller
         }
         if ($status !== '') {
             $baseQuery->where('status', $status);
+        }
+        if ($hasBom) {
+            $this->filterProductionOrdersWithBom($baseQuery);
+        }
+        $customers = (clone $baseQuery)
+            ->whereNotNull('customer')
+            ->where('customer', '<>', '')
+            ->select('customer')
+            ->distinct()
+            ->orderBy('customer')
+            ->pluck('customer')
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->unique()
+            ->values();
+        if ($customer !== '') {
+            $baseQuery->whereRaw('UPPER(TRIM(customer)) = ?', [$customer]);
         }
 
         $groupQuery = (clone $baseQuery)
@@ -803,6 +839,7 @@ class InternalWeavingController extends Controller
 
         return response()->json([
             'data' => $rows,
+            'customers' => $customers,
             'summary' => [
                 'order_count' => (clone $baseQuery)->distinct()->count('production_order'),
                 'line_count' => (clone $baseQuery)->count(),
@@ -843,6 +880,27 @@ class InternalWeavingController extends Controller
                 'color' => trim((string) $row->color),
             ])->values(),
         ]);
+    }
+
+    private function filterProductionOrdersWithBom($query)
+    {
+        $itemCodes = DB::connection('internal')
+            ->table('internal_weaving_items as weaving_item')
+            ->join('internal_weaving_boms as weaving_bom', 'weaving_bom.weaving_item_id', '=', 'weaving_item.id')
+            ->whereNotNull('weaving_bom.material_code')
+            ->where('weaving_bom.material_code', '<>', '')
+            ->where('weaving_bom.consumption_per_unit', '>', 0)
+            ->distinct()
+            ->pluck('weaving_item.item_code')
+            ->map(fn ($code) => trim((string) $code))
+            ->filter()
+            ->values();
+
+        if ($itemCodes->isEmpty()) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereIn('item_code', $itemCodes->all());
     }
 
     public function storeOrder(Request $request)
@@ -998,12 +1056,14 @@ class InternalWeavingController extends Controller
                 'order_date' => optional($order->order_date)->format('Y-m-d'),
                 'due_date' => optional($order->due_date)->format('Y-m-d'),
                 'note' => $order->note,
+                'catalog_id' => $itemCatalog ? (int) $itemCatalog->id : null,
                 'image_url' => $itemCatalog->image_url ?? '',
                 'metadata' => array_merge($itemMetadata, $orderMetadata),
             ],
             'source_items' => [[
                 'item_code' => $order->item_code,
                 'item_name' => $order->item->item_name ?? '',
+                'catalog_id' => $itemCatalog ? (int) $itemCatalog->id : null,
                 'image_url' => $itemCatalog->image_url ?? '',
                 'design_code' => $order->design_code,
                 'po_number' => $order->po_number,
@@ -1059,6 +1119,9 @@ class InternalWeavingController extends Controller
         }
 
         $itemCodes = $sourceLines->pluck('item_code')->map(fn ($code) => $this->cleanCode($code))->filter()->unique()->values();
+        $weavingOrderMatchesSource = $weavingOrder
+            && $itemCodes->contains($this->cleanCode($weavingOrder->item_code));
+        $matchedWeavingOrder = $weavingOrderMatchesSource ? $weavingOrder : null;
         $items = InternalWeavingItem::query()
             ->with('boms')
             ->whereIn('item_code', $itemCodes->all())
@@ -1069,7 +1132,7 @@ class InternalWeavingController extends Controller
             ->where('is_active', true)
             ->get()
             ->keyBy(fn ($row) => $this->cleanCode($row->item_code));
-        $weavingOrderMetadata = json_decode((string) ($weavingOrder->metadata_json ?? ''), true) ?: [];
+        $weavingOrderMetadata = json_decode((string) ($matchedWeavingOrder->metadata_json ?? ''), true) ?: [];
 
         $materialRequirements = [];
         $missingBomItems = [];
@@ -1083,11 +1146,12 @@ class InternalWeavingController extends Controller
             $sourceItem = [
                 'item_code' => $itemCode,
                 'item_name' => trim((string) ($item->item_name ?? $sourceLine->description)),
+                'catalog_id' => $sourceCatalog ? (int) $sourceCatalog->id : null,
                 'image_url' => $sourceCatalog->image_url ?? '',
-                'design_code' => trim((string) ($item->design_code ?? $weavingOrder->design_code ?? '')),
-                'po_number' => trim((string) ($weavingOrder->po_number ?? $sourceLine->purchase_order ?? '')),
+                'design_code' => trim((string) ($item->design_code ?? $matchedWeavingOrder->design_code ?? '')),
+                'po_number' => trim((string) ($matchedWeavingOrder->po_number ?? $sourceLine->purchase_order ?? '')),
                 'metadata' => $itemMetadata,
-                'customer' => trim((string) ($weavingOrder->customer ?? $sourceLine->customer)),
+                'customer' => trim((string) ($matchedWeavingOrder->customer ?? $sourceLine->customer)),
                 'size' => trim((string) $sourceLine->size),
                 'color' => trim((string) $sourceLine->color),
                 'order_quantity' => (float) $sourceLine->order_quantity,
@@ -1229,20 +1293,22 @@ class InternalWeavingController extends Controller
         return response()->json([
             'order' => [
                 'production_order' => $productionOrder,
-                'weaving_order_id' => $weavingOrder ? (int) $weavingOrder->id : null,
-                'customer' => trim((string) ($weavingOrder->customer ?? $sourceLines->pluck('customer')->filter()->first())),
+                'weaving_order_id' => $matchedWeavingOrder ? (int) $matchedWeavingOrder->id : null,
+                'customer' => trim((string) ($matchedWeavingOrder->customer ?? $sourceLines->pluck('customer')->filter()->first())),
                 'item_code' => $itemCodes->count() === 1 ? (string) $itemCodes->first() : '',
                 'line_count' => $sourceLines->count(),
                 'item_count' => $itemCodes->count(),
                 'planned_quantity' => (float) $sourceLines->sum('order_quantity'),
-                'unit' => trim((string) ($weavingOrder->unit ?? $sourceLines->pluck('unit')->filter()->first())),
-                'po_number' => trim((string) ($weavingOrder->po_number ?? $sourceLines->pluck('purchase_order')->filter()->first())),
-                'design_code' => trim((string) ($weavingOrder->design_code ?? '')),
-                'order_date' => optional($weavingOrder->order_date ?? null)->format('Y-m-d')
+                'unit' => trim((string) ($matchedWeavingOrder->unit ?? $sourceLines->pluck('unit')->filter()->first())),
+                'po_number' => trim((string) ($matchedWeavingOrder->po_number ?? $sourceLines->pluck('purchase_order')->filter()->first())),
+                'design_code' => trim((string) ($matchedWeavingOrder->design_code ?? '')),
+                'order_date' => optional($matchedWeavingOrder->order_date ?? null)->format('Y-m-d')
                     ?: optional($sourceLines->pluck('received_date')->filter()->sort()->first())->format('Y-m-d'),
-                'due_date' => optional($weavingOrder->due_date ?? null)->format('Y-m-d')
-                    ?: optional($sourceLines->pluck('promised_date')->filter()->sort()->first())->format('Y-m-d'),
-                'note' => trim((string) ($weavingOrder->note ?? '')),
+                'due_date' => optional($sourceLines->pluck('promised_date')->filter()->sort()->first())->format('Y-m-d'),
+                'note' => trim((string) ($matchedWeavingOrder->note ?? '')),
+                'catalog_id' => $itemCodes->count() === 1
+                    ? (int) (($sourceCatalogs[$itemCodes->first()]->id ?? 0))
+                    : null,
                 'image_url' => $itemCodes->count() === 1
                     ? (string) (($sourceCatalogs[$itemCodes->first()]->image_url ?? ''))
                     : '',
@@ -1252,6 +1318,13 @@ class InternalWeavingController extends Controller
                         : [],
                     $weavingOrderMetadata
                 ),
+                'ignored_weaving_order_mismatch' => $weavingOrder && !$weavingOrderMatchesSource
+                    ? [
+                        'weaving_order_id' => (int) $weavingOrder->id,
+                        'imported_item_code' => trim((string) $weavingOrder->item_code),
+                        'expected_item_codes' => $itemCodes->values(),
+                    ]
+                    : null,
             ],
             'source_items' => $sourceItems,
             'data' => $lines,
@@ -1267,65 +1340,271 @@ class InternalWeavingController extends Controller
         ]);
     }
 
-    public function exportSheet(Request $request, GoogleSheetWeavingTemplateWriter $writer)
+    public function exportExcel(Request $request, WeavingExcelBatchExporter $exporter)
     {
         $data = $request->validate([
             'production_order' => 'required|string|max:120',
         ]);
-
-        $planRequest = Request::create('/api/lenh-det/production-order-plan', 'GET', [
-            'production_order' => trim($data['production_order']),
-        ]);
-        $response = $this->productionPlan($planRequest);
-        $plan = $response->getData(true);
-
-        if ($response->getStatusCode() >= 400) {
-            return response()->json($plan, $response->getStatusCode());
+        $productionOrder = trim($data['production_order']);
+        $planResponse = $this->productionPlan(Request::create(
+            '/api/lenh-det/production-order-plan',
+            'GET',
+            ['production_order' => $productionOrder]
+        ));
+        $plan = $planResponse->getData(true);
+        if ($planResponse->getStatusCode() >= 400) {
+            return response()->json($plan, $planResponse->getStatusCode());
         }
 
-        $sourceItems = collect($plan['source_items'] ?? []);
-        $sourceItemCodes = $sourceItems
+        $sourceItemCodes = collect($plan['source_items'] ?? [])
             ->pluck('item_code')
             ->map(fn ($code) => $this->cleanCode($code))
             ->filter()
             ->unique()
             ->values();
-        $lines = collect($plan['data'] ?? []);
         if ($sourceItemCodes->count() !== 1) {
             return response()->json([
-                'message' => 'Mẫu LENH_DET chỉ nhận một mã hàng. Lệnh này có ' . $sourceItemCodes->count() . ' mã hàng.',
+                'message' => 'Mẫu LENH_DET chỉ nhận một mã hàng; lệnh có ' . $sourceItemCodes->count() . ' mã.',
             ], 422);
         }
-        if ($lines->isEmpty()) {
-            return response()->json([
-                'message' => 'Lệnh chưa có định mức sợi nên chưa thể xuất mẫu.',
-            ], 422);
-        }
-        $templateLineCount = $sourceItems
+        $templateLineCount = collect($plan['source_items'] ?? [])
             ->flatMap(fn ($item) => (array) ($item['materials'] ?? []))
             ->count();
+        if ($templateLineCount === 0) {
+            return response()->json(['message' => 'Lệnh chưa có định mức sợi.'], 422);
+        }
         if ($templateLineCount > 7) {
             return response()->json([
-                'message' => 'Lệnh có ' . $templateLineCount . ' dòng sợi, vượt 7 dòng có đủ cột của mẫu LENH_DET.',
+                'message' => 'Định mức có ' . $templateLineCount . ' dòng, vượt giới hạn 7 dòng của mẫu.',
+            ], 422);
+        }
+
+        $centralCustomer = InternalProductionOrder::query()
+            ->where('is_active', true)
+            ->whereRaw('UPPER(TRIM(production_order)) = ?', [$this->cleanCode($productionOrder)])
+            ->whereNotNull('customer')
+            ->where('customer', '<>', '')
+            ->value('customer');
+        if (trim((string) $centralCustomer) !== '') {
+            $plan['order']['customer'] = trim((string) $centralCustomer);
+            foreach ($plan['source_items'] as &$sourceItem) {
+                $sourceItem['customer'] = trim((string) $centralCustomer);
+            }
+            unset($sourceItem);
+        }
+
+        try {
+            $file = $exporter->single($productionOrder, $plan);
+
+            return response()->download($file['path'], $file['name'], [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Cache-Control' => 'private, no-store',
+            ])->deleteFileAfterSend(true);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => 'Không tạo được file Excel: ' . $e->getMessage()], 422);
+        }
+    }
+
+    public function startBatchExport(Request $request, WeavingExcelBatchExporter $exporter)
+    {
+        $data = $request->validate([
+            'select_all' => 'nullable|boolean',
+            'production_orders' => 'nullable|array|max:1000',
+            'production_orders.*' => 'required|string|max:120',
+            'year' => 'nullable|integer|min:2000|max:2099',
+            'customer' => 'nullable|string|max:200',
+            'keyword' => 'nullable|string|max:200',
+        ]);
+
+        $query = InternalProductionOrder::query()
+            ->where('is_active', true)
+            ->whereNotNull('production_order')
+            ->where('production_order', '<>', '');
+        $this->filterProductionOrdersWithBom($query);
+
+        if (!empty($data['select_all'])) {
+            $year = (int) ($data['year'] ?? 0);
+            if ($year >= 2000 && $year <= 2099) {
+                $suffix = '/' . str_pad((string) ($year % 100), 2, '0', STR_PAD_LEFT);
+                $query->whereRaw('TRIM(production_order) LIKE ?', ['%' . $suffix]);
+            }
+            $customer = mb_strtoupper(trim((string) ($data['customer'] ?? '')));
+            if ($customer !== '') {
+                $query->whereRaw('UPPER(TRIM(customer)) = ?', [$customer]);
+            }
+            $keyword = mb_strtoupper(trim((string) ($data['keyword'] ?? '')));
+            if ($keyword !== '') {
+                $query->where(function ($sub) use ($keyword) {
+                    $like = '%' . $keyword . '%';
+                    $sub->whereRaw('UPPER(production_order) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(purchase_order) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(customer) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(item_code) LIKE ?', [$like])
+                        ->orWhereRaw('UPPER(description) LIKE ?', [$like]);
+                });
+            }
+        } else {
+            $codes = collect($data['production_orders'] ?? [])
+                ->map(fn ($code) => $this->cleanCode($code))
+                ->filter()
+                ->unique()
+                ->values();
+            if ($codes->isEmpty()) {
+                return response()->json(['message' => 'Hãy chọn ít nhất một lệnh sản xuất.'], 422);
+            }
+            $query->whereIn(DB::raw('UPPER(TRIM(production_order))'), $codes->all());
+        }
+
+        $orders = $query
+            ->select(
+                'production_order',
+                DB::raw("COALESCE(NULLIF(TRIM(MIN(customer)), ''), 'CHUA-XAC-DINH') as customer"),
+                DB::raw('MIN(id) as first_id')
+            )
+            ->groupBy('production_order')
+            ->orderByDesc('first_id')
+            ->limit(1001)
+            ->get()
+            ->map(fn ($row) => [
+                'production_order' => trim((string) $row->production_order),
+                'customer' => trim((string) $row->customer),
+            ])
+            ->values();
+
+        if ($orders->count() > 1000) {
+            return response()->json(['message' => 'Kết quả vượt 1.000 lệnh. Hãy lọc theo khách hàng hoặc từ khóa.'], 422);
+        }
+        if ($orders->isEmpty()) {
+            return response()->json([
+                'message' => 'Không có lệnh nào đã có định mức sợi/vật tư để xuất Excel.',
             ], 422);
         }
 
         try {
-            $sheetUrl = $writer->write(self::SPREADSHEET_ID, $plan);
+            return response()->json($exporter->start($orders->all(), [
+                'year' => $data['year'] ?? null,
+                'customer' => $data['customer'] ?? null,
+                'keyword' => $data['keyword'] ?? null,
+            ]), 201);
         } catch (\Throwable $e) {
             report($e);
 
-            return response()->json([
-                'message' => 'Không ghi được mẫu LENH_DET: ' . $e->getMessage(),
-            ], 422);
+            return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
 
-        return response()->json([
-            'message' => 'Đã ghi lệnh ' . ($plan['order']['production_order'] ?? $data['production_order']) . ' vào mẫu LENH_DET.',
-            'sheet_url' => $sheetUrl,
-            'sheet_name' => GoogleSheetWeavingTemplateWriter::SHEET_NAME,
-            'line_count' => $templateLineCount,
-        ]);
+    public function processBatchExport(string $token, WeavingExcelBatchExporter $exporter)
+    {
+        try {
+            $pending = $exporter->pending($token);
+            if (empty($pending)) {
+                return response()->json($exporter->status($token));
+            }
+
+            $status = null;
+            $readyExports = [];
+            foreach ($pending as $batchOrder) {
+                $productionOrder = trim((string) $batchOrder['production_order']);
+                try {
+                    $planResponse = $this->productionPlan(Request::create(
+                        '/api/lenh-det/production-order-plan',
+                        'GET',
+                        ['production_order' => $productionOrder]
+                    ));
+                    $plan = $planResponse->getData(true);
+                    if ($planResponse->getStatusCode() >= 400) {
+                        throw new \RuntimeException($plan['message'] ?? 'Không đọc được lệnh sản xuất.');
+                    }
+
+                    $sourceItemCodes = collect($plan['source_items'] ?? [])
+                        ->pluck('item_code')
+                        ->map(fn ($code) => $this->cleanCode($code))
+                        ->filter()
+                        ->unique()
+                        ->values();
+                    if ($sourceItemCodes->count() !== 1) {
+                        throw new \RuntimeException('Mẫu LENH_DET chỉ nhận một mã hàng; lệnh có ' . $sourceItemCodes->count() . ' mã.');
+                    }
+                    $templateLineCount = collect($plan['source_items'] ?? [])
+                        ->flatMap(fn ($item) => (array) ($item['materials'] ?? []))
+                        ->count();
+                    if ($templateLineCount === 0) {
+                        throw new \RuntimeException('Lệnh chưa có định mức sợi.');
+                    }
+                    if ($templateLineCount > 7) {
+                        throw new \RuntimeException('Định mức có ' . $templateLineCount . ' dòng, vượt giới hạn 7 dòng của mẫu.');
+                    }
+
+                    $centralCustomer = trim((string) $batchOrder['customer']) ?: 'CHUA-XAC-DINH';
+                    $plan['order']['customer'] = $centralCustomer;
+                    foreach ($plan['source_items'] as &$sourceItem) {
+                        $sourceItem['customer'] = $centralCustomer;
+                    }
+                    unset($sourceItem);
+
+                    $readyExports[] = [
+                        'production_order' => $productionOrder,
+                        'plan' => $plan,
+                    ];
+                } catch (\Throwable $e) {
+                    report($e);
+                    $status = $exporter->mark($token, $productionOrder, 'failed', null, $e->getMessage());
+                }
+            }
+            if (!empty($readyExports)) {
+                try {
+                    $exportResults = $exporter->appendMany($token, $readyExports);
+                } catch (\Throwable $e) {
+                    report($e);
+                    $exportResults = collect($readyExports)->map(fn ($export) => [
+                        'production_order' => $export['production_order'],
+                        'status' => 'failed',
+                        'file' => null,
+                        'error' => $e->getMessage(),
+                    ])->all();
+                }
+                foreach ($exportResults as $result) {
+                    $status = $exporter->mark(
+                        $token,
+                        $result['production_order'],
+                        $result['status'],
+                        $result['file'],
+                        $result['error']
+                    );
+                }
+            }
+
+            return response()->json($status ?: $exporter->status($token));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function batchExportStatus(string $token, WeavingExcelBatchExporter $exporter)
+    {
+        try {
+            return response()->json($exporter->status($token));
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 404);
+        }
+    }
+
+    public function downloadBatchExport(string $token, WeavingExcelBatchExporter $exporter)
+    {
+        try {
+            $file = $exporter->download($token);
+
+            return response()->download($file['path'], $file['name'], [
+                'Content-Type' => 'application/zip',
+                'Cache-Control' => 'private, no-store',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 404);
+        }
     }
 
     public function saveTemplateDetails(Request $request)
@@ -1422,8 +1701,7 @@ class InternalWeavingController extends Controller
                 'unit' => trim((string) ($data['unit'] ?? $existingOrder->unit ?? $sourceLines->pluck('unit')->filter()->first() ?? 'PCS')),
                 'order_date' => $data['order_date'] ?? optional($existingOrder->order_date ?? null)->format('Y-m-d')
                     ?? optional($sourceLines->pluck('received_date')->filter()->sort()->first())->format('Y-m-d'),
-                'due_date' => $data['due_date'] ?? optional($existingOrder->due_date ?? null)->format('Y-m-d')
-                    ?? optional($sourceLines->pluck('promised_date')->filter()->sort()->first())->format('Y-m-d'),
+                'due_date' => optional($sourceLines->pluck('promised_date')->filter()->sort()->first())->format('Y-m-d'),
                 'status' => $existingOrder->status ?? 'draft',
                 'note' => $existingOrder->note ?? '',
                 'metadata_json' => json_encode($metadata, JSON_UNESCAPED_UNICODE),
@@ -1438,6 +1716,13 @@ class InternalWeavingController extends Controller
 
     public function saveDesignerOrder(Request $request)
     {
+        $request->merge([
+            'lines' => $this->deriveBomConsumptionFromTotals(
+                (array) $request->input('lines', []),
+                $this->toNumber($request->input('order_quantity', 0))
+            ),
+        ]);
+
         $data = $request->validate([
             'action' => 'required|in:draft,issued',
             'production_order' => 'required|string|max:120',
@@ -1490,6 +1775,12 @@ class InternalWeavingController extends Controller
             'lines.*.total_grams' => 'nullable|numeric|min:0',
             'lines.*.note' => 'nullable|string|max:1000',
         ]);
+        $data['metadata'] = array_replace((array) ($data['metadata'] ?? []), [
+            'roll_machine_small' => 'Muller',
+            'roll_machine_large' => 'Hi-Tex',
+            'row_machine_small' => 'Muller',
+            'row_machine_large' => 'Hi-Tex',
+        ]);
         $data = $this->normalizeDateFields($data, ['order_date', 'due_date']);
 
         $orderCode = $this->cleanCode($data['production_order']);
@@ -1501,6 +1792,9 @@ class InternalWeavingController extends Controller
         if ($sourceLines->isEmpty()) {
             return response()->json(['message' => 'Lệnh không còn trong Lệnh sản xuất trung tâm.'], 422);
         }
+        $data['due_date'] = optional(
+            $sourceLines->pluck('promised_date')->filter()->sort()->first()
+        )->format('Y-m-d');
         $sourceItemCodes = $sourceLines->pluck('item_code')
             ->map(fn ($code) => $this->cleanCode($code))
             ->filter()
@@ -1611,6 +1905,32 @@ class InternalWeavingController extends Controller
                 : 'Đã lưu nháp lệnh ' . $orderCode . '.',
             'data' => $order->fresh('item'),
         ]);
+    }
+
+    private function deriveBomConsumptionFromTotals(array $lines, float $orderQuantity): array
+    {
+        if ($orderQuantity <= 0) {
+            return $lines;
+        }
+
+        return collect($lines)->map(function ($line) use ($orderQuantity) {
+            $line = (array) $line;
+            $consumption = $this->toNumber($line['consumption_per_unit'] ?? 0);
+            $totalGrams = $this->toNumber($line['total_grams'] ?? 0);
+            $wastePercent = $this->toNumber($line['waste_percent'] ?? 0);
+            $line['consumption_per_unit'] = $consumption;
+            $line['total_grams'] = $totalGrams;
+            $line['waste_percent'] = $wastePercent;
+
+            if ($consumption <= 0 && $totalGrams > 0) {
+                $line['consumption_per_unit'] = round(
+                    $totalGrams / $orderQuantity / (1 + $wastePercent / 100),
+                    6
+                );
+            }
+
+            return $line;
+        })->all();
     }
 
     public function createIssue(Request $request, InternalWeavingOrder $order)
@@ -1847,6 +2167,107 @@ class InternalWeavingController extends Controller
         ];
     }
 
+    private function centralProductionOrderMap(): array
+    {
+        return InternalProductionOrder::query()
+            ->where('is_active', true)
+            ->whereNotNull('production_order')
+            ->get([
+                'production_order',
+                'item_code',
+                'description',
+                'customer',
+                'purchase_order',
+                'order_quantity',
+                'unit',
+                'received_date',
+                'promised_date',
+            ])
+            ->mapWithKeys(function ($row) {
+                $orderCode = $this->cleanCode($row->production_order);
+                if ($orderCode === '') {
+                    return [];
+                }
+
+                return [$orderCode => $this->centralProductionOrderData($row, $orderCode)];
+            })
+            ->all();
+    }
+
+    private function centralProductionOrderData($row, string $orderCode): array
+    {
+        return [
+            'order_code' => $orderCode,
+            'item_code' => $this->cleanCode($row->item_code),
+            'item_name' => trim((string) $row->description),
+            'customer' => trim((string) $row->customer),
+            'po' => trim((string) $row->purchase_order),
+            'order_quantity' => (float) $row->order_quantity,
+            'unit' => trim((string) $row->unit) ?: 'PCS',
+            'received_date' => optional($row->received_date)->format('Y-m-d'),
+            'promised_date' => optional($row->promised_date)->format('Y-m-d'),
+        ];
+    }
+
+    private function applyCentralProductionOrder(array $parsed, ?array $centralOrders = null): array
+    {
+        $orderCode = $this->cleanCode($parsed['order_code'] ?? '');
+        if ($orderCode === '') {
+            return [
+                'parsed' => $parsed,
+                'error' => ['message' => 'Phiếu lệnh dệt thiếu LỆNH IN.'],
+            ];
+        }
+
+        if ($centralOrders === null) {
+            $row = InternalProductionOrder::query()
+                ->where('is_active', true)
+                ->whereRaw('UPPER(TRIM(production_order)) = ?', [$orderCode])
+                ->first([
+                    'production_order',
+                    'item_code',
+                    'description',
+                    'customer',
+                    'purchase_order',
+                    'order_quantity',
+                    'unit',
+                    'received_date',
+                    'promised_date',
+                ]);
+            $centralOrders = $row
+                ? [$orderCode => $this->centralProductionOrderData($row, $orderCode)]
+                : [];
+        }
+
+        $central = $centralOrders[$orderCode] ?? null;
+        if (!$central || ($central['item_code'] ?? '') === '') {
+            return [
+                'parsed' => $parsed,
+                'error' => [
+                    'message' => "Lệnh {$orderCode} chưa có trong Lệnh SX trung tâm hoặc chưa có mã hàng.",
+                    'order_code' => $orderCode,
+                ],
+            ];
+        }
+
+        $fileItemCode = $this->cleanCode($parsed['item_code'] ?? '');
+        if ($fileItemCode !== '' && $fileItemCode !== $central['item_code']) {
+            $parsed['warnings'][] = "Bỏ qua mã {$fileItemCode} trong file; dùng mã {$central['item_code']} từ Lệnh SX trung tâm.";
+        }
+
+        $parsed['order_code'] = $orderCode;
+        $parsed['item_code'] = $central['item_code'];
+        $parsed['item_name'] = $central['item_name'];
+        $parsed['customer'] = $central['customer'];
+        $parsed['po'] = $central['po'];
+        $parsed['order_quantity'] = $central['order_quantity'];
+        $parsed['unit'] = $central['unit'];
+        $parsed['job_date'] = $central['received_date'] ?: ($parsed['job_date'] ?? null);
+        $parsed['delivery_date'] = $central['promised_date'] ?: ($parsed['delivery_date'] ?? null);
+
+        return ['parsed' => $parsed, 'error' => null];
+    }
+
     private function saveParsedDesignSheet(array $parsed, array $missingCatalog = []): array
     {
         return DB::connection('internal')->transaction(function () use ($parsed, $missingCatalog) {
@@ -1854,10 +2275,10 @@ class InternalWeavingController extends Controller
             $item = InternalWeavingItem::query()->updateOrCreate(
                 ['item_code' => $parsed['item_code']],
                 [
-                    'item_name' => $parsed['design_code'] ?: ($metadata['label_name'] ?? $parsed['item_code']),
+                    'item_name' => $parsed['item_name'] ?: ($metadata['label_name'] ?: ($parsed['design_code'] ?: $parsed['item_code'])),
                     'design_code' => $parsed['design_code'] ?: null,
                     'customer' => $parsed['customer'],
-                    'unit' => 'PCS',
+                    'unit' => $parsed['unit'] ?: 'PCS',
                     'note' => trim(implode(' | ', array_filter([
                         $parsed['po'] ? 'PO: ' . $parsed['po'] : '',
                         $parsed['job_date'] ? 'Ngay phieu: ' . $parsed['job_date'] : '',
@@ -1900,7 +2321,7 @@ class InternalWeavingController extends Controller
                         'po_number' => $parsed['po'] ?: null,
                         'design_code' => $parsed['design_code'] ?: null,
                         'order_quantity' => $parsed['order_quantity'],
-                        'unit' => 'PCS',
+                        'unit' => $parsed['unit'] ?: 'PCS',
                         'order_date' => $parsed['job_date'] ?: now('Asia/Ho_Chi_Minh')->format('Y-m-d'),
                         'due_date' => $parsed['delivery_date'] ?: null,
                         'status' => 'draft',
@@ -1974,11 +2395,13 @@ class InternalWeavingController extends Controller
             'customer' => trim((string) $customer),
             'order_code' => $this->cleanCode($orderCode),
             'item_code' => $itemCode,
+            'item_name' => '',
             'po' => trim((string) $po),
             'design_code' => trim((string) $designCode),
             'job_date' => $jobDate,
             'delivery_date' => $deliveryDate,
             'order_quantity' => $this->parseDesignSheetQuantity($rows, $lines),
+            'unit' => 'PCS',
             'lines' => $lines,
             'metadata' => $metadata,
             'warnings' => [],
@@ -2011,30 +2434,196 @@ class InternalWeavingController extends Controller
     private function parseDesignSheetMetadata(array $rows, string $sheetName = ''): array
     {
         $operationLabels = ['TEN LABEL', 'UI KEO', 'LOOP', 'PHAN TREN', 'PHẦN TRÊN', 'PHAN DUOI', 'PHẦN DƯỚI', 'CHIEU DAI', 'CHIỀU DÀI', 'HOAN CHINH', 'HOÀN CHỈNH', 'MA SO HOP', 'MÃ SỐ HỘP'];
+        $normalizedOperationLabels = array_values(array_unique(array_map(fn ($label) => $this->normalizeText($label), $operationLabels)));
+        $threadTableStart = null;
+        foreach ($rows as $row) {
+            $normalizedCells = array_map(fn ($cell) => $this->normalizeText($cell), $row);
+            $materialCodeColumn = array_search('MA SO CHI', $normalizedCells, true);
+            if ($materialCodeColumn === false || !in_array('TL/1PCS', $normalizedCells, true)) {
+                continue;
+            }
+            $typeColumn = array_search('LOAI', $normalizedCells, true);
+            $threadTableStart = $typeColumn !== false
+                ? (int) $typeColumn
+                : max(0, (int) $materialCodeColumn - 1);
+            break;
+        }
+
         $operations = [];
         foreach ($rows as $row) {
-            $label = $this->normalizeText($row[0] ?? '');
-            if (in_array($label, array_map(fn ($x) => $this->normalizeText($x), $operationLabels), true)) {
-                $operations[$label] = trim(implode(' ', array_filter(array_slice($row, 1), fn ($cell) => trim((string) $cell) !== '')));
+            $labelIndex = null;
+            $label = '';
+            foreach ($row as $index => $cell) {
+                $candidate = $this->normalizeText($cell);
+                if (in_array($candidate, $normalizedOperationLabels, true)) {
+                    $labelIndex = $index;
+                    $label = $candidate;
+                    break;
+                }
             }
+            if ($labelIndex === null) {
+                continue;
+            }
+
+            $endColumn = $threadTableStart === null ? count($row) : min(count($row), $threadTableStart);
+            $valueLength = max(0, $endColumn - $labelIndex - 1);
+            $operations[$label] = trim(implode(' ', array_filter(
+                array_slice($row, $labelIndex + 1, $valueLength),
+                fn ($cell) => trim((string) $cell) !== ''
+            )));
         }
+
+        $machineMetrics = $this->parseDesignSheetMachineMetrics($rows);
 
         return [
             'sheet_name' => $sheetName,
-            'label_name' => $this->findValueAfterLabel($rows, ['TEN LABEL']),
+            'label_name' => trim((string) ($operations['TEN LABEL'] ?? '')),
             'length' => $this->findValueAfterLabel($rows, ['CHIEU DAI', 'CHIỀU DÀI']),
             'finished_size' => $this->findValueAfterLabel($rows, ['HOAN CHINH', 'HOÀN CHỈNH']),
             'box_code' => $this->findValueAfterLabel($rows, ['MA SO HOP', 'MÃ SỐ HỘP']),
-            'pick' => $this->extractValueNearLabel($rows, ['SO PICK', 'SỐ PICK']),
-            'density' => $this->extractValueNearLabel($rows, ['MAT DO', 'MẬT ĐỘ']),
-            'machine' => $this->extractValueNearLabel($rows, ['MAY', 'MÁY']),
-            'roll_count' => $this->extractValueNearLabel($rows, ['SO CUON', 'SỐ CUỘN']),
-            'quantity_plus_10' => $this->extractValueNearLabel($rows, ['SO LUONG +10%', 'SỐ LƯỢNG +10%']),
-            'row_count_plus_10' => $this->extractValueNearLabel($rows, ['SO DONG +10%', 'SỐ DÒNG +10%']),
-            'shift' => $this->extractValueNearLabel($rows, ['CA']),
+            'pick' => $machineMetrics['pick'],
+            'density' => $machineMetrics['density'],
+            'machine' => $machineMetrics['machine'],
+            'roll_count' => $machineMetrics['roll_count_small'],
+            'roll_machine_small' => $machineMetrics['roll_machine_small'],
+            'roll_count_small' => $machineMetrics['roll_count_small'],
+            'roll_machine_large' => $machineMetrics['roll_machine_large'],
+            'roll_count_large' => $machineMetrics['roll_count_large'],
+            'quantity_plus_10' => $machineMetrics['quantity_plus_10'],
+            'row_machine_small' => $machineMetrics['row_machine_small'],
+            'row_count_plus_10' => $machineMetrics['row_count_plus_10'],
+            'row_machine_large' => $machineMetrics['row_machine_large'],
+            'row_count_plus_10_large' => $machineMetrics['row_count_plus_10_large'],
+            'shift' => $machineMetrics['shift'],
+            'shift_large' => $machineMetrics['shift_large'],
             'operations' => $operations,
             'production_capacity_rows' => $this->parseCapacityRows($rows),
         ];
+    }
+
+    private function parseDesignSheetMachineMetrics(array $rows): array
+    {
+        $result = [
+            'pick' => '',
+            'density' => '',
+            'machine' => '',
+            'roll_machine_small' => '',
+            'roll_count_small' => '',
+            'roll_machine_large' => '',
+            'roll_count_large' => '',
+            'quantity_plus_10' => '',
+            'row_machine_small' => '',
+            'row_count_plus_10' => '',
+            'row_machine_large' => '',
+            'row_count_plus_10_large' => '',
+            'shift' => '',
+            'shift_large' => '',
+        ];
+
+        $headerRowIndex = null;
+        $columns = [];
+        foreach ($rows as $rowIndex => $row) {
+            $normalized = array_map(fn ($cell) => $this->normalizeText($cell), $row);
+            if (!in_array('SO PICK', $normalized, true) || !in_array('SO CUON', $normalized, true)) {
+                continue;
+            }
+
+            $headerRowIndex = $rowIndex;
+            foreach ([
+                'pick' => 'SO PICK',
+                'density' => 'MAT DO',
+                'machine' => 'MAY',
+                'roll' => 'SO CUON',
+                'quantity' => 'SO LUONG +10%',
+                'row' => 'SO DONG+10%',
+                'shift' => 'CA',
+            ] as $key => $label) {
+                $index = array_search($label, $normalized, true);
+                if ($index === false && $key === 'row') {
+                    $index = array_search('SO DONG +10%', $normalized, true);
+                }
+                if ($index === false && $key === 'quantity') {
+                    $index = array_search('SO LUONG+10%', $normalized, true);
+                }
+                $columns[$key] = $index === false ? null : (int) $index;
+            }
+            break;
+        }
+
+        if ($headerRowIndex === null) {
+            $result['pick'] = $this->extractValueNearLabel($rows, ['SO PICK', 'SỐ PICK']);
+            $result['density'] = $this->extractValueNearLabel($rows, ['MAT DO', 'MẬT ĐỘ']);
+            $result['machine'] = $this->extractValueNearLabel($rows, ['MAY', 'MÁY']);
+            return $result;
+        }
+
+        $dataRows = [];
+        for ($index = $headerRowIndex + 1; $index < min($headerRowIndex + 5, count($rows)); $index++) {
+            if (str_contains($this->normalizeText(implode(' ', $rows[$index])), 'TEN FILE')) {
+                break;
+            }
+            $dataRows[] = $rows[$index];
+        }
+
+        $firstValue = function (string $columnKey) use ($dataRows, $columns): string {
+            $column = $columns[$columnKey] ?? null;
+            if ($column === null) {
+                return '';
+            }
+            foreach ($dataRows as $row) {
+                $value = trim((string) ($row[$column] ?? ''));
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+            return '';
+        };
+
+        $sectionRows = function (string $startKey, string $endKey) use ($dataRows, $columns): array {
+            $start = $columns[$startKey] ?? null;
+            $end = $columns[$endKey] ?? null;
+            if ($start === null) {
+                return [];
+            }
+            $end = $end === null ? $start + 4 : $end;
+            $values = [];
+            foreach ($dataRows as $row) {
+                $tokens = [];
+                for ($column = $start; $column < $end; $column++) {
+                    $value = trim((string) ($row[$column] ?? ''));
+                    if ($value !== '') {
+                        $tokens[] = $value;
+                    }
+                }
+                if ($tokens) {
+                    $values[] = $tokens;
+                }
+            }
+            return $values;
+        };
+
+        $result['pick'] = $firstValue('pick');
+        $result['density'] = $firstValue('density');
+        $result['machine'] = $firstValue('machine');
+        $result['quantity_plus_10'] = $firstValue('quantity');
+        $result['shift'] = $firstValue('shift');
+
+        $rollRows = $sectionRows('roll', 'quantity');
+        $result['roll_machine_small'] = trim((string) ($rollRows[0][0] ?? ''));
+        $result['roll_count_small'] = trim((string) ($rollRows[0][1] ?? ''));
+        $result['roll_machine_large'] = trim((string) ($rollRows[1][0] ?? ''));
+        $result['roll_count_large'] = trim((string) ($rollRows[1][1] ?? ''));
+
+        $rowRows = $sectionRows('row', 'shift');
+        $result['row_machine_small'] = trim((string) ($rowRows[0][0] ?? ''));
+        $result['row_count_plus_10'] = trim((string) ($rowRows[0][1] ?? ''));
+        $result['row_machine_large'] = trim((string) ($rowRows[1][0] ?? ''));
+        $result['row_count_plus_10_large'] = trim((string) ($rowRows[1][1] ?? ''));
+        $result['shift_large'] = isset($dataRows[1], $columns['shift'])
+            ? trim((string) ($dataRows[1][$columns['shift']] ?? ''))
+            : '';
+
+        return $result;
     }
 
     private function parseDesignSheetThreadLine(array $row): ?array

@@ -18,4 +18,9 @@ class WeavingManagementPageController extends Controller
     {
         return view('client.internal-weaving');
     }
+
+    public function exports()
+    {
+        return view('client.weaving-batch-export');
+    }
 }

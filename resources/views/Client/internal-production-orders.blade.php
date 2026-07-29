@@ -147,12 +147,12 @@
                 .catch(error => rowsEl.innerHTML = `<tr><td colspan="17" class="wms-empty text-danger">${esc(error.message)}</td></tr>`);
         }
 
-        document.getElementById('syncProductionBtn').addEventListener('click', () => {
+        function syncProductionOrders() {
             const button = document.getElementById('syncProductionBtn');
             const resultEl = document.getElementById('productionSyncResult');
             button.disabled = true;
             resultEl.textContent = 'Đang đồng bộ...';
-            fetch('/api/lenh-san-xuat-sheet/dong-bo', {
+            return fetch('/api/lenh-san-xuat-sheet/dong-bo', {
                 method:'POST',
                 headers:{'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
             }).then(response => jsonOrError(response, 'Không đồng bộ được Google Sheet'))
@@ -163,6 +163,10 @@
               })
               .catch(error => resultEl.textContent = error.message)
               .finally(() => button.disabled = false);
+        }
+
+        document.getElementById('syncProductionBtn').addEventListener('click', () => {
+            syncProductionOrders();
         });
 
         function queueSearch(source) {
@@ -186,6 +190,7 @@
             loadProductionOrders();
         });
         loadProductionOrders();
+        syncProductionOrders();
     </script>
 </body>
 </html>

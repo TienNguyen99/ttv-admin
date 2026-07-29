@@ -58,6 +58,8 @@
         .weaving-ticket-image { min-height:140px; display:flex; align-items:center; justify-content:center; background:#f8fbff; border:1px dashed #b8cee8; border-radius:10px; overflow:hidden; }
         .weaving-ticket-image img { max-width:100%; max-height:220px; object-fit:contain; display:block; }
         .weaving-ticket-image-empty { color:#64748b; font-size:12px; font-weight:800; text-align:center; }
+        .weaving-ticket-image .catalog-image-trigger { width:100%; min-height:138px; justify-content:center; flex-direction:column; border:0; background:transparent; }
+        .weaving-ticket-image .catalog-image-trigger img { width:auto; height:auto; max-width:100%; max-height:220px; }
         .weaving-source-list { display:grid; grid-template-columns:repeat(auto-fit, minmax(330px, 1fr)); gap:12px; margin-bottom:14px; }
         .weaving-source-card { border:1px solid #d8e8fb; border-radius:16px; background:linear-gradient(180deg,#fff,#f7fbff); box-shadow:0 10px 24px rgba(64,111,170,.08); overflow:hidden; }
         .weaving-source-head { display:flex; justify-content:space-between; gap:12px; padding:12px 14px; border-bottom:1px solid #e6f0fb; }
@@ -221,7 +223,7 @@
                     <div id="planSummary" class="d-flex flex-wrap gap-2"></div>
                     <button id="openShelfMapBtn" class="wms-btn" type="button" disabled><i data-lucide="map-pin"></i>Xem mặt kệ</button>
                     <button id="editWeavingTemplateBtn" class="wms-btn" type="button" disabled><i data-lucide="settings-2"></i>Thông tin mẫu</button>
-                    <button id="exportWeavingSheetBtn" class="wms-btn" type="button" disabled><i data-lucide="file-spreadsheet"></i>Xuất mẫu Sheet</button>
+                    <button id="exportWeavingSheetBtn" class="wms-btn" type="button" disabled><i data-lucide="file-spreadsheet"></i>Xuất Excel</button>
                     <button id="createIssueBtn" class="wms-btn wms-btn--primary" type="button" disabled><i data-lucide="send"></i>Tạo phiếu xuất</button>
                 </div>
             </div>
@@ -356,6 +358,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+@include('layouts.partials.catalog-image-paste-modal')
 <script src="https://unpkg.com/lucide@latest"></script>
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
@@ -562,6 +565,13 @@ function renderWeavingTicket(result) {
     const operations = metadata.operations || {};
     const lines = sourceItem.materials?.length ? sourceItem.materials : (result.data || []);
     const ticketImage = imageUrl(order.image_url || sourceItem.image_url || metadata.image_url || '');
+    const ticketCatalogId = order.catalog_id || sourceItem.catalog_id || '';
+    const ticketItemCode = order.item_code || sourceItem.item_code || '';
+    const ticketImageControl = ticketItemCode
+        ? `<button type="button" class="catalog-image-trigger" data-catalog-image-open data-catalog-id="${esc(ticketCatalogId)}" data-item-code="${esc(ticketItemCode)}" data-item-name="${esc(sourceItem.item_name || '')}" data-unit="${esc(sourceItem.unit || order.unit || '')}" data-image-url="${esc(ticketImage)}" title="${ticketImage ? 'Xem hoặc thay ảnh danh mục' : 'Paste ảnh vào danh mục'}">
+            ${ticketImage ? `<img loading="lazy" src="${esc(ticketImage)}" alt="${esc(order.item_code || sourceItem.item_code || 'Hình lệnh dệt')}">` : '<span><i data-lucide="image-plus"></i><strong class="d-block">Paste ảnh vào danh mục</strong></span>'}
+        </button>`
+        : '<div class="weaving-ticket-image-empty">Mã hàng chưa có trong Danh mục nội bộ</div>';
     const operationRows = [
         ['Tên label', metadata.label_name || sourceItem.item_name || '-'],
         ['Ui Keo', operations.UI_KEO || operations['UI KEO'] || '-'],
@@ -591,6 +601,10 @@ function renderWeavingTicket(result) {
                 <div class="d-flex justify-content-between gap-2"><span class="weaving-ticket-label">Số pick</span><strong>${esc(metadata.pick || '-')}</strong></div>
                 <div class="d-flex justify-content-between gap-2"><span class="weaving-ticket-label">Mật độ</span><strong>${esc(metadata.density || '-')}</strong></div>
                 <div class="d-flex justify-content-between gap-2"><span class="weaving-ticket-label">Máy</span><strong>${esc(metadata.machine || '-')}</strong></div>
+                <div class="d-flex justify-content-between gap-2"><span class="weaving-ticket-label">${esc(metadata.roll_machine_small || 'Muller')}</span><strong>${esc(metadata.roll_count_small || '-')} cuộn</strong></div>
+                <div class="d-flex justify-content-between gap-2"><span class="weaving-ticket-label">${esc(metadata.roll_machine_large || 'Hi-Tex')}</span><strong>${esc(metadata.roll_count_large || '-')} cuộn</strong></div>
+                <div class="d-flex justify-content-between gap-2"><span class="weaving-ticket-label">Số lượng +10%</span><strong>${esc(metadata.quantity_plus_10 || '-')}</strong></div>
+                <div class="d-flex justify-content-between gap-2"><span class="weaving-ticket-label">Số dòng +10%</span><strong>${esc(metadata.row_count_plus_10 || '-')} / ${esc(metadata.row_count_plus_10_large || '-')}</strong></div>
             </div>
             <div class="weaving-ticket-thread">
                 <table>
@@ -618,7 +632,7 @@ function renderWeavingTicket(result) {
             <div class="weaving-ticket-box">
                 <div class="weaving-ticket-label mb-1">Hình ảnh</div>
                 <div class="weaving-ticket-image">
-                    ${ticketImage ? `<img src="${esc(ticketImage)}" alt="${esc(order.item_code || sourceItem.item_code || 'Hình lệnh dệt')}">` : '<div class="weaving-ticket-image-empty">Chưa có ảnh<br>Thêm tại Danh mục nội bộ</div>'}
+                    ${ticketImageControl}
                 </div>
             </div>
         </div>
@@ -1166,21 +1180,10 @@ document.getElementById('exportWeavingSheetBtn').addEventListener('click', () =>
     const button = document.getElementById('exportWeavingSheetBtn');
     const sheetWindow = window.open('about:blank', '_blank');
     button.disabled = true;
-    api('/api/lenh-det/export-sheet', {
-        method: 'POST',
-        body: JSON.stringify({production_order: currentProductionOrder}),
-    }).then(result => {
-        if (sheetWindow) {
-            sheetWindow.location.href = result.sheet_url;
-        } else {
-            window.location.href = result.sheet_url;
-        }
-    }).catch(error => {
-        if (sheetWindow) sheetWindow.close();
-        alert(error.message);
-    }).finally(() => {
-        button.disabled = false;
-    });
+    const url = `/api/lenh-det/export-excel?production_order=${encodeURIComponent(currentProductionOrder)}`;
+    if (sheetWindow) sheetWindow.location.href = url;
+    else window.location.href = url;
+    window.setTimeout(() => { button.disabled = false; }, 800);
 });
 document.getElementById('openShelfMapBtn').addEventListener('click', () => {
     if (!currentProductionOrder || !currentPlanResult) return;
@@ -1209,6 +1212,39 @@ document.getElementById('orderNext').addEventListener('click', () => { if (order
 document.getElementById('itemPrev').addEventListener('click', () => { if (itemPage > 1) { itemPage--; loadItems(); } });
 document.getElementById('itemNext').addEventListener('click', () => { if (itemPage < itemTotalPages) { itemPage++; loadItems(); } });
 document.getElementById('reloadBtn').addEventListener('click', () => { loadItems(); loadOrders(); if (currentProductionOrder) loadPlan(currentProductionOrder); });
+document.getElementById('weavingTicket').addEventListener('click', event => {
+    const button = event.target.closest('[data-catalog-image-open]');
+    if (!button) return;
+    window.CatalogImagePaste?.open({
+        catalogId: button.dataset.catalogId,
+        itemCode: button.dataset.itemCode,
+        itemName: button.dataset.itemName,
+        unit: button.dataset.unit,
+        imageUrl: button.dataset.imageUrl,
+    });
+});
+document.addEventListener('catalog-image-ready', event => {
+    const data = event.detail || {};
+    if (!currentPlanResult || !data.id) return;
+    const order = currentPlanResult.order || {};
+    const sourceItem = (currentPlanResult.source_items || [])[0] || {};
+    if (String(order.item_code || sourceItem.item_code || '').toUpperCase() !== String(data.item_code || '').toUpperCase()) return;
+    order.catalog_id = Number(data.id);
+    sourceItem.catalog_id = Number(data.id);
+    renderWeavingTicket(currentPlanResult);
+    if (window.lucide) lucide.createIcons();
+});
+document.addEventListener('catalog-image-uploaded', event => {
+    const data = event.detail || {};
+    if (!currentPlanResult || !data.id) return;
+    const order = currentPlanResult.order || {};
+    const sourceItem = (currentPlanResult.source_items || [])[0] || {};
+    if (String(order.catalog_id || sourceItem.catalog_id || '') !== String(data.id)) return;
+    order.image_url = data.image_url || '';
+    sourceItem.image_url = data.image_url || '';
+    renderWeavingTicket(currentPlanResult);
+    if (window.lucide) lucide.createIcons();
+});
 
 const requestedOrder = new URLSearchParams(window.location.search).get('order');
 weavingTemplateModal = new bootstrap.Modal(document.getElementById('weavingTemplateModal'));
