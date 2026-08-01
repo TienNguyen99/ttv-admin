@@ -385,27 +385,31 @@
         };
         window.alert = message => swalToast(message, 'info');
 
-        function showIssueError(error) {
+        function showIssueError(error, retryWithNegativeStock = null) {
             const stockErrors = Array.isArray(error?.errors?.stock) ? error.errors.stock : [];
             if (window.Swal && stockErrors.length) {
                 Swal.fire({
                     icon: 'warning',
-                    title: 'Chưa đủ tồn để xuất',
+                    title: 'Cảnh báo xuất âm tồn',
                     html: `
                         <div style="text-align:left">
-                            <p style="margin:0 0 10px;color:#475569">Phiếu vẫn giữ nguyên để bạn kiểm tra và sửa số lượng. Các dòng thiếu tồn:</p>
+                            <p style="margin:0 0 10px;color:#475569">Phiếu vẫn giữ nguyên. Kiểm tra phiếu nhập, size, màu, mặt và vị trí trước khi tiếp tục:</p>
                             <div style="display:grid;gap:8px;max-height:260px;overflow:auto">
                                 ${stockErrors.map(item => `<div style="padding:10px 12px;border:1px solid #fecaca;border-radius:10px;background:#fff7ed;color:#7f1d1d">${esc(item)}</div>`).join('')}
                             </div>
                         </div>
                     `,
-                    confirmButtonText: 'Sửa phiếu',
+                    confirmButtonText: retryWithNegativeStock ? 'Vẫn xuất âm' : 'Kiểm tra lại',
+                    confirmButtonColor: retryWithNegativeStock ? '#dc2626' : '#2563eb',
+                    showCancelButton: !!retryWithNegativeStock,
+                    cancelButtonText: 'Kiểm tra lại',
                     showDenyButton: true,
                     denyButtonText: 'Xem tồn kho',
                     customClass: {
                         popup: 'text-start'
                     }
                 }).then(result => {
+                    if (result.isConfirmed && retryWithNegativeStock) retryWithNegativeStock();
                     if (result.isDenied) window.open('/client/ton-kho-noi-bo', '_blank');
                 });
                 return;
@@ -1246,7 +1250,7 @@
               });
         }
 
-        function saveIssue() {
+        function saveIssue(allowNegative = false) {
             const lines = collectLines();
             if (!lines.length) return alert('Nhập ít nhất một dòng hàng.');
             if (lines.some(line => (!line.ma_hh && !line.internal_item_code) || !Number(line.quantity))) return alert('Mỗi dòng cần mã nội bộ hoặc mã đối chiếu, và số lượng.');
@@ -1263,6 +1267,7 @@
                     production_order: Array.from(new Set(lines.map(line => line.production_order).filter(Boolean))).join(', '),
                     purpose: value('purpose'),
                     note: value('issueNote'),
+                    allow_negative: allowNegative,
                     lines
                 })
             }).then(response => jsonOrError(response, 'Không tạo được phiếu xuất kho'))
@@ -1275,7 +1280,12 @@
                   resetIssueForm();
                   loadIssues();
               })
-              .catch(showIssueError);
+              .catch(error => showIssueError(
+                  error,
+                  !allowNegative && error?.payload?.requires_negative_confirmation
+                      ? () => saveIssue(true)
+                      : null
+              ));
         }
 
         function applyBtpOrderCodesToRows(orders) {
@@ -1295,6 +1305,53 @@
                     input.value = code;
                 }
             });
+        }
+
+        async function requestBtpIssue(orders, allowNegative = false) {
+            try {
+                return await fetch('/api/lenh-btp/tao-phieu-xuat', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                    body: JSON.stringify({
+                        order_ids: orders.map(order => order.id).filter(Boolean),
+                        order_codes: orders.map(order => order.btp_order_code).filter(Boolean),
+                        issue_date: value('issueDate'),
+                        receiver_name: value('receiverName'),
+                        department: value('department') || 'San xuat',
+                        purpose: value('purpose') || 'Xuat BTP di san xuat',
+                        note: value('issueNote'),
+                        allow_negative: allowNegative
+                    })
+                }).then(response => jsonOrError(response, 'Khong tao duoc phieu xuat BTP.'));
+            } catch (error) {
+                const stockErrors = Array.isArray(error?.errors?.stock) ? error.errors.stock : [];
+                if (allowNegative || !stockErrors.length || !error?.payload?.requires_negative_confirmation) {
+                    throw error;
+                }
+
+                let confirmed = false;
+                if (window.Swal) {
+                    const decision = await Swal.fire({
+                        icon: 'warning',
+                        title: 'Cảnh báo xuất BTP âm tồn',
+                        html: `<div style="display:grid;gap:8px;max-height:300px;overflow:auto;text-align:left">
+                            ${stockErrors.map(item => `<div style="padding:10px 12px;border:1px solid #fecaca;border-radius:8px;background:#fff7ed;color:#7f1d1d">${esc(item)}</div>`).join('')}
+                        </div>`,
+                        confirmButtonText: 'Vẫn xuất âm',
+                        confirmButtonColor: '#dc2626',
+                        showCancelButton: true,
+                        cancelButtonText: 'Kiểm tra lại'
+                    });
+                    confirmed = decision.isConfirmed;
+                } else {
+                    confirmed = confirm(`${stockErrors.join('\n\n')}\n\nVẫn xuất âm?`);
+                }
+
+                if (confirmed) return requestBtpIssue(orders, true);
+                const cancelled = new Error('Đã giữ các lệnh BTP ở trạng thái mới tạo để bạn kiểm tra tồn.');
+                cancelled.cancelled = true;
+                throw cancelled;
+            }
         }
 
         function legacyCreateBtpOrderAndIssue() {
@@ -1384,19 +1441,7 @@
                   applyBtpOrderCodesToRows(orders);
                   const codes = orders.map(order => order.btp_order_code).filter(Boolean);
                   document.getElementById('issueNote').value = [value('issueNote'), `Lenh BTP ${codes.join(', ')}`].filter(Boolean).join(' - ');
-                  return fetch('/api/lenh-btp/tao-phieu-xuat', {
-                      method: 'POST',
-                      headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
-                      body: JSON.stringify({
-                          order_ids: orders.map(order => order.id).filter(Boolean),
-                          order_codes: orders.map(order => order.btp_order_code).filter(Boolean),
-                          issue_date: value('issueDate'),
-                          receiver_name: value('receiverName'),
-                          department: value('department') || 'San xuat',
-                          purpose: value('purpose') || 'Xuat BTP di san xuat',
-                          note: value('issueNote')
-                      })
-                  }).then(response => jsonOrError(response, 'Khong tao duoc phieu xuat BTP.'));
+                  return requestBtpIssue(orders, false);
               })
               .then(result => {
                   if (result?.print_url) window.open(result.print_url, '_blank');
@@ -1415,7 +1460,11 @@
               })
               .catch(error => {
                   labelPrintWindow?.close();
-                  alert(error.message);
+                  if (error.cancelled) {
+                      swalToast(error.message, 'warning');
+                  } else {
+                      alert(error.message);
+                  }
               })
               .finally(() => {
                   button.disabled = false;
@@ -1563,7 +1612,7 @@
         document.getElementById('pasteExcelData').addEventListener('input', renderPasteColumnMap);
         document.getElementById('analyzePasteBtn').addEventListener('click', analyzePastedData);
         document.getElementById('applyPastedLinesBtn').addEventListener('click', applyPastedLines);
-        document.getElementById('saveBtn').addEventListener('click', saveIssue);
+        document.getElementById('saveBtn').addEventListener('click', () => saveIssue(false));
         document.getElementById('createBtpAndIssueBtn').addEventListener('click', createBtpOrderAndIssue);
         document.getElementById('cancelEditBtn').addEventListener('click', resetIssueForm);
         document.getElementById('issueType').addEventListener('change', event => applyIssueType(event.target.value));

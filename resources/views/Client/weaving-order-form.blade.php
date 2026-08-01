@@ -22,20 +22,16 @@
         .designer-suggestion:hover,.designer-suggestion:focus { background:#eff6ff; outline:0; }
         .designer-suggestion:last-child { border-bottom:0; }
         .designer-suggestion strong { color:#155fc0; }
-        .designer-steps { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:12px 0; }
-        .designer-step { display:flex; align-items:center; gap:8px; padding:9px 11px; border:1px solid #dce7f5; border-radius:8px; background:#fff; color:#6b7f99; font-size:12px; font-weight:800; }
-        .designer-step span { display:grid; place-items:center; width:23px; height:23px; border-radius:50%; background:#e7eef8; }
-        .designer-step.is-active { border-color:#8ab5f4; background:#edf5ff; color:#175ca8; }
-        .designer-step.is-done { border-color:#9bd9c0; background:#effbf6; color:#087a55; }
-        .designer-workspace { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(390px,.85fr); gap:14px; align-items:start; }
+        .designer-workspace { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(360px,.65fr); gap:14px; margin-top:12px; align-items:start; }
         .designer-form-panel,.designer-preview { border:1px solid var(--designer-border); border-radius:8px; background:#fff; overflow:hidden; }
         .designer-section { border-bottom:1px solid #e1eaf6; }
         .designer-section:last-child { border-bottom:0; }
         .designer-section-title { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; padding:13px 16px; border:0; background:#f8fbff; color:#17375e; font-size:13px; font-weight:850; text-align:left; }
         .designer-section-title svg { width:17px; }
         .designer-section-body { padding:15px 16px; }
-        .designer-field-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:11px; }
+        .designer-field-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
         .designer-field-grid .span-2 { grid-column:span 2; }
+        .designer-field-grid .span-3 { grid-column:span 3; }
         .designer-field label { display:block; margin-bottom:5px; color:#486681; font-size:11px; font-weight:800; }
         .designer-field input { min-height:39px; }
         .designer-field input[readonly] { background:#f3f7fc; color:#49657f; }
@@ -46,6 +42,12 @@
         .designer-bom-index { align-self:center; display:grid; place-items:center; width:28px; height:28px; border-radius:6px; background:#e7f1ff; color:#1764c0; font-size:12px; font-weight:900; }
         .designer-icon-btn { display:grid; place-items:center; width:34px; height:39px; border:1px solid #f1b6bd; border-radius:6px; background:#fff; color:#c93646; }
         .designer-icon-btn svg { width:16px; }
+        .designer-color-field { position:relative; }
+        .designer-color-field .form-control { padding-left:42px; }
+        .designer-color-swatch { position:absolute; z-index:2; left:8px; top:50%; width:25px; height:25px; transform:translateY(-50%); border:1px solid #8fa5bf; border-radius:6px; background-color:var(--swatch-color,#fff); box-shadow:inset 0 0 0 1px rgba(255,255,255,.7); }
+        .designer-color-swatch.is-empty { background:repeating-linear-gradient(135deg,#eef3f9 0,#eef3f9 5px,#cbd8e8 5px,#cbd8e8 7px); }
+        .designer-preview-swatch { display:inline-block; width:18px; height:18px; margin-right:5px; border:1px solid #8295aa; border-radius:4px; background-color:var(--swatch-color,#fff); vertical-align:middle; }
+        .designer-preview-swatch.is-empty { background:repeating-linear-gradient(135deg,#eef3f9 0,#eef3f9 4px,#cbd8e8 4px,#cbd8e8 6px); }
         .designer-preview { position:sticky; top:70px; }
         .designer-preview-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 15px; border-bottom:1px solid #dbe7f5; background:#f6faff; }
         .designer-preview-head h2 { margin:0; color:#17375e; font-size:14px; font-weight:900; }
@@ -88,8 +90,8 @@
             .designer-create .wms-heading h1 { font-size:25px; }
             .designer-create .wms-heading p { overflow-wrap:anywhere; }
             .designer-find,.designer-form-panel,.designer-preview { max-width:100%; overflow:hidden; }
-            .designer-find-row,.designer-steps,.designer-field-grid { grid-template-columns:minmax(0,1fr); }
-            .designer-field-grid .span-2 { grid-column:auto; }
+            .designer-find-row,.designer-field-grid { grid-template-columns:minmax(0,1fr); }
+            .designer-field-grid .span-2,.designer-field-grid .span-3 { grid-column:auto; }
             .designer-suggestion { grid-template-columns:minmax(0,1fr); gap:3px; }
             .designer-bom-row { grid-template-columns:32px minmax(0,1fr); }
             .designer-bom-row > :not(.designer-bom-index) { grid-column:2; }
@@ -126,13 +128,6 @@
             <button id="clearOrderBtn" class="wms-btn" type="button"><i data-lucide="rotate-ccw"></i>Chọn lệnh khác</button>
         </div>
     </section>
-
-    <div class="designer-steps" aria-label="Tiến trình tạo lệnh">
-        <div class="designer-step is-active" data-step="1"><span>1</span>Chọn lệnh</div>
-        <div class="designer-step" data-step="2"><span>2</span>Thông tin kỹ thuật</div>
-        <div class="designer-step" data-step="3"><span>3</span>Định mức sợi</div>
-        <div class="designer-step" data-step="4"><span>4</span>Kiểm tra và gửi</div>
-    </div>
 
     <div class="designer-workspace">
         <section class="designer-form-panel">
@@ -184,7 +179,7 @@
                 <button class="designer-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#machineSection">
                     <span><i data-lucide="settings"></i> Thông số máy và cuộn</span><i data-lucide="chevron-down"></i>
                 </button>
-                <div id="machineSection" class="collapse show">
+                <div id="machineSection" class="collapse">
                     <div class="designer-section-body">
                         <div class="designer-field-grid">
                             <div class="designer-field"><label>Số pick</label><input id="pick" class="form-control" data-metadata></div>
@@ -336,11 +331,7 @@ function getValue(id) {
     return String(document.getElementById(id)?.value || '').trim();
 }
 function setSteps(active) {
-    document.querySelectorAll('.designer-step').forEach(step => {
-        const index = Number(step.dataset.step);
-        step.classList.toggle('is-active', index === active);
-        step.classList.toggle('is-done', index < active);
-    });
+    document.querySelector('.designer-create')?.setAttribute('data-progress-step', String(active));
 }
 
 async function searchOrders() {
@@ -426,12 +417,17 @@ function renderBomRows(lines) {
 }
 function bomRow(line = {}, index) {
     const total = Number(line.total_grams) > 0 ? line.total_grams : (line.required_quantity_raw || line.required_quantity || '');
+    const colorHex = normalizeHex(line.color_hex);
+    const colorLabel = swatchLabel(line);
     return `
         <div class="designer-bom-row" data-bom-row>
             <div class="designer-bom-index">${index + 1}</div>
             <div class="designer-field"><label>Loại</label><input class="form-control" data-bom="type" value="${esc(line.type || '')}"></div>
             <div class="designer-field"><label>Mã sợi *</label><input class="form-control" list="materialOptions" data-bom="material_code" data-material-code value="${esc(line.material_code || '')}"></div>
-            <div class="designer-field"><label>Tên màu sợi</label><input class="form-control" data-bom="material_name" value="${esc(line.catalog_name || line.material_name || '')}"></div>
+            <div class="designer-field"><label>Tên màu sợi</label><div class="designer-color-field">
+                <span class="designer-color-swatch${colorHex ? '' : ' is-empty'}" data-color-swatch style="${colorHex ? `--swatch-color:${colorHex}` : ''}" title="${esc(colorLabel)}" aria-label="${esc(colorLabel)}"></span>
+                <input class="form-control" data-bom="material_name" value="${esc(line.catalog_name || line.material_name || '')}">
+            </div></div>
             <div class="designer-field"><label>Kệ</label><input class="form-control" data-bom="shelf_hint" value="${esc(line.first_location || line.catalog_shelf_code || line.shelf_hint || '')}"></div>
             <div class="designer-field bom-consumption"><label>TL/1PCS *</label><input type="text" inputmode="decimal" class="form-control" data-bom="consumption_per_unit" value="${esc(line.consumption_per_unit || '')}" placeholder="0,38"></div>
             <div class="designer-field bom-total"><label>T.L(g)</label><input type="text" inputmode="decimal" class="form-control" data-bom="total_grams" value="${esc(total)}" placeholder="Nhập để tính ngược" title="Nhập tổng trọng lượng để tự tính TL/1PCS"></div>
@@ -439,8 +435,36 @@ function bomRow(line = {}, index) {
             <input type="hidden" data-bom="line_role" value="${esc(line.line_role || `DONG-${index + 1}`)}">
             <input type="hidden" data-bom="unit" value="${esc(line.bom_unit || line.unit || 'gam')}">
             <input type="hidden" data-bom="waste_percent" value="${esc(line.waste_percent || 0)}">
+            <input type="hidden" data-color-hex value="${esc(colorHex)}">
+            <input type="hidden" data-pantone-code value="${esc(line.pantone_code || '')}">
+            <input type="hidden" data-color-name value="${esc(line.color_name || line.catalog_color || '')}">
         </div>
     `;
+}
+
+function normalizeHex(value) {
+    const text = String(value || '').trim().toLowerCase();
+    return /^#[0-9a-f]{6}$/.test(text) ? text : '';
+}
+function swatchLabel(line = {}) {
+    const parts = [
+        line.color_name || line.catalog_color || '',
+        line.pantone_code || '',
+    ].map(value => String(value || '').trim()).filter(Boolean);
+    return parts.length ? parts.join(' · ') : 'Chưa nhận diện màu';
+}
+function setBomSwatch(row, color = {}) {
+    const hex = normalizeHex(color.color_hex);
+    const swatch = row.querySelector('[data-color-swatch]');
+    if (!swatch) return;
+    swatch.classList.toggle('is-empty', !hex);
+    swatch.style.setProperty('--swatch-color', hex || '#ffffff');
+    const label = swatchLabel(color);
+    swatch.title = label;
+    swatch.setAttribute('aria-label', label);
+    row.querySelector('[data-color-hex]').value = hex;
+    row.querySelector('[data-pantone-code]').value = color.pantone_code || '';
+    row.querySelector('[data-color-name]').value = color.color_name || color.color || '';
 }
 
 function collectBomLines() {
@@ -498,18 +522,20 @@ async function loadMaterialSuggestions(keyword) {
         const options = result.data || [];
         options.forEach(row => catalogRows.set(row.item_code.toUpperCase(), row));
         document.getElementById('materialOptions').innerHTML = options.map(row =>
-            `<option value="${esc(row.item_code)}">${esc(row.item_name)} · Kệ ${esc(row.shelf_code || '-')}</option>`
+            `<option value="${esc(row.item_code)}">${esc(row.item_name)} · ${esc(row.color_name || row.color || 'Chưa có màu')} · Kệ ${esc(row.shelf_code || '-')}</option>`
         ).join('');
+        document.querySelectorAll('[data-material-code]').forEach(input => applyMaterial(input, false));
     } catch (_) {}
 }
-function applyMaterial(input) {
+function applyMaterial(input, refresh = true) {
     const row = catalogRows.get(input.value.trim().toUpperCase());
     if (!row) return;
     const wrapper = input.closest('[data-bom-row]');
     wrapper.querySelector('[data-bom="material_name"]').value = row.item_name || row.color || '';
     wrapper.querySelector('[data-bom="unit"]').value = 'gam';
     if (row.shelf_code) wrapper.querySelector('[data-bom="shelf_hint"]').value = row.shelf_code;
-    renderPreview();
+    setBomSwatch(wrapper, row);
+    if (refresh) renderPreview();
 }
 
 function metadataPayload() {
@@ -621,7 +647,14 @@ function renderPreview(skipTotalRow = null) {
                 ${previewOp('Dòng +10% Hi-Tex',data.metadata.row_count_plus_10_large)}
             </div>
             <div><table><thead><tr><th>Loại</th><th>Mã sợi</th><th>Kệ</th><th>Tên màu</th><th>TL/PCS</th><th>T.L(g)</th></tr></thead><tbody>
-                ${data.lines.map(line => `<tr><td>${esc(line.type)}</td><td><b>${esc(line.material_code)}</b></td><td>${esc(line.shelf_hint)}</td><td>${esc(line.material_name)}</td><td class="text-end">${num(line.consumption_per_unit)}</td><td class="text-end">${num(line.total_grams)}</td></tr>`).join('') || '<tr><td colspan="6" class="text-center">Chưa có định mức</td></tr>'}
+                ${data.lines.map((line,index) => {
+                    const sourceRow = document.querySelectorAll('[data-bom-row]')[index];
+                    const colorHex = normalizeHex(sourceRow?.querySelector('[data-color-hex]')?.value);
+                    const pantone = sourceRow?.querySelector('[data-pantone-code]')?.value || '';
+                    const colorName = sourceRow?.querySelector('[data-color-name]')?.value || '';
+                    const label = [colorName,pantone].filter(Boolean).join(' · ') || 'Chưa nhận diện màu';
+                    return `<tr><td>${esc(line.type)}</td><td><b>${esc(line.material_code)}</b></td><td>${esc(line.shelf_hint)}</td><td><span class="designer-preview-swatch${colorHex ? '' : ' is-empty'}" style="${colorHex ? `--swatch-color:${colorHex}` : ''}" title="${esc(label)}"></span>${esc(line.material_name)}</td><td class="text-end">${num(line.consumption_per_unit)}</td><td class="text-end">${num(line.total_grams)}</td></tr>`;
+                }).join('') || '<tr><td colspan="6" class="text-center">Chưa có định mức</td></tr>'}
             </tbody></table></div>
         </div>
         <div class="designer-sheet-image">${imageControl}</div>

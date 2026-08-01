@@ -10,6 +10,7 @@ use App\Models\InternalWeavingItem;
 use App\Models\InternalWeavingOrder;
 use App\Models\InventoryPackage;
 use App\Services\InternalUnitConverter;
+use App\Services\PantoneColorMatcher;
 use App\Services\WeavingExcelBatchExporter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -869,16 +870,25 @@ class InternalWeavingController extends Controller
             ->orderByRaw('CASE WHEN UPPER(item_code) = ? THEN 0 WHEN UPPER(item_code) LIKE ? THEN 1 ELSE 2 END', [$keyword, $keyword . '%'])
             ->orderBy('item_code')
             ->limit(20)
-            ->get(['item_code', 'item_name', 'unit', 'shelf_code', 'color']);
+            ->get(['item_code', 'item_name', 'unit', 'shelf_code', 'color', 'logo_color', 'size', 'side', 'raw_data']);
+        $colorMatcher = app(PantoneColorMatcher::class);
 
         return response()->json([
-            'data' => $rows->map(fn ($row) => [
-                'item_code' => trim((string) $row->item_code),
-                'item_name' => trim((string) $row->item_name),
-                'unit' => trim((string) $row->unit),
-                'shelf_code' => trim((string) $row->shelf_code),
-                'color' => trim((string) $row->color),
-            ])->values(),
+            'data' => $rows->map(function ($row) use ($colorMatcher) {
+                $match = $colorMatcher->matchCatalog($row);
+
+                return [
+                    'item_code' => trim((string) $row->item_code),
+                    'item_name' => trim((string) $row->item_name),
+                    'unit' => trim((string) $row->unit),
+                    'shelf_code' => trim((string) $row->shelf_code),
+                    'color' => trim((string) $row->color),
+                    'color_hex' => trim((string) ($match['hex'] ?? '')),
+                    'color_name' => trim((string) ($match['name'] ?? '')),
+                    'pantone_code' => trim((string) ($match['pantone'] ?? '')),
+                    'color_source' => trim((string) ($match['source'] ?? '')),
+                ];
+            })->values(),
         ]);
     }
 
@@ -993,14 +1003,21 @@ class InternalWeavingController extends Controller
             ->get()
             ->keyBy(fn ($row) => $this->cleanCode($row->item_code));
         $unitConverter = app(InternalUnitConverter::class);
+        $colorMatcher = app(PantoneColorMatcher::class);
 
-        $lines = $bomRows->map(function (InternalWeavingBom $bom) use ($order, $stock, $catalog, $unitConverter) {
+        $lines = $bomRows->map(function (InternalWeavingBom $bom) use ($order, $stock, $catalog, $unitConverter, $colorMatcher) {
             $code = $this->cleanCode($bom->material_code);
             $bomMetadata = json_decode((string) ($bom->metadata_json ?? ''), true) ?: [];
             $requiredRaw = round((float) $order->order_quantity * (float) $bom->consumption_per_unit * (1 + ((float) $bom->waste_percent / 100)), 3);
             $stockRow = $stock[$code] ?? ['quantity' => 0, 'locations' => collect()];
             $locations = collect($stockRow['locations'])->values();
             $catalogRow = $catalog[$code] ?? null;
+            $colorMatch = $colorMatcher->matchValues([
+                $code,
+                $catalogRow->color ?? '',
+                $catalogRow->item_name ?? '',
+                $bom->material_name ?? '',
+            ], $catalogRow);
             $base = $unitConverter->toBase($code, $requiredRaw, $bom->unit ?? '', $catalogRow->unit ?? ($bom->unit ?? ''));
             $required = round((float) $base['quantity'], 3);
             $stockQuantity = (float) $stockRow['quantity'];
@@ -1026,6 +1043,11 @@ class InternalWeavingController extends Controller
                 'catalog_name' => $catalogRow->item_name ?? '',
                 'catalog_unit' => $catalogRow->unit ?? '',
                 'catalog_shelf_code' => $catalogRow->shelf_code ?? '',
+                'catalog_color' => $catalogRow->color ?? '',
+                'color_hex' => trim((string) ($colorMatch['hex'] ?? '')),
+                'color_name' => trim((string) ($colorMatch['name'] ?? '')),
+                'pantone_code' => trim((string) ($colorMatch['pantone'] ?? '')),
+                'color_source' => trim((string) ($colorMatch['source'] ?? '')),
                 'type' => $bomMetadata['type'] ?? '',
                 'shelf_hint' => $bomMetadata['shelf_hint'] ?? '',
                 'total_grams' => (float) ($bomMetadata['total_grams'] ?? 0),
@@ -1209,11 +1231,18 @@ class InternalWeavingController extends Controller
         $stock = $this->stockByMaterial($materialCodes);
         $catalog = $this->catalogByCodes($materialCodes);
         $unitConverter = app(InternalUnitConverter::class);
+        $colorMatcher = app(PantoneColorMatcher::class);
 
-        $sourceItems = collect($sourceItemBreakdown)->map(function ($sourceItem) use ($catalog, $unitConverter) {
-            $materials = collect($sourceItem['materials'])->map(function ($material) use ($catalog, $unitConverter) {
+        $sourceItems = collect($sourceItemBreakdown)->map(function ($sourceItem) use ($catalog, $unitConverter, $colorMatcher) {
+            $materials = collect($sourceItem['materials'])->map(function ($material) use ($catalog, $unitConverter, $colorMatcher) {
                 $code = $this->cleanCode($material['material_code'] ?? '');
                 $catalogRow = $catalog[$code] ?? null;
+                $colorMatch = $colorMatcher->matchValues([
+                    $code,
+                    $catalogRow->color ?? '',
+                    $catalogRow->item_name ?? '',
+                    $material['material_name'] ?? '',
+                ], $catalogRow);
                 $base = $unitConverter->toBase(
                     $code,
                     (float) ($material['required_quantity'] ?? 0),
@@ -1232,7 +1261,10 @@ class InternalWeavingController extends Controller
                     'catalog_exists' => (bool) $catalogRow,
                     'catalog_shelf_code' => $catalogRow->shelf_code ?? '',
                     'catalog_color' => $catalogRow->color ?? '',
-                    'pantone_hex' => $catalogRow->pantone_hex ?? '',
+                    'color_hex' => trim((string) ($colorMatch['hex'] ?? '')),
+                    'color_name' => trim((string) ($colorMatch['name'] ?? '')),
+                    'pantone_code' => trim((string) ($colorMatch['pantone'] ?? '')),
+                    'color_source' => trim((string) ($colorMatch['source'] ?? '')),
                 ]);
             })->values();
 
@@ -1243,9 +1275,15 @@ class InternalWeavingController extends Controller
             return $sourceItem;
         })->values();
 
-        $lines = collect($materialRequirements)->map(function ($row) use ($stock, $catalog, $unitConverter) {
+        $lines = collect($materialRequirements)->map(function ($row) use ($stock, $catalog, $unitConverter, $colorMatcher) {
             $code = $row['material_code'];
             $catalogRow = $catalog[$code] ?? null;
+            $colorMatch = $colorMatcher->matchValues([
+                $code,
+                $catalogRow->color ?? '',
+                $catalogRow->item_name ?? '',
+                $row['material_name'] ?? '',
+            ], $catalogRow);
             $stockRow = $stock[$code] ?? ['quantity' => 0, 'locations' => collect()];
             $stockQuantity = (float) $stockRow['quantity'];
             $locations = collect($stockRow['locations'])->values();
@@ -1280,6 +1318,11 @@ class InternalWeavingController extends Controller
                 'catalog_name' => $catalogRow->item_name ?? '',
                 'catalog_unit' => $catalogRow->unit ?? '',
                 'catalog_shelf_code' => $catalogRow->shelf_code ?? '',
+                'catalog_color' => $catalogRow->color ?? '',
+                'color_hex' => trim((string) ($colorMatch['hex'] ?? '')),
+                'color_name' => trim((string) ($colorMatch['name'] ?? '')),
+                'pantone_code' => trim((string) ($colorMatch['pantone'] ?? '')),
+                'color_source' => trim((string) ($colorMatch['source'] ?? '')),
                 'required_quantity' => $required,
                 'stock_quantity' => $stockQuantity,
                 'shortage_quantity' => max(0, $required - $stockQuantity),

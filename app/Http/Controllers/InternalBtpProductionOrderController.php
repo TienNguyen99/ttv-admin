@@ -392,6 +392,7 @@ class InternalBtpProductionOrderController extends Controller
             'department' => 'nullable|string|max:150',
             'purpose' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
+            'allow_negative' => 'nullable|boolean',
         ]);
         $data = $this->normalizeDateFields($data, ['issue_date']);
 
@@ -462,6 +463,7 @@ class InternalBtpProductionOrderController extends Controller
             'production_order' => '',
             'purpose' => trim($data['purpose'] ?? '') ?: 'Xuat BTP di san xuat',
             'note' => trim($data['note'] ?? '') ?: ('Xuat tu ' . $orders->count() . ' lenh BTP'),
+            'allow_negative' => !empty($data['allow_negative']),
             'lines' => $lines->all(),
         ];
 

@@ -184,6 +184,11 @@
             color: var(--quick-blue);
         }
 
+        .quick-btn:disabled {
+            cursor: wait;
+            opacity: 0.65;
+        }
+
         .quick-btn-primary {
             min-width: 160px;
             border-color: var(--quick-blue);
@@ -452,6 +457,49 @@
 
         .quick-status.is-error { color: #b91c1c; }
         .quick-status.is-ok { color: var(--quick-good); }
+        .operation-loader {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            background: rgba(229, 241, 255, 0.68);
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 180ms ease, visibility 180ms ease;
+        }
+        .operation-loader.is-visible {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+        .operation-loader__card {
+            display: grid;
+            grid-template-columns: 42px minmax(0, 1fr);
+            gap: 3px 12px;
+            width: min(390px, 100%);
+            padding: 18px;
+            border: 1px solid #bfdbfe;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 24px 60px rgba(15, 47, 99, 0.2);
+        }
+        .operation-loader__spinner {
+            grid-row: 1 / 3;
+            width: 38px;
+            height: 38px;
+            align-self: center;
+            border: 4px solid #dbeafe;
+            border-top-color: var(--quick-blue);
+            border-radius: 50%;
+            animation: operation-spin 760ms linear infinite;
+        }
+        .operation-loader__card strong { color: #0f2f63; font-size: 15px; }
+        .operation-loader__card small { color: var(--quick-muted); font-size: 12px; }
+        @keyframes operation-spin { to { transform: rotate(360deg); } }
         .variant-dialog { width:min(920px,calc(100% - 24px)); max-height:min(760px,calc(100vh - 32px)); padding:0; border:0; border-radius:16px; background:#fff; box-shadow:0 24px 70px rgba(15,47,99,.24); }
         .variant-dialog::backdrop { background:rgba(15,23,42,.48); backdrop-filter:blur(2px); }
         .variant-dialog__head,.variant-dialog__foot { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; }
@@ -486,6 +534,10 @@
             .quick-export-panel { grid-template-columns: 1fr; padding: 12px; }
             .quick-panel-header { align-items: flex-start; flex-direction: column; }
             .quick-toolbar { justify-content: flex-start; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .operation-loader,
+            .operation-loader__spinner { transition: none; animation: none; }
         }
     </style>
 </head>
@@ -540,6 +592,7 @@
                         <span class="quick-pill">Dòng <strong id="lineCount">0</strong></span>
                         <span class="quick-pill">SL <strong id="totalQty">0</strong></span>
                         <span class="quick-pill">CHUA-XEP</span>
+                        <button id="addRowBtn" class="quick-btn" type="button"><i data-lucide="plus"></i>Thêm dòng</button>
                         <button id="clearFormBtn" class="quick-btn" type="button"><i data-lucide="rotate-ccw"></i>Mới</button>
                     </div>
                 </div>
@@ -623,7 +676,14 @@
     </dialog>
 
     <datalist id="internalCatalogOptions"></datalist>
-    <datalist id="productionOrderOptions"></datalist>
+
+    <div id="operationLoader" class="operation-loader" role="status" aria-live="polite" aria-hidden="true">
+        <div class="operation-loader__card">
+            <span class="operation-loader__spinner" aria-hidden="true"></span>
+            <strong id="operationLoaderTitle">Đang xử lý phiếu</strong>
+            <small id="operationLoaderDetail">Vui lòng chờ, không đóng trang.</small>
+        </div>
+    </div>
 
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
@@ -635,8 +695,8 @@
         let catalogSearchCache = new Map();
         let catalogExactCache = new Map();
         let latestCatalogSearchKey = '';
-        let productionOrderOptions = [];
-        let productionOrderSearchTimer = null;
+        const productionOrderSearchTimers = new WeakMap();
+        const productionOrderSearchRequests = new WeakMap();
         let pendingVariantOrder = '';
         let pendingVariantPlans = [];
         let pendingVariantSizes = [];
@@ -645,6 +705,15 @@
         let pendingVariantNeedsLink = false;
         let variantCheckPromise = Promise.resolve();
         let variantCheckError = null;
+        let receiptRequestPending = false;
+
+        function setOperationLoading(loading, title = 'Đang xử lý phiếu', detail = 'Vui lòng chờ, không đóng trang.') {
+            const loader = document.getElementById('operationLoader');
+            document.getElementById('operationLoaderTitle').textContent = title;
+            document.getElementById('operationLoaderDetail').textContent = detail;
+            loader.classList.toggle('is-visible', loading);
+            loader.setAttribute('aria-hidden', loading ? 'false' : 'true');
+        }
 
         function localIsoDate() {
             const date = new Date();
@@ -667,16 +736,6 @@
 
         function selectedReceiptDate() {
             return document.getElementById('receiptDate').value || localIsoDate();
-        }
-
-        function openOrderQuery(keyword, limit) {
-            const params = new URLSearchParams({
-                keyword,
-                unfinished: '1',
-                order_date_to: selectedReceiptDate(),
-                limit: String(limit),
-            });
-            return `/api/lenh-san-xuat-sheet?${params.toString()}`;
         }
 
         function allOrderQuery(keyword, limit) {
@@ -709,7 +768,7 @@
             return `<tr>
                 <td class="quick-row-index">${index + 1}</td>
                 <td class="quick-order">
-                    <input class="form-control production-order" list="productionOrderOptions" autocomplete="off" placeholder="G&#245; l&#7879;nh SX ho&#7863;c m&#227; h&#224;ng">
+                    <input class="form-control production-order" autocomplete="off" placeholder="G&#245; l&#7879;nh SX ho&#7863;c m&#227; h&#224;ng">
                     <select class="form-select order-suggestions d-none mt-1" aria-label="L&#7879;nh s&#7843;n xu&#7845;t ch&#432;a ho&#224;n t&#7845;t"></select>
                 </td>
                 <td class="quick-code">
@@ -732,7 +791,18 @@
 
         function bindQuickRow(row) {
             row.querySelector('.production-order').addEventListener('input', event => searchProductionOrders(event.target));
-            row.querySelector('.production-order').addEventListener('change', event => applyProductionOrder(event.target));
+            row.querySelector('.production-order').addEventListener('focus', event => {
+                if (event.target.value.trim().length >= 2) searchProductionOrders(event.target, true);
+            });
+            row.querySelector('.production-order').addEventListener('change', event => {
+                const input = event.target;
+                const value = input.value.trim().toUpperCase();
+                const select = input.closest('tr').querySelector('.order-suggestions');
+                const hasExactSuggestion = Array.from(select.options).some(option => {
+                    return option.value && option.value.trim().toUpperCase() === value;
+                });
+                if (hasExactSuggestion) applyProductionOrder(input);
+            });
             row.querySelector('.order-suggestions').addEventListener('change', event => {
                 const select = event.target;
                 if (!select.value) return;
@@ -765,6 +835,13 @@
             Array.from(body.querySelectorAll('tr')).slice(start).forEach(bindQuickRow);
         }
 
+        function addQuickRow() {
+            appendQuickRows(1);
+            const row = document.querySelector('#quickRows tr:last-child');
+            row?.scrollIntoView({behavior: 'smooth', block: 'center'});
+            window.setTimeout(() => row?.querySelector('.production-order')?.focus(), 180);
+        }
+
         function focusNext(input) {
             if (input.classList.contains('production-order') && applyProductionOrder(input)) return;
             if (input.classList.contains('quantity')) {
@@ -781,91 +858,162 @@
             if (index >= 0 && inputs[index + 1]) inputs[index + 1].focus();
         }
 
+        function productionOrderMatchesItemCode(order, itemCode) {
+            const code = String(itemCode || '').trim().toUpperCase();
+            if (!code) return false;
+            return [order.item_code, order.source_item_code, order.standard_item_code]
+                .map(value => String(value || '').trim().toUpperCase())
+                .filter(Boolean)
+                .some(candidate => {
+                    return candidate === code
+                        || candidate.startsWith(`${code}-`)
+                        || candidate.startsWith(`${code}_`)
+                        || code.startsWith(`${candidate}-`)
+                        || code.startsWith(`${candidate}_`);
+                });
+        }
+
         function loadOpenOrdersForItem(input) {
             const code = String(input.value || '').trim().toUpperCase();
             const select = input.closest('tr').querySelector('.order-suggestions');
             if (!code || !select) return Promise.resolve(0);
 
-            return fetch(openOrderQuery(code, 100))
-                .then(response => jsonOrError(response, 'Khong tai duoc lenh chua hoan tat'))
+            select.disabled = true;
+            select.innerHTML = '<option value="">Đang tìm lệnh liên quan...</option>';
+            select.classList.remove('d-none');
+
+            return fetch(allOrderQuery(code, 100))
+                .then(response => jsonOrError(response, 'Không tải được lệnh chưa hoàn tất'))
                 .then(result => {
                     const byOrder = new Map();
                     (result.data || []).forEach(order => {
-                        if (String(order.item_code || '').trim().toUpperCase() !== code) return;
+                        if (!productionOrderMatchesItemCode(order, code)) return;
+                        if (order.has_planned_quantity !== false && Number(order.remaining_quantity || 0) <= 0) return;
                         const orderCode = String(order.production_order || '').trim();
                         if (orderCode && !byOrder.has(orderCode)) byOrder.set(orderCode, order);
                     });
                     const orders = Array.from(byOrder.values());
                     if (!orders.length) {
-                        select.innerHTML = '';
-                        select.classList.add('d-none');
+                        select.disabled = true;
+                        select.innerHTML = '<option value="">Không có lệnh chưa hoàn tất cho mã này</option>';
+                        select.classList.remove('d-none');
                         return 0;
                     }
+                    select.disabled = false;
                     select.innerHTML = `<option value="">${orders.length} l&#7879;nh ch&#432;a ho&#224;n t&#7845;t - ch&#7885;n l&#7879;nh</option>` + orders.map(order => {
                         const orderDate = order.received_date ? `Nh\u1eadn l\u1ec7nh ${String(order.received_date).split('-').reverse().join('/')}` : '';
-                        const remaining = `C\u00f2n ${fmt(order.remaining_quantity || 0)}`;
+                        const remaining = order.has_planned_quantity === false
+                            ? 'Ch\u01b0a c\u00f3 SL k\u1ebf ho\u1ea1ch'
+                            : `C\u00f2n ${fmt(order.remaining_quantity || 0)}`;
                         const detail = [order.production_order, remaining, orderDate, order.customer, order.purchase_order].filter(Boolean).join(' - ');
                         return `<option value="${esc(order.production_order || '')}">${esc(detail)}</option>`;
                     }).join('');
                     select.classList.remove('d-none');
                     return orders.length;
                 })
-                .catch(() => {
-                    select.innerHTML = '';
-                    select.classList.add('d-none');
+                .catch(error => {
+                    select.disabled = true;
+                    select.innerHTML = '<option value="">Không tải được lệnh liên quan</option>';
+                    select.classList.remove('d-none');
+                    setStatus(error.message, 'error');
                     return 0;
                 });
         }
-        function searchProductionOrders(input) {
+        function searchProductionOrders(input, immediate = false) {
             const keyword = input.value.trim();
+            const select = input.closest('tr')?.querySelector('.order-suggestions');
             if (input.dataset.appliedOrder !== keyword.toUpperCase()) {
                 delete input.dataset.appliedOrder;
             }
-            clearTimeout(productionOrderSearchTimer);
-            if (keyword.length < 2) return;
 
-            productionOrderSearchTimer = setTimeout(() => {
-                fetch(allOrderQuery(keyword, 20))
+            clearTimeout(productionOrderSearchTimers.get(input));
+            productionOrderSearchRequests.get(input)?.abort();
+            if (keyword.length < 2) {
+                input.dataset.orderSearchKey = '';
+                if (select) {
+                    select.innerHTML = '';
+                    select.classList.add('d-none');
+                }
+                return;
+            }
+
+            const requestKey = keyword.toUpperCase();
+            input.dataset.orderSearchKey = requestKey;
+            if (select) {
+                select.disabled = true;
+                select.innerHTML = '<option value="">Đang tìm lệnh sản xuất...</option>';
+                select.classList.remove('d-none');
+            }
+
+            const timer = setTimeout(() => {
+                const controller = new AbortController();
+                productionOrderSearchRequests.set(input, controller);
+                fetch(allOrderQuery(keyword, 30), {signal: controller.signal})
                     .then(response => jsonOrError(response, 'Không tải được lệnh sản xuất'))
                     .then(result => {
+                        if (input.dataset.orderSearchKey !== requestKey || !select) return;
                         const uniqueOrders = new Map();
                         (result.data || []).forEach(order => {
                             const code = String(order.production_order || '').trim();
                             if (!code || uniqueOrders.has(code)) return;
                             uniqueOrders.set(code, {
                                 ...order,
-                                suggestion_state: Number(order.remaining_quantity || 0) > 0
+                                suggestion_state: order.has_planned_quantity === false || Number(order.remaining_quantity || 0) > 0
                                     ? 'unfinished'
                                     : 'completed',
                             });
                         });
-                        const upperKeyword = keyword.toUpperCase();
-                        productionOrderOptions = Array.from(uniqueOrders.values()).sort((left, right) => {
-                            const leftMatchesOrder = String(left.production_order || '').toUpperCase().includes(upperKeyword) ? 0 : 1;
-                            const rightMatchesOrder = String(right.production_order || '').toUpperCase().includes(upperKeyword) ? 0 : 1;
+                        const options = Array.from(uniqueOrders.values()).sort((left, right) => {
+                            const leftMatchesOrder = String(left.production_order || '').toUpperCase().includes(requestKey) ? 0 : 1;
+                            const rightMatchesOrder = String(right.production_order || '').toUpperCase().includes(requestKey) ? 0 : 1;
                             if (leftMatchesOrder !== rightMatchesOrder) return leftMatchesOrder - rightMatchesOrder;
-                            return left.suggestion_state === right.suggestion_state
-                                ? 0
-                                : (left.suggestion_state === 'unfinished' ? -1 : 1);
+                            if (left.suggestion_state !== right.suggestion_state) {
+                                return left.suggestion_state === 'unfinished' ? -1 : 1;
+                            }
+                            return Number(right.remaining_quantity || 0) - Number(left.remaining_quantity || 0);
                         });
-                        document.getElementById('productionOrderOptions').innerHTML = productionOrderOptions.map(order => {
-                            const progressLabel = order.suggestion_state === 'completed'
-                                ? 'Đã nhập đủ/dư - chọn để kiểm tra'
-                                : `C\u00f2n ${fmt(order.remaining_quantity || 0)}`;
+
+                        if (!options.length) {
+                            select.disabled = true;
+                            select.innerHTML = `<option value="">Không tìm thấy lệnh trước ngày ${esc(selectedReceiptDate().split('-').reverse().join('/'))}</option>`;
+                            select.classList.remove('d-none');
+                            return;
+                        }
+
+                        select.disabled = false;
+                        select.innerHTML = `<option value="">Chọn 1 trong ${options.length} lệnh tìm thấy</option>` + options.map(order => {
+                            const progressLabel = order.has_planned_quantity === false
+                                ? 'Chưa có SL kế hoạch'
+                                : order.suggestion_state === 'completed'
+                                    ? 'Đã nhập đủ/dư'
+                                    : `Còn ${fmt(order.remaining_quantity || 0)}`;
                             const label = [
+                                order.production_order,
                                 progressLabel,
-                                order.received_date ? `Nh\u1eadn l\u1ec7nh ${String(order.received_date).split('-').reverse().join('/')}` : '',
+                                order.received_date ? `Nhận lệnh ${String(order.received_date).split('-').reverse().join('/')}` : '',
                                 order.customer,
                                 order.item_code,
                                 order.size ? `Size ${order.size}` : '',
-                                order.color ? `Màu ${order.color}` : '',
-                                order.description
+                                order.color ? `Màu ${order.color}` : ''
                             ].filter(Boolean).join(' - ');
-                            return `<option value="${esc(order.production_order || '')}" label="${esc(label)}"></option>`;
+                            return `<option value="${esc(order.production_order || '')}">${esc(label)}</option>`;
                         }).join('');
+                        select.classList.remove('d-none');
                     })
-                    .catch(() => {});
-            }, 180);
+                    .catch(error => {
+                        if (error.name === 'AbortError' || input.dataset.orderSearchKey !== requestKey || !select) return;
+                        select.disabled = true;
+                        select.innerHTML = '<option value="">Không tải được gợi ý lệnh</option>';
+                        select.classList.remove('d-none');
+                        setStatus(error.message, 'error');
+                    })
+                    .finally(() => {
+                        if (productionOrderSearchRequests.get(input) === controller) {
+                            productionOrderSearchRequests.delete(input);
+                        }
+                    });
+            }, immediate ? 0 : 180);
+            productionOrderSearchTimers.set(input, timer);
         }
 
         function applyProductionOrder(input) {
@@ -930,6 +1078,7 @@
             orderInput.dataset.productionOrderId = order.id || '';
             orderInput.dataset.purchaseOrder = order.purchase_order || '';
             orderInput.dataset.customer = order.customer || '';
+            orderInput.dataset.sourceItemCode = order.item_code || '';
             row.querySelector('.internal-code').value = order.item_code || '';
             row.querySelector('.item-name').value = order.description || order.specification || '';
             row.querySelector('.item-size').value = order.size || '';
@@ -1341,7 +1490,7 @@
                 const state = input.closest('tr').querySelector('.row-state');
                 if (!item) {
                     state.className = 'row-state is-warn';
-                    state.textContent = 'Chưa thấy trong danh mục';
+                    state.textContent = 'Mã mới - sẽ append khi lưu';
                     return;
                 }
                 applyCatalogItem(input, item);
@@ -1501,6 +1650,64 @@
             return [...new Set(invalidCodes)];
         }
 
+        async function ensureMissingCatalogCodes(codes) {
+            const missingKeys = new Set((codes || []).map(catalogKey).filter(Boolean));
+            const processed = new Set();
+            const rows = Array.from(document.querySelectorAll('#quickRows tr'));
+            let appendedCount = 0;
+
+            for (const row of rows) {
+                const codeInput = row.querySelector('.internal-code');
+                const originalCode = codeInput.value.trim();
+                const key = catalogKey(originalCode);
+                if (!missingKeys.has(key) || processed.has(key) || num(row.querySelector('.quantity').value) <= 0) {
+                    continue;
+                }
+                processed.add(key);
+
+                const matchingRows = rows.filter(candidate => {
+                    return catalogKey(candidate.querySelector('.internal-code').value) === key
+                        && num(candidate.querySelector('.quantity').value) > 0;
+                });
+                const orderInput = row.querySelector('.production-order');
+                const itemName = row.querySelector('.item-name').value.trim() || originalCode;
+                const unit = row.querySelector('.item-unit').value.trim() || 'Cái';
+                const size = row.querySelector('.item-size').value.trim();
+                const color = row.querySelector('.item-color').value.trim();
+                const response = await fetch('/api/danh-muc-noi-bo/tao-tu-lenh', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                    body: JSON.stringify({
+                        item_code: originalCode,
+                        source_item_code: orderInput.dataset.sourceItemCode || originalCode,
+                        production_order_line_id: Number(orderInput.dataset.productionOrderId || 0) || null,
+                        item_name: itemName,
+                        unit,
+                        size,
+                        color,
+                        item_group: selectedReceiptKind === 'semi_finished' ? 'BTP' : 'TP',
+                    })
+                });
+                const result = await jsonOrError(response, `Không thêm được mã ${originalCode} vào DANH MỤC`);
+                const savedCode = result.data?.item_code || originalCode;
+                const catalogItem = {
+                    code: savedCode,
+                    value: savedCode,
+                    name: result.data?.item_name || itemName,
+                    unit,
+                    size,
+                    color,
+                    image_url: result.data?.image_url || '',
+                };
+                rememberCatalogItems([catalogItem]);
+                matchingRows.forEach(target => applyCatalogItem(target.querySelector('.internal-code'), catalogItem));
+                if (result.data?.appended_to_sheet) appendedCount += 1;
+            }
+
+            renderInternalCatalogOptions();
+            return {createdCount: processed.size, appendedCount};
+        }
+
         async function warnDuplicates(lines) {
             const response = await fetch('/api/kiem-ton-kho/phieu-nhap-tp/kiem-tra-trung', {
                 method: 'POST',
@@ -1513,7 +1720,18 @@
             const result = await response.json().catch(() => ({}));
             const first = (result.duplicates || [])[0];
             if (!first) return true;
-            return confirm(`Cảnh báo trùng: ${first.internal_item_code}, SL ${fmt(first.quantity)} đã có trong phiếu cũ.\n\nVẫn lưu phiếu này?`);
+            const variant = [
+                first.production_order ? `Lệnh ${first.production_order}` : '',
+                first.size ? `size ${first.size}` : '',
+                first.color ? `màu ${first.color}` : '',
+                first.side ? `mặt ${first.side}` : '',
+            ].filter(Boolean).join(' · ');
+            const receipts = (first.matches || []).map(item => item.receipt_code).filter(Boolean).join(', ');
+            return confirm(
+                `CẢNH BÁO NGHI NHẬP TRÙNG\n\n${first.internal_item_code}`
+                + `${variant ? ` · ${variant}` : ''}\nSL ${fmt(first.quantity)}`
+                + ` đã có trong ${receipts || 'phiếu nhập cũ'} cùng ngày.\n\nVẫn lưu phiếu này?`
+            );
         }
 
         async function warnProductionOrderOverages(lines) {
@@ -1561,16 +1779,30 @@
             }
             setStatus('Đang kiểm tra mã danh mục...');
             const invalidCatalogCodes = await checkAllCatalog();
-            const lines = validLines();
+            let lines = validLines();
             updateSummary();
             if (!lines.length) {
                 setStatus('Cần ít nhất 1 dòng có mã nội bộ và số lượng lớn hơn 0.', 'error');
                 return;
             }
+            let catalogCreation = {createdCount:0, appendedCount:0};
             if (invalidCatalogCodes.length) {
-                setStatus(`Mã chưa có trong DANH MỤC: ${invalidCatalogCodes.join(', ')}. Chọn lại mã đúng trước khi lưu.`, 'error');
-                document.querySelector('#quickRows tr .row-state.is-warn')?.closest('tr')?.querySelector('.internal-code')?.focus();
-                return;
+                setStatus(`Đang thêm ${invalidCatalogCodes.length} mã mới vào DANH MỤC...`);
+                try {
+                    catalogCreation = await ensureMissingCatalogCodes(invalidCatalogCodes);
+                } catch (error) {
+                    setStatus(error.message, 'error');
+                    document.querySelector('#quickRows tr .row-state.is-warn')?.closest('tr')?.querySelector('.internal-code')?.focus();
+                    return;
+                }
+                const unresolvedCodes = await checkAllCatalog();
+                if (unresolvedCodes.length) {
+                    setStatus(`Chưa tạo được mã trong DANH MỤC: ${unresolvedCodes.join(', ')}. Phiếu chưa được lưu.`, 'error');
+                    return;
+                }
+                lines = validLines();
+                updateSummary();
+                setStatus(`Đã tạo ${catalogCreation.createdCount} mã danh mục; ${catalogCreation.appendedCount} mã được append vào Google Sheet.`);
             }
             if (!await warnDuplicates(lines)) {
                 setStatus('Đã hủy lưu vì phiếu có dòng nghi trùng.', 'error');
@@ -1601,6 +1833,16 @@
                 setStatus('Chưa lưu. Có thể bấm Chọn lại để đổi loại phiếu.');
                 return;
             }
+
+            if (receiptRequestPending) return;
+            receiptRequestPending = true;
+            const saveButton = document.getElementById('savePrintBtn');
+            saveButton.disabled = true;
+            setOperationLoading(
+                true,
+                exportImmediately ? 'Đang nhập và xuất thành phẩm' : (isBtp ? 'Đang tạo phiếu BTP' : 'Đang lưu phiếu nhập'),
+                exportImmediately ? 'Đang ghi tồn kho, trừ FIFO và tạo phiếu xuất.' : 'Đang ghi dữ liệu và chuẩn bị phiếu in.'
+            );
 
             const receiptPrintWindow = window.open('', '_blank');
             const issuePrintWindow = exportImmediately ? window.open('', '_blank') : null;
@@ -1653,6 +1895,11 @@
                     if (issuePrintWindow) issuePrintWindow.close();
                     setStatus(error.message, 'error');
                     alert(error.message);
+                })
+                .finally(() => {
+                    receiptRequestPending = false;
+                    saveButton.disabled = false;
+                    setOperationLoading(false);
                 });
         }
 
@@ -1755,6 +2002,7 @@
         document.getElementById('previewVariantSizesBtn').addEventListener('click', previewManualVariantSizes);
         document.getElementById('closeVariantDialog').addEventListener('click', () => document.getElementById('variantDialog').close());
         document.getElementById('cancelVariantDialog').addEventListener('click', () => document.getElementById('variantDialog').close());
+        document.getElementById('addRowBtn').addEventListener('click', addQuickRow);
         document.getElementById('clearFormBtn').addEventListener('click', () => resetRows(true));
         document.getElementById('exportImmediately').addEventListener('change', () => {
             if (!document.getElementById('issueDate').value) {
@@ -1773,7 +2021,6 @@
             if (issueDateInput.dataset.changedByUser !== '1') {
                 issueDateInput.value = document.getElementById('receiptDate').value;
             }
-            document.getElementById('productionOrderOptions').innerHTML = '';
             document.querySelectorAll('.order-suggestions').forEach(select => {
                 select.innerHTML = '';
                 select.classList.add('d-none');

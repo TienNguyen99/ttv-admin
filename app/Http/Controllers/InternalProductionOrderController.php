@@ -197,16 +197,50 @@ class InternalProductionOrderController extends Controller
     {
         $data = $request->validate([
             'standard_catalog_id' => 'nullable|integer',
+            'standard_item_code' => 'nullable|string|max:200',
+            'reset' => 'sometimes|boolean',
         ]);
+        $reset = (bool) ($data['reset'] ?? false);
         $catalogId = (int) ($data['standard_catalog_id'] ?? 0);
+        $standardItemCode = trim((string) ($data['standard_item_code'] ?? ''));
         $catalog = null;
-        if ($catalogId > 0) {
+
+        if (!$reset && $catalogId > 0) {
             $catalog = InternalItemCatalog::query()->where('is_active', true)->find($catalogId);
             if (!$catalog) {
                 return response()->json([
                     'message' => 'Dòng mã chuẩn không tồn tại trong Danh mục nội bộ.',
                 ], 422);
             }
+
+            if ($standardItemCode !== '' && mb_strtoupper(trim((string) $catalog->item_code)) !== mb_strtoupper($standardItemCode)) {
+                return response()->json([
+                    'message' => 'Mã đã gõ không khớp dòng Danh mục được chọn. Hãy chọn lại đúng dòng.',
+                ], 422);
+            }
+        } elseif (!$reset && $standardItemCode !== '') {
+            $catalogs = InternalItemCatalog::query()
+                ->where('is_active', true)
+                ->whereRaw('UPPER(TRIM(item_code)) = ?', [mb_strtoupper($standardItemCode)])
+                ->orderBy('source_row')
+                ->limit(2)
+                ->get();
+
+            if ($catalogs->count() === 1) {
+                $catalog = $catalogs->first();
+            } elseif ($catalogs->count() > 1) {
+                return response()->json([
+                    'message' => 'Có nhiều dòng Danh mục cùng mã. Hãy chọn đúng dòng theo tên, màu hoặc ảnh.',
+                ], 422);
+            } else {
+                return response()->json([
+                    'message' => 'Mã chuẩn chưa tồn tại trong Danh mục nội bộ.',
+                ], 422);
+            }
+        } elseif (!$reset) {
+            return response()->json([
+                'message' => 'Hãy nhập hoặc chọn một mã chuẩn. Dùng nút "Dùng mã gốc" nếu muốn bỏ liên kết.',
+            ], 422);
         }
 
         $order->standard_catalog_id = $catalog ? $catalog->id : null;
@@ -222,6 +256,7 @@ class InternalProductionOrderController extends Controller
                 'standard_item_code' => trim((string) $order->standard_item_code),
                 'standard_catalog_id' => $order->standard_catalog_id ? (int) $order->standard_catalog_id : null,
                 'item_code' => trim((string) ($order->standard_item_code ?: $order->item_code)),
+                'image_url' => $catalog ? trim((string) $catalog->image_url) : '',
             ],
         ]);
     }
@@ -244,7 +279,9 @@ class InternalProductionOrderController extends Controller
         if ($productionOrder === '' && $request->filled('order_date_to')) {
             $query->whereNotNull('received_date')
                 ->whereDate('received_date', '<=', $request->query('order_date_to'));
-            if ($firstFinishedReceiptDate) {
+            // Keep the default list within the managed period, while targeted
+            // item/order searches may still find older orders that need handling.
+            if ($firstFinishedReceiptDate && $keyword === '') {
                 $query->where(function ($eligibleOrderQuery) use ($firstFinishedReceiptDate) {
                     $eligibleOrderQuery->whereDate('received_date', '>=', $firstFinishedReceiptDate)
                         ->orWhereRaw("EXISTS (
@@ -260,14 +297,15 @@ class InternalProductionOrderController extends Controller
         }
 
         if ($request->boolean('unfinished') && $productionOrder === '') {
-            $query->whereRaw("COALESCE((
+            $receivedQuantitySql = "COALESCE((
                 SELECT SUM(receipt_line.quantity)
                 FROM internal_material_receipt_lines AS receipt_line
                 INNER JOIN internal_material_receipts AS receipt
                     ON receipt.id = receipt_line.receipt_id
                 WHERE receipt_line.production_order = internal_production_orders.production_order
                   AND receipt.source = 'Phieu nhap thanh pham'
-            ), 0) < COALESCE((
+            ), 0)";
+            $plannedQuantitySql = "COALESCE((
                 SELECT MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(planned_variant.raw_data, '$._internal_variant.source_quantity')) AS DECIMAL(18, 3)))
                 FROM internal_production_orders AS planned_variant
                 WHERE planned_variant.production_order = internal_production_orders.production_order
@@ -278,7 +316,10 @@ class InternalProductionOrderController extends Controller
                 FROM internal_production_orders AS planned_order
                 WHERE planned_order.production_order = internal_production_orders.production_order
                   AND planned_order.is_active = 1
-            ), 0)");
+            ), 0)";
+
+            // A blank synced quantity is unknown, not a completed production order.
+            $query->whereRaw("({$plannedQuantitySql} <= 0 OR {$receivedQuantitySql} < {$plannedQuantitySql})");
         }
 
         if ($productionOrder !== '') {
@@ -362,6 +403,7 @@ class InternalProductionOrderController extends Controller
                 $planned = (float) ($plannedByOrder[$row->production_order] ?? 0);
                 $received = (float) ($receivedByOrder[$row->production_order] ?? 0);
                 $row->setAttribute('planned_quantity', $planned);
+                $row->setAttribute('has_planned_quantity', $planned > 0);
                 $row->setAttribute('received_quantity', $received);
                 $row->setAttribute('remaining_quantity', max($planned - $received, 0));
             });

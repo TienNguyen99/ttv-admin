@@ -849,12 +849,20 @@
                 const code = String(line.internal_item_code || '').trim().toUpperCase();
                 const quantity = Number(line.quantity || 0);
                 if (!code || quantity <= 0) return;
-                const key = `${code}|${quantity.toFixed(3)}`;
+                const order = String(line.production_order || '').trim().toUpperCase();
+                const size = String(line.size || '').trim().toUpperCase();
+                const color = String(line.color || '').trim().toUpperCase();
+                const side = String(line.side || '').trim().toUpperCase();
+                const key = `${code}|${order}|${size}|${color}|${side}|${quantity.toFixed(3)}`;
                 if (seen.has(key)) {
                     duplicates.push({
                         line_index: index,
                         internal_item_code: code,
                         quantity,
+                        production_order: order,
+                        size,
+                        color,
+                        side,
                         first_line: seen.get(key),
                     });
                     return;
@@ -870,7 +878,9 @@
                 const first = localDuplicates[0];
                 showWarehouseToast(
                     'Cảnh báo trùng trong phiếu',
-                    `Dòng ${first.line_index + 1} giống dòng ${first.first_line + 1}: ${first.internal_item_code}, SL ${Number(first.quantity).toLocaleString('vi-VN')}.`
+                    `Dòng ${first.line_index + 1} giống dòng ${first.first_line + 1}: ${first.internal_item_code}`
+                    + `${first.size ? `, size ${first.size}` : ''}${first.color ? `, màu ${first.color}` : ''}`
+                    + `, SL ${Number(first.quantity).toLocaleString('vi-VN')}.`
                 );
             }
 

@@ -430,6 +430,7 @@ class InternalMaterialIssueController extends Controller
             'purpose' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
             'force_new_btp_orders' => 'nullable|boolean',
+            'allow_negative' => 'nullable|boolean',
             'lines' => 'required|array|min:1',
             'lines.*.ma_hh' => 'nullable|string|max:100',
             'lines.*.ten_hh' => 'nullable|string|max:1000',
@@ -461,11 +462,10 @@ class InternalMaterialIssueController extends Controller
         }
 
         $issueType = $data['issue_type'] ?? 'production';
-        if ($issueType === 'customer') {
-            $this->assertSufficientStockForCustomerIssue(
-                $data['lines'],
-                strtoupper(trim($data['warehouse_code'] ?? ''))
-            );
+        $warehouseCode = strtoupper(trim($data['warehouse_code'] ?? ''));
+        $stockWarnings = $this->stockShortages($data['lines'], $warehouseCode);
+        if (!empty($stockWarnings) && empty($data['allow_negative'])) {
+            return $this->negativeStockWarningResponse($stockWarnings);
         }
         $createdBtpOrderCodes = [];
 
@@ -525,7 +525,7 @@ class InternalMaterialIssueController extends Controller
                     $line,
                     strtoupper(trim($data['warehouse_code'] ?? '')),
                     $issueLine->id,
-                    $issueType !== 'customer'
+                    !empty($data['allow_negative']) || $issueType !== 'customer'
                 );
             }
 
@@ -553,6 +553,7 @@ class InternalMaterialIssueController extends Controller
                 : ($issueType === 'customer' ? 'Đã tạo phiếu xuất thành phẩm cho khách hàng.' : 'Đã tạo phiếu xuất kho nội bộ.'),
             'data' => $issue,
             'btp_order_codes' => $createdBtpOrderCodes,
+            'stock_warnings' => $stockWarnings,
             'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in'),
         ]);
     }
@@ -1446,6 +1447,7 @@ class InternalMaterialIssueController extends Controller
             'production_order' => 'nullable|string|max:1000',
             'purpose' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
+            'allow_negative' => 'nullable|boolean',
             'lines' => 'required|array|min:1',
             'lines.*.ma_hh' => 'nullable|string|max:100',
             'lines.*.ten_hh' => 'nullable|string|max:1000',
@@ -1474,20 +1476,24 @@ class InternalMaterialIssueController extends Controller
         }
 
         $issueType = $data['issue_type'] ?? $issue->issue_type ?? 'production';
+        $stockWarnings = [];
         $createdBtpOrderCodes = [];
 
-        $updatedIssue = DB::connection('internal')->transaction(function () use ($issue, $data, $issueType, &$createdBtpOrderCodes) {
+        $updatedIssue = DB::connection('internal')->transaction(function () use ($issue, $data, $issueType, &$createdBtpOrderCodes, &$stockWarnings) {
             $issue->load('lines.allocations');
             foreach ($issue->lines as $line) {
                 $this->restoreIssueLineStock($issue, $line);
                 $line->delete();
             }
 
-            if ($issueType === 'customer') {
-                $this->assertSufficientStockForCustomerIssue(
-                    $data['lines'],
-                    strtoupper(trim($data['warehouse_code'] ?? ''))
-                );
+            $stockWarnings = $this->stockShortages(
+                $data['lines'],
+                strtoupper(trim($data['warehouse_code'] ?? ''))
+            );
+            if (!empty($stockWarnings) && empty($data['allow_negative'])) {
+                throw ValidationException::withMessages([
+                    'stock' => array_column($stockWarnings, 'message'),
+                ]);
             }
 
             $createdBtpOrderCodes = $this->createMissingBtpOrdersForIssue($data, $issueType);
@@ -1528,7 +1534,12 @@ class InternalMaterialIssueController extends Controller
                     'note' => mb_substr(trim($line['note'] ?? ''), 0, 500),
                 ]);
 
-                $this->decreaseInternalStock($line, strtoupper(trim($data['warehouse_code'] ?? '')), $issueLine->id, $issueType !== 'customer');
+                $this->decreaseInternalStock(
+                    $line,
+                    strtoupper(trim($data['warehouse_code'] ?? '')),
+                    $issueLine->id,
+                    !empty($data['allow_negative']) || $issueType !== 'customer'
+                );
             }
 
             return $issue->fresh()->load('lines');
@@ -1547,6 +1558,7 @@ class InternalMaterialIssueController extends Controller
             'message' => 'Đã cập nhật phiếu xuất kho nội bộ.',
             'data' => $updatedIssue,
             'btp_order_codes' => $createdBtpOrderCodes,
+            'stock_warnings' => $stockWarnings,
             'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $updatedIssue->id . '/in'),
         ]);
     }
@@ -1751,8 +1763,18 @@ class InternalMaterialIssueController extends Controller
 
     private function assertSufficientStockForCustomerIssue(array $lines, string $warehouseCode): void
     {
+        $warnings = $this->stockShortages($lines, $warehouseCode);
+        if (!empty($warnings)) {
+            throw ValidationException::withMessages([
+                'stock' => array_column($warnings, 'message'),
+            ]);
+        }
+    }
+
+    private function stockShortages(array $lines, string $warehouseCode): array
+    {
         $reservedByPackage = [];
-        $errors = [];
+        $warnings = [];
 
         foreach (array_values($lines) as $index => $line) {
             $requiredQuantity = (float) ($line['base_quantity'] ?? 0);
@@ -1771,17 +1793,39 @@ class InternalMaterialIssueController extends Controller
             }
 
             if ($availableQuantity + 0.0001 < $requiredQuantity) {
-                $errors[] = sprintf(
-                    'Dòng %d (%s%s%s%s): cần %s, tồn khả dụng %s, thiếu %s.',
-                    $index + 1,
-                    trim((string) ($line['internal_item_code'] ?? ($line['ma_hh'] ?? ''))),
+                $code = trim((string) ($line['internal_item_code'] ?? ($line['ma_hh'] ?? '')));
+                $reason = $this->negativeStockReason($line, $warehouseCode, $availableQuantity);
+                $variant = implode('', array_filter([
                     trim((string) ($line['size'] ?? '')) !== '' ? ' / size ' . trim((string) $line['size']) : '',
                     trim((string) ($line['color'] ?? '')) !== '' ? ' / màu ' . trim((string) $line['color']) : '',
                     trim((string) ($line['side'] ?? '')) !== '' ? ' / mặt ' . trim((string) $line['side']) : '',
+                ]));
+                $shortage = $requiredQuantity - $availableQuantity;
+                $message = sprintf(
+                    'Dòng %d (%s%s): cần %s, tồn khả dụng %s, sẽ âm %s. %s',
+                    $index + 1,
+                    $code,
+                    $variant,
                     $this->formatStockQuantity($requiredQuantity),
                     $this->formatStockQuantity($availableQuantity),
-                    $this->formatStockQuantity($requiredQuantity - $availableQuantity)
+                    $this->formatStockQuantity($shortage),
+                    $reason['label']
                 );
+                $warnings[] = [
+                    'line_index' => $index,
+                    'internal_item_code' => $code,
+                    'size' => trim((string) ($line['size'] ?? '')),
+                    'color' => trim((string) ($line['color'] ?? '')),
+                    'side' => trim((string) ($line['side'] ?? '')),
+                    'location_code' => trim((string) ($line['location_code'] ?? '')),
+                    'required_quantity' => $requiredQuantity,
+                    'available_quantity' => $availableQuantity,
+                    'shortage_quantity' => $shortage,
+                    'projected_quantity' => $availableQuantity - $requiredQuantity,
+                    'reason' => $reason['code'],
+                    'reason_label' => $reason['label'],
+                    'message' => $message,
+                ];
                 continue;
             }
 
@@ -1802,11 +1846,102 @@ class InternalMaterialIssueController extends Controller
             }
         }
 
-        if (!empty($errors)) {
-            throw ValidationException::withMessages([
-                'stock' => $errors,
-            ]);
+        return $warnings;
+    }
+
+    private function negativeStockReason(array $line, string $warehouseCode, float $availableQuantity): array
+    {
+        $internalCode = trim((string) ($line['internal_item_code'] ?? ''));
+        $maHh = strtoupper(trim((string) ($line['ma_hh'] ?? '')));
+        $size = trim((string) ($line['size'] ?? ''));
+        $color = trim((string) ($line['color'] ?? ''));
+        $side = trim((string) ($line['side'] ?? ''));
+
+        $negativeQuery = InternalInventoryCount::query()->where('counted_quantity', '<', 0);
+        if ($internalCode !== '') {
+            $negativeQuery->where('internal_item_code', $internalCode);
+        } elseif ($maHh !== '') {
+            $negativeQuery->where('ma_sp', $maHh);
         }
+        foreach (['size' => $size, 'color' => $color, 'side' => $side] as $field => $value) {
+            if ($value !== '') {
+                $negativeQuery->where($field, $value);
+            }
+        }
+        if ($warehouseCode !== '') {
+            $negativeQuery->where('ma_ko', $warehouseCode);
+        }
+        if ($negativeQuery->exists()) {
+            return [
+                'code' => 'already_negative',
+                'label' => 'Mã/biến thể này đã âm từ phiếu xuất trước; cần bổ sung hoặc sửa phiếu nhập.',
+            ];
+        }
+
+        if ($availableQuantity > 0.0001) {
+            return [
+                'code' => 'partially_available',
+                'label' => 'Có một phần tồn đúng biến thể nhưng không đủ số lượng cần xuất.',
+            ];
+        }
+
+        $otherStockQuery = InventoryPackage::query()->where('quantity', '>', 0);
+        if ($internalCode !== '') {
+            $otherStockQuery->where('internal_item_code', $internalCode);
+        } elseif ($maHh !== '') {
+            $otherStockQuery->where('ma_sp', $maHh);
+        }
+        if ($warehouseCode !== '') {
+            $otherStockQuery->where('ma_ko', $warehouseCode);
+        }
+        if ($otherStockQuery->exists()) {
+            return [
+                'code' => 'variant_or_location_mismatch',
+                'label' => 'Có tồn cùng mã ở size, màu, mặt hoặc vị trí khác; kiểm tra lại biến thể trước khi xuất âm.',
+            ];
+        }
+
+        $receiptQuery = InternalMaterialReceiptLine::query()
+            ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'internal_material_receipt_lines.receipt_id')
+            ->where(function ($query) {
+                $query->whereNull('receipt.status')->orWhere('receipt.status', '<>', 'cancelled');
+            });
+        if ($internalCode !== '') {
+            $receiptQuery->whereRaw(
+                'UPPER(TRIM(internal_material_receipt_lines.internal_item_code)) = ?',
+                [mb_strtoupper($internalCode)]
+            );
+        } elseif ($maHh !== '') {
+            $receiptQuery->where('internal_material_receipt_lines.ma_hh', $maHh);
+        }
+        foreach (['size' => $size, 'color' => $color, 'side' => $side] as $field => $value) {
+            if ($value !== '') {
+                $receiptQuery->where("internal_material_receipt_lines.{$field}", $value);
+            }
+        }
+        if ($receiptQuery->exists()) {
+            return [
+                'code' => 'received_but_depleted',
+                'label' => 'Đã có phiếu nhập phù hợp nhưng lượng đó đã được xuất hết hoặc đang lệch liên kết FIFO.',
+            ];
+        }
+
+        return [
+            'code' => 'not_received',
+            'label' => 'Chưa thấy phiếu nhập phù hợp cho đúng mã/size/màu/mặt này.',
+        ];
+    }
+
+    private function negativeStockWarningResponse(array $warnings)
+    {
+        return response()->json([
+            'message' => 'Tồn không đủ. Kiểm tra cảnh báo hoặc xác nhận xuất âm.',
+            'errors' => [
+                'stock' => array_column($warnings, 'message'),
+            ],
+            'stock_warnings' => $warnings,
+            'requires_negative_confirmation' => true,
+        ], 422);
     }
 
     private function formatStockQuantity(float $value): string
@@ -1898,7 +2033,7 @@ class InternalMaterialIssueController extends Controller
 
     private function stockPackageQueryForLine(array $line, string $warehouseCode, bool $lockForUpdate = false)
     {
-        $maHh = strtoupper(trim($line['ma_hh'] ?? ''));
+        $maHh = mb_strtoupper(trim($line['ma_hh'] ?? ''));
         $locationCode = strtoupper(trim($line['location_code'] ?? ''));
         $internalCode = trim($line['internal_item_code'] ?? '');
         $size = trim($line['size'] ?? '');

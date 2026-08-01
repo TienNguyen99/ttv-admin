@@ -209,6 +209,7 @@
         .suggestion small { color: var(--muted); font-size: 11px; }
         .suggestion span { grid-row: 1 / 3; grid-column: 2; align-self: center; color: #475569; font-size: 11px; }
         .row-state { min-height: 16px; margin-top: 3px; color: var(--good); font-size: 10px; font-weight: 700; }
+        .row-state.is-new { color: #a16207; }
         .remove-row {
             width: 34px;
             height: 34px;
@@ -250,6 +251,48 @@
         .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid #e2e8f0; }
         .spin { animation: spin .8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .operation-loader {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            background: rgba(229, 241, 255, 0.68);
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 180ms ease, visibility 180ms ease;
+        }
+        .operation-loader.is-visible {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+        .operation-loader__card {
+            display: grid;
+            grid-template-columns: 42px minmax(0, 1fr);
+            gap: 3px 12px;
+            width: min(390px, 100%);
+            padding: 18px;
+            border: 1px solid #bfdbfe;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 24px 60px rgba(15, 47, 99, 0.2);
+        }
+        .operation-loader__spinner {
+            grid-row: 1 / 3;
+            width: 38px;
+            height: 38px;
+            align-self: center;
+            border: 4px solid #dbeafe;
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 760ms linear infinite;
+        }
+        .operation-loader__card strong { color: var(--blue-dark); font-size: 15px; }
+        .operation-loader__card small { color: var(--muted); font-size: 12px; }
         @media (max-width: 900px) {
             .issue-meta { grid-template-columns: 1fr 1fr; }
         }
@@ -260,6 +303,11 @@
             .issue-actions .btn-quick { flex: 1; }
             .issue-meta { grid-template-columns: 1fr; }
             .panel-head { align-items: flex-start; flex-direction: column; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .operation-loader,
+            .operation-loader__spinner,
+            .spin { transition: none; animation: none; }
         }
     </style>
 </head>
@@ -338,6 +386,14 @@
     </div>
 </dialog>
 
+<div id="operationLoader" class="operation-loader" role="status" aria-live="polite" aria-hidden="true">
+    <div class="operation-loader__card">
+        <span class="operation-loader__spinner" aria-hidden="true"></span>
+        <strong id="operationLoaderTitle">Đang xử lý phiếu xuất</strong>
+        <small id="operationLoaderDetail">Vui lòng chờ, không đóng trang.</small>
+    </div>
+</div>
+
 <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
 <script>
 (() => {
@@ -347,6 +403,14 @@
     const saveButton = document.getElementById('saveIssueBtn');
     let rowSequence = 0;
     const suggestionTimers = new WeakMap();
+
+    function setOperationLoading(loading, title = 'Đang xử lý phiếu xuất', detail = 'Vui lòng chờ, không đóng trang.') {
+        const loader = document.getElementById('operationLoader');
+        document.getElementById('operationLoaderTitle').textContent = title;
+        document.getElementById('operationLoaderDetail').textContent = detail;
+        loader.classList.toggle('is-visible', loading);
+        loader.setAttribute('aria-hidden', loading ? 'false' : 'true');
+    }
 
     const escapeHtml = value => String(value ?? '')
         .replaceAll('&', '&amp;')
@@ -394,7 +458,10 @@
         const validation = payload.errors
             ? Object.values(payload.errors).flat().join(' ')
             : '';
-        throw new Error(validation || payload.message || 'Không tạo được phiếu xuất thành phẩm.');
+        const error = new Error(validation || payload.message || 'Không tạo được phiếu xuất thành phẩm.');
+        error.payload = payload;
+        error.status = response.status;
+        throw error;
     }
 
     function rowTemplate(index) {
@@ -438,17 +505,35 @@
     function bindRow(row) {
         const orderInput = row.querySelector('.production-order');
         const codeInput = row.querySelector('.internal-code');
-        orderInput.addEventListener('input', () => debounceSuggestions(orderInput, () => loadOrderSuggestions(row)));
+        orderInput.addEventListener('input', () => {
+            delete row.dataset.catalogLookup;
+            row.querySelector('.catalog-suggestions').classList.add('d-none');
+            debounceSuggestions(orderInput, () => loadOrderSuggestions(row));
+        });
         orderInput.addEventListener('focus', () => {
+            delete row.dataset.catalogLookup;
+            row.querySelector('.catalog-suggestions').classList.add('d-none');
             if (orderInput.value.trim().length >= 2) loadOrderSuggestions(row);
         });
         orderInput.addEventListener('keydown', event => chooseFirstSuggestion(event, row.querySelector('.order-suggestions')));
         codeInput.addEventListener('input', () => {
+            delete row.dataset.orderLookup;
+            row.querySelector('.order-suggestions').classList.add('d-none');
+            const selectedOrderCode = String(row.dataset.orderItemCode || '').trim().toUpperCase();
+            if (selectedOrderCode && codeInput.value.trim().toUpperCase() !== selectedOrderCode) {
+                orderInput.value = '';
+                delete row.dataset.orderItemCode;
+                delete row.dataset.productionOrderId;
+                delete row.dataset.purchaseOrder;
+                delete row.dataset.orderCustomer;
+            }
             row.querySelector('.row-state').textContent = '';
             debounceSuggestions(codeInput, () => loadSuggestions(row));
             updateSummary();
         });
         codeInput.addEventListener('focus', () => {
+            delete row.dataset.orderLookup;
+            row.querySelector('.order-suggestions').classList.add('d-none');
             if (codeInput.value.trim().length >= 1) loadSuggestions(row);
         });
         codeInput.addEventListener('change', () => applyExactCatalog(row));
@@ -485,9 +570,15 @@
     }
 
     function clearRow(row) {
+        delete row.dataset.orderItemCode;
+        delete row.dataset.productionOrderId;
+        delete row.dataset.purchaseOrder;
+        delete row.dataset.orderCustomer;
+        delete row.dataset.orderLookup;
         row.querySelectorAll('input').forEach(input => {
             input.value = input.classList.contains('quantity') ? '0' : (input.classList.contains('unit') ? 'Cái' : '');
         });
+        row.querySelector('.row-state').className = 'row-state';
         row.querySelector('.row-state').textContent = '';
         row.querySelectorAll('.suggestions').forEach(panel => panel.classList.add('d-none'));
         updateSummary();
@@ -501,14 +592,19 @@
 
     async function loadSuggestions(row) {
         const keyword = row.querySelector('.internal-code').value.trim();
-        const panel = row.querySelector('.suggestions');
+        const panel = row.querySelector('.catalog-suggestions');
         if (!keyword) {
             panel.classList.add('d-none');
+            row.querySelector('.order-suggestions').classList.add('d-none');
             return;
         }
+        const requestKey = keyword.toUpperCase();
+        row.dataset.catalogLookup = requestKey;
+        row.querySelector('.order-suggestions').classList.add('d-none');
         try {
             const result = await fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(keyword)}&limit=20&with_color=0`)
                 .then(jsonOrError);
+            if (row.dataset.catalogLookup !== requestKey) return;
             const items = result.data || [];
             row._catalogSuggestions = items;
             panel.innerHTML = items.map((item, index) => `
@@ -523,6 +619,7 @@
                 button.addEventListener('click', () => applySuggestion(row, items[Number(button.dataset.index)]));
             });
         } catch (error) {
+            if (row.dataset.catalogLookup !== requestKey) return;
             panel.classList.add('d-none');
             setStatus(error.message, 'error');
         }
@@ -550,8 +647,101 @@
             applySuggestion(row, item);
             return;
         }
-        row.querySelector('.row-state').textContent = 'Mã chưa có trong danh mục';
-        setStatus(`Không tìm thấy mã ${code} trong DANH MỤC.`, 'error');
+        row.querySelector('.row-state').className = 'row-state is-new';
+        row.querySelector('.row-state').textContent = 'Mã mới - sẽ append khi lưu';
+        setStatus(`Mã ${code} sẽ được append vào DANH MỤC trước khi lưu phiếu.`);
+    }
+
+    function orderQuery(keyword, limit = 60) {
+        const params = new URLSearchParams({
+            keyword,
+            with_progress: '1',
+            limit: String(limit),
+        });
+        return `/api/lenh-san-xuat-sheet?${params.toString()}`;
+    }
+
+    function uniqueProductionOrders(rows, keyword = '', exactItemCode = false) {
+        const normalizedKeyword = String(keyword || '').trim().toUpperCase();
+        const seen = new Set();
+        return (rows || []).filter(item => {
+            const itemCode = String(item.item_code || '').trim().toUpperCase();
+            const sourceCode = String(item.source_item_code || '').trim().toUpperCase();
+            if (exactItemCode && normalizedKeyword && itemCode !== normalizedKeyword && sourceCode !== normalizedKeyword) {
+                return false;
+            }
+            const key = [
+                item.production_order,
+                item.item_code,
+                item.size,
+                item.color,
+            ].map(value => String(value || '').trim().toUpperCase()).join('|');
+            if (!item.production_order || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        }).sort((left, right) => {
+            const leftReceived = Number(left.received_quantity || 0) > 0 ? 0 : 1;
+            const rightReceived = Number(right.received_quantity || 0) > 0 ? 0 : 1;
+            if (leftReceived !== rightReceived) return leftReceived - rightReceived;
+            return String(right.received_date || '').localeCompare(String(left.received_date || ''));
+        });
+    }
+
+    function renderOrderSuggestions(row, items) {
+        const panel = row.querySelector('.order-suggestions');
+        row.querySelector('.catalog-suggestions').classList.add('d-none');
+        row._orderSuggestions = items;
+        panel.innerHTML = items.map((item, index) => {
+            const planned = Number(item.planned_quantity || item.order_quantity || 0);
+            const received = Number(item.received_quantity || 0);
+            const date = item.received_date
+                ? String(item.received_date).slice(0, 10).split('-').reverse().join('/')
+                : '';
+            const detail = [
+                item.customer,
+                date ? `Nhận lệnh ${date}` : '',
+                item.item_code,
+                item.size ? `Size ${item.size}` : '',
+                item.color ? `Màu ${item.color}` : '',
+            ].filter(Boolean).join(' · ');
+            const progress = received > 0
+                ? `Đã nhập ${numberFormat(received)}${planned > 0 ? ` / KH ${numberFormat(planned)}` : ''}`
+                : 'Chưa nhập TP';
+            return `
+                <button class="suggestion" type="button" data-index="${index}">
+                    <strong>${escapeHtml(item.production_order)}</strong>
+                    <small>${escapeHtml(detail)}</small>
+                    <span>${escapeHtml(progress)}</span>
+                </button>`;
+        }).join('');
+        panel.classList.toggle('d-none', items.length === 0);
+        panel.querySelectorAll('.suggestion').forEach(button => {
+            button.addEventListener('click', () => applyOrderSuggestion(row, items[Number(button.dataset.index)]));
+        });
+    }
+
+    async function loadOrdersForInternalCode(row, rawCode) {
+        const code = String(rawCode || '').trim().toUpperCase();
+        if (code.length < 2) return;
+        const requestKey = code;
+        row.dataset.orderLookup = requestKey;
+        try {
+            const result = await fetch(orderQuery(code, 100)).then(jsonOrError);
+            if (row.dataset.orderLookup !== requestKey) return;
+            const exactCatalogCode = (row._catalogSuggestions || []).some(item =>
+                String(item.code || item.value || '').trim().toUpperCase() === code
+            );
+            const items = uniqueProductionOrders(result.data || [], code, exactCatalogCode).slice(0, 30);
+            renderOrderSuggestions(row, items);
+            if (exactCatalogCode) {
+                row.querySelector('.row-state').textContent = items.length
+                    ? `Đúng danh mục · ${items.length} lệnh liên quan`
+                    : 'Đúng danh mục · Chưa thấy lệnh liên quan';
+            }
+        } catch (error) {
+            if (row.dataset.orderLookup !== requestKey) return;
+            row.querySelector('.order-suggestions').classList.add('d-none');
+        }
     }
 
     async function loadOrderSuggestions(row) {
@@ -562,48 +752,15 @@
             panel.classList.add('d-none');
             return;
         }
-        const params = new URLSearchParams({
-            keyword,
-            with_progress: '1',
-            limit: '30',
-        });
-        const issueDate = displayToIsoDate(document.getElementById('issueDate').value);
-        if (issueDate) params.set('order_date_to', issueDate);
+        const requestKey = `manual|${keyword.toUpperCase()}`;
+        row.dataset.orderLookup = requestKey;
+        row.querySelector('.catalog-suggestions').classList.add('d-none');
         try {
-            const result = await fetch(`/api/lenh-san-xuat-sheet?${params.toString()}`).then(jsonOrError);
-            const seen = new Set();
-            const items = (result.data || []).filter(item => {
-                const key = [
-                    item.production_order,
-                    item.item_code,
-                    item.size,
-                    item.color,
-                ].map(value => String(value || '').trim().toUpperCase()).join('|');
-                if (!item.production_order || seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            }).slice(0, 20);
-            row._orderSuggestions = items;
-            panel.innerHTML = items.map((item, index) => {
-                const remaining = Number(item.remaining_quantity || 0);
-                const detail = [
-                    item.item_code,
-                    item.size ? `Size ${item.size}` : '',
-                    item.color ? `Màu ${item.color}` : '',
-                    item.customer,
-                ].filter(Boolean).join(' · ');
-                return `
-                    <button class="suggestion" type="button" data-index="${index}">
-                        <strong>${escapeHtml(item.production_order)}</strong>
-                        <small>${escapeHtml(detail)}</small>
-                        <span>${remaining > 0 ? `Còn ${numberFormat(remaining)}` : 'Đã đủ'}</span>
-                    </button>`;
-            }).join('');
-            panel.classList.toggle('d-none', items.length === 0);
-            panel.querySelectorAll('.suggestion').forEach(button => {
-                button.addEventListener('click', () => applyOrderSuggestion(row, items[Number(button.dataset.index)]));
-            });
+            const result = await fetch(orderQuery(keyword, 60)).then(jsonOrError);
+            if (row.dataset.orderLookup !== requestKey) return;
+            renderOrderSuggestions(row, uniqueProductionOrders(result.data || [], keyword, false).slice(0, 30));
         } catch (error) {
+            if (row.dataset.orderLookup !== requestKey) return;
             panel.classList.add('d-none');
             setStatus(error.message, 'error');
         }
@@ -612,6 +769,10 @@
     function applyOrderSuggestion(row, item) {
         row.querySelector('.production-order').value = item.production_order || '';
         row.querySelector('.internal-code').value = item.item_code || '';
+        row.dataset.orderItemCode = String(item.item_code || '').trim().toUpperCase();
+        row.dataset.productionOrderId = item.id || '';
+        row.dataset.purchaseOrder = item.purchase_order || '';
+        row.dataset.orderCustomer = item.customer || '';
         row.querySelector('.item-name').value = item.description || item.specification || '';
         row.querySelector('.size').value = item.size || '';
         row.querySelector('.color').value = item.color || '';
@@ -626,16 +787,104 @@
     }
 
     function applySuggestion(row, item) {
+        const hasSelectedOrder = Boolean(row.dataset.orderItemCode);
         row.querySelector('.internal-code').value = item.code || item.value || '';
-        row.querySelector('.item-name').value = item.name || '';
-        row.querySelector('.size').value = item.size || '';
-        row.querySelector('.color').value = item.color || '';
-        row.querySelector('.unit').value = item.unit || 'Cái';
-        row.querySelector('.location').value = item.shelf || '';
-        row.querySelector('.row-state').textContent = 'Đúng danh mục';
+        row.querySelector('.item-name').value = item.name || row.querySelector('.item-name').value || '';
+        row.querySelector('.size').value = item.size || row.querySelector('.size').value || '';
+        row.querySelector('.color').value = item.color || row.querySelector('.color').value || '';
+        row.querySelector('.unit').value = item.unit || row.querySelector('.unit').value || 'Cái';
+        row.querySelector('.location').value = item.shelf || row.querySelector('.location').value || '';
+        row.querySelector('.row-state').textContent = hasSelectedOrder ? 'Từ lệnh sản xuất · Đúng danh mục' : 'Đúng danh mục';
         row.querySelectorAll('.suggestions').forEach(panel => panel.classList.add('d-none'));
         row.querySelector('.quantity').focus();
+        if (!hasSelectedOrder) loadOrdersForInternalCode(row, item.code || item.value || '');
         updateSummary();
+    }
+
+    function catalogCodeKey(value) {
+        return String(value || '').trim().toUpperCase();
+    }
+
+    function applyCatalogItemToIssueRows(rows, item) {
+        const savedCode = item.code || item.value || '';
+        rows.forEach(row => {
+            row.querySelector('.internal-code').value = savedCode;
+            row.querySelector('.item-name').value = item.name || row.querySelector('.item-name').value || savedCode;
+            row.querySelector('.size').value = row.querySelector('.size').value || item.size || '';
+            row.querySelector('.color').value = row.querySelector('.color').value || item.color || '';
+            row.querySelector('.unit').value = item.unit || row.querySelector('.unit').value || 'Cái';
+            row.querySelector('.row-state').textContent = 'Đúng danh mục';
+            row.querySelectorAll('.suggestions').forEach(panel => panel.classList.add('d-none'));
+        });
+    }
+
+    async function inspectIssueCatalog() {
+        const rows = [...rowsBody.children].filter(row => {
+            return row.querySelector('.internal-code').value.trim()
+                && Number(row.querySelector('.quantity').value || 0) > 0;
+        });
+        const groupedRows = new Map();
+        rows.forEach(row => {
+            const code = row.querySelector('.internal-code').value.trim();
+            const key = catalogCodeKey(code);
+            if (!groupedRows.has(key)) groupedRows.set(key, {code, rows: []});
+            groupedRows.get(key).rows.push(row);
+        });
+
+        const missing = [];
+        for (const group of groupedRows.values()) {
+            const result = await fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(group.code)}&limit=20&with_color=0`)
+                .then(jsonOrError);
+            const item = (result.data || []).find(candidate => {
+                return catalogCodeKey(candidate.code || candidate.value) === catalogCodeKey(group.code);
+            });
+            if (item) {
+                applyCatalogItemToIssueRows(group.rows, item);
+            } else {
+                missing.push(group);
+            }
+        }
+        return missing;
+    }
+
+    async function createMissingIssueCatalog(missingGroups) {
+        let appendedCount = 0;
+        for (const group of missingGroups) {
+            const row = group.rows[0];
+            const orderInput = row.querySelector('.production-order');
+            const itemName = row.querySelector('.item-name').value.trim() || group.code;
+            const unit = row.querySelector('.unit').value.trim() || 'Cái';
+            const size = row.querySelector('.size').value.trim();
+            const color = row.querySelector('.color').value.trim();
+            const response = await fetch('/api/danh-muc-noi-bo/tao-tu-lenh', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                },
+                body: JSON.stringify({
+                    item_code: group.code,
+                    source_item_code: row.dataset.orderItemCode || group.code,
+                    production_order_line_id: Number(row.dataset.productionOrderId || 0) || null,
+                    item_name: itemName,
+                    unit,
+                    size,
+                    color,
+                    item_group: 'TP',
+                }),
+            });
+            const result = await jsonOrError(response);
+            applyCatalogItemToIssueRows(group.rows, {
+                code: result.data?.item_code || group.code,
+                name: result.data?.item_name || itemName,
+                unit,
+                size,
+                color,
+            });
+            if (result.data?.appended_to_sheet) appendedCount += 1;
+        }
+        return appendedCount;
     }
 
     function collectLines() {
@@ -646,15 +895,17 @@
                 ma_hh: code,
                 internal_item_code: code,
                 ten_hh: row.querySelector('.item-name').value.trim(),
+                production_order_id: Number(row.dataset.productionOrderId || 0) || null,
                 production_order: order,
                 ps_number: order,
+                purchase_order: row.dataset.purchaseOrder || '',
                 size: row.querySelector('.size').value.trim(),
                 color: row.querySelector('.color').value.trim(),
                 quantity: Number(row.querySelector('.quantity').value || 0),
                 dvt: row.querySelector('.unit').value.trim(),
                 location_code: row.querySelector('.location').value.trim(),
                 note: row.querySelector('.line-note').value.trim(),
-                customer: document.getElementById('customerName').value.trim(),
+                customer: row.dataset.orderCustomer || document.getElementById('customerName').value.trim(),
             };
         }).filter(line => line.internal_item_code || line.quantity > 0);
     }
@@ -665,12 +916,15 @@
         document.getElementById('totalQuantity').textContent = numberFormat(lines.reduce((sum, line) => sum + line.quantity, 0));
     }
 
-    function confirmIssue(message) {
+    function confirmIssue(message, options = {}) {
         return new Promise(resolve => {
             const dialog = document.getElementById('confirmDialog');
+            dialog.querySelector('h2').textContent = options.title || 'Xác nhận xuất thành phẩm';
             document.getElementById('confirmText').textContent = message;
             const accept = document.getElementById('acceptConfirmBtn');
             const cancel = document.getElementById('cancelConfirmBtn');
+            accept.textContent = options.acceptText || 'Xác nhận xuất';
+            cancel.textContent = options.cancelText || 'Kiểm tra lại';
             const finish = value => {
                 accept.onclick = null;
                 cancel.onclick = null;
@@ -683,10 +937,10 @@
         });
     }
 
-    async function saveIssue() {
+    async function saveIssue(allowNegative = false) {
         const customer = document.getElementById('customerName').value.trim();
         const issueDate = displayToIsoDate(document.getElementById('issueDate').value);
-        const lines = collectLines();
+        let lines = collectLines();
         if (!issueDate) {
             setStatus('Ngày xuất phải đúng định dạng dd/mm/yyyy.', 'error');
             document.getElementById('issueDate').focus();
@@ -702,19 +956,56 @@
             return;
         }
 
+        setStatus('Đang kiểm tra mã trong danh mục...');
+        let missingCatalogGroups = [];
+        try {
+            missingCatalogGroups = await inspectIssueCatalog();
+            lines = collectLines();
+        } catch (error) {
+            setStatus(error.message, 'error');
+            return;
+        }
+
         const total = lines.reduce((sum, line) => sum + line.quantity, 0);
+        const missingCatalogNotice = missingCatalogGroups.length
+            ? `\n\n${missingCatalogGroups.length} mã chưa có trong DANH MỤC và sẽ được append:\n${missingCatalogGroups.map(group => group.code).join(', ')}`
+            : '';
         const confirmed = await confirmIssue(
-            `Khách hàng: ${customer}\n${lines.length} dòng · Tổng SL ${numberFormat(total)}\nHệ thống sẽ kiểm tồn, trừ FIFO và tạo phiếu xuất.`
+            `Khách hàng: ${customer}\n${lines.length} dòng · Tổng SL ${numberFormat(total)}\nHệ thống sẽ kiểm tồn, trừ FIFO và tạo phiếu xuất.${missingCatalogNotice}`
         );
         if (!confirmed) return;
 
         const printWindow = window.open('', '_blank');
         saveButton.disabled = true;
         saveButton.innerHTML = '<i class="spin" data-lucide="loader-circle"></i>Đang lưu';
-        setStatus('Đang kiểm tồn và tạo phiếu xuất...');
         window.lucide?.createIcons();
+        setOperationLoading(
+            true,
+            missingCatalogGroups.length ? 'Đang chuẩn hóa danh mục' : 'Đang kiểm tồn FIFO',
+            missingCatalogGroups.length ? 'Đang thêm mã còn thiếu trước khi xuất.' : 'Đang kiểm tra tồn và chuẩn bị phiếu xuất.'
+        );
+
+        if (missingCatalogGroups.length) {
+            setStatus('Đang thêm mã mới vào Google Sheet DANH MỤC...');
+            try {
+                const appendedCount = await createMissingIssueCatalog(missingCatalogGroups);
+                lines = collectLines();
+                setStatus(`Đã chuẩn hóa danh mục (${appendedCount} mã mới). Đang kiểm tồn FIFO...`);
+            } catch (error) {
+                printWindow?.close();
+                saveButton.disabled = false;
+                saveButton.innerHTML = '<i data-lucide="printer"></i>Lưu + in';
+                window.lucide?.createIcons();
+                setOperationLoading(false);
+                setStatus(error.message, 'error');
+                return;
+            }
+        } else {
+            setStatus('Đang kiểm tồn và tạo phiếu xuất...');
+        }
 
         try {
+            setOperationLoading(true, 'Đang tạo phiếu xuất', 'Đang trừ tồn FIFO và ghi dữ liệu phiếu.');
             const result = await fetch('/api/xuat-vat-tu-noi-bo', {
                 method: 'POST',
                 headers: {
@@ -731,20 +1022,51 @@
                     production_order: [...new Set(lines.map(line => line.production_order).filter(Boolean))].join(', '),
                     purpose: 'Xuất thành phẩm cho khách hàng',
                     note: document.getElementById('issueNote').value.trim(),
+                    allow_negative: allowNegative,
                     lines,
                 })
             }).then(jsonOrError);
 
             if (printWindow && result.print_url) printWindow.location.href = result.print_url;
             else printWindow?.close();
-            setStatus(`Đã tạo ${result.data?.issue_code || 'phiếu xuất thành phẩm'}.`, 'success');
+            const negativeCount = Array.isArray(result.stock_warnings) ? result.stock_warnings.length : 0;
+            setStatus(
+                `Đã tạo ${result.data?.issue_code || 'phiếu xuất thành phẩm'}.`
+                + (negativeCount ? ` Có ${negativeCount} dòng đã xác nhận xuất âm.` : ''),
+                'success'
+            );
             resetForm(false);
         } catch (error) {
             printWindow?.close();
+            const payload = error.payload || {};
+            const stockWarnings = Array.isArray(payload.stock_warnings) ? payload.stock_warnings : [];
+            const stockErrors = Array.isArray(payload.errors?.stock) ? payload.errors.stock : [];
+            if (!allowNegative && (payload.requires_negative_confirmation || stockWarnings.length || stockErrors.length)) {
+                setOperationLoading(false);
+                const warningLines = stockWarnings.length
+                    ? stockWarnings.map(item => item.message)
+                    : stockErrors;
+                const confirmedNegative = await confirmIssue(
+                    `Tồn không đủ cho ${warningLines.length} dòng:\n\n${warningLines.join('\n\n')}\n\nChỉ tiếp tục khi bạn đã kiểm tra phiếu nhập, size, màu, mặt và vị trí.`,
+                    {
+                        title: 'Cảnh báo xuất âm tồn',
+                        acceptText: 'Vẫn xuất âm',
+                        cancelText: 'Kiểm tra lại'
+                    }
+                );
+                if (confirmedNegative) {
+                    saveButton.disabled = false;
+                    await saveIssue(true);
+                } else {
+                    setStatus('Chưa xuất. Phiếu được giữ nguyên để kiểm tra tồn hoặc phiếu nhập.', 'error');
+                }
+                return;
+            }
             setStatus(error.message, 'error');
         } finally {
             saveButton.disabled = false;
             saveButton.innerHTML = '<i data-lucide="printer"></i>Lưu + in';
+            setOperationLoading(false);
             window.lucide?.createIcons();
         }
     }
@@ -767,7 +1089,7 @@
     });
     document.getElementById('addRowBtn').addEventListener('click', () => addRow(true));
     document.getElementById('resetBtn').addEventListener('click', () => resetForm(true));
-    document.getElementById('saveIssueBtn').addEventListener('click', saveIssue);
+    document.getElementById('saveIssueBtn').addEventListener('click', () => saveIssue(false));
     document.getElementById('issueDate').value = isoToDisplayDate(localIsoDate());
     resetForm(false);
     window.lucide?.createIcons();

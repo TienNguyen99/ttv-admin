@@ -166,8 +166,22 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
                 </div>
                 <div class="modal-body">
-                    <label class="form-label" for="inventoryReportMonth">Tháng báo cáo</label>
-                    <input id="inventoryReportMonth" type="month" class="form-control mb-3" value="{{ now()->format('Y-m') }}">
+                    <div class="row g-2 mb-3">
+                        <div class="col-12">
+                            <label class="form-label" for="inventoryReportMonth">Tháng báo cáo</label>
+                            <input id="inventoryReportMonth" type="month" class="form-control" value="{{ now()->format('Y-m') }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="inventoryReportOrder">Lệnh sản xuất</label>
+                            <input id="inventoryReportOrder" type="text" class="form-control" list="inventoryReportOrderOptions" autocomplete="off" placeholder="Ví dụ: T-01750/26">
+                            <datalist id="inventoryReportOrderOptions"></datalist>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="inventoryReportItem">Mã hàng nội bộ</label>
+                            <input id="inventoryReportItem" type="text" class="form-control" list="inventoryReportItemOptions" autocomplete="off" placeholder="Để trống nếu lấy tất cả">
+                            <datalist id="inventoryReportItemOptions"></datalist>
+                        </div>
+                    </div>
 
                     <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
                         <span class="form-label mb-0">Loại hàng</span>
@@ -203,6 +217,8 @@
         const stockFifoModal = new bootstrap.Modal(document.getElementById('stockFifoModal'));
         const inventoryReportModal = new bootstrap.Modal(document.getElementById('inventoryReportModal'));
         let searchTimer = null;
+        let reportOrderTimer = null;
+        let reportItemTimer = null;
         let mappingSearchTimer = null;
         let stockLocationPayload = null;
         let locationOptionsLoaded = false;
@@ -650,6 +666,43 @@
             return Array.from(document.querySelectorAll('input[name="inventory_report_groups[]"]'));
         }
 
+        function loadReportOrderOptions(keyword) {
+            clearTimeout(reportOrderTimer);
+            if (keyword.trim().length < 2) return;
+            reportOrderTimer = setTimeout(() => {
+                fetch(`/api/lenh-san-xuat-sheet?keyword=${encodeURIComponent(keyword.trim())}&limit=30`)
+                    .then(response => jsonOrError(response, 'Không tải được lệnh sản xuất'))
+                    .then(result => {
+                        const seen = new Set();
+                        document.getElementById('inventoryReportOrderOptions').innerHTML = (result.data || [])
+                            .filter(item => {
+                                const code = String(item.production_order || '').trim();
+                                if (!code || seen.has(code)) return false;
+                                seen.add(code);
+                                return true;
+                            })
+                            .map(item => `<option value="${esc(item.production_order)}">${esc([item.customer, item.item_code].filter(Boolean).join(' · '))}</option>`)
+                            .join('');
+                    })
+                    .catch(() => {});
+            }, 120);
+        }
+
+        function loadReportItemOptions(keyword) {
+            clearTimeout(reportItemTimer);
+            if (keyword.trim().length < 2) return;
+            reportItemTimer = setTimeout(() => {
+                fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(keyword.trim())}&limit=30&with_color=0`)
+                    .then(response => jsonOrError(response, 'Không tải được mã hàng'))
+                    .then(result => {
+                        document.getElementById('inventoryReportItemOptions').innerHTML = (result.data || [])
+                            .map(item => `<option value="${esc(item.code || item.value || '')}">${esc(item.name || '')}</option>`)
+                            .join('');
+                    })
+                    .catch(() => {});
+            }, 120);
+        }
+
         function loadReportGroups() {
             if (reportGroupsLoaded) return Promise.resolve();
 
@@ -692,12 +745,23 @@
         document.getElementById('downloadInventoryReportBtn').addEventListener('click', () => {
             const month = document.getElementById('inventoryReportMonth').value;
             const groups = reportGroupCheckboxes().filter(checkbox => checkbox.checked).map(checkbox => checkbox.value);
+            const productionOrder = document.getElementById('inventoryReportOrder').value.trim();
+            const itemCode = document.getElementById('inventoryReportItem').value.trim();
             if (!month) return alert('Chọn tháng cần xuất báo cáo.');
             if (!groups.length) return alert('Chọn ít nhất một loại hàng.');
 
             const params = new URLSearchParams({month});
             groups.forEach(group => params.append('groups[]', group));
+            if (productionOrder) params.set('production_order', productionOrder);
+            if (itemCode) params.set('item_code', itemCode);
             window.location.href = `/api/bao-cao-nhap-xuat-ton/xuat?${params.toString()}`;
+        });
+
+        document.getElementById('inventoryReportOrder').addEventListener('input', event => {
+            loadReportOrderOptions(event.target.value);
+        });
+        document.getElementById('inventoryReportItem').addEventListener('input', event => {
+            loadReportItemOptions(event.target.value);
         });
 
         topKeywordEl.value = keywordEl.value;

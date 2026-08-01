@@ -2988,6 +2988,10 @@ class WarehouseCountController extends Controller
             'lines' => 'required|array|min:1|max:500',
             'lines.*.internal_item_code' => 'nullable|string|max:100',
             'lines.*.quantity' => 'nullable|numeric|min:0',
+            'lines.*.production_order' => 'nullable|string|max:100',
+            'lines.*.size' => 'nullable|string|max:255',
+            'lines.*.color' => 'nullable|string|max:1000',
+            'lines.*.side' => 'nullable|string|max:255',
         ]);
         $data = $this->normalizeDateFields($data, ['checked_at']);
 
@@ -2997,6 +3001,10 @@ class WarehouseCountController extends Controller
                     'index' => $index,
                     'internal_item_code' => trim((string) ($line['internal_item_code'] ?? '')),
                     'quantity' => (float) ($line['quantity'] ?? 0),
+                    'production_order' => trim((string) ($line['production_order'] ?? '')),
+                    'size' => trim((string) ($line['size'] ?? '')),
+                    'color' => trim((string) ($line['color'] ?? '')),
+                    'side' => trim((string) ($line['side'] ?? '')),
                 ];
             })
             ->filter(fn ($line) => $line['internal_item_code'] !== '' && $line['quantity'] > 0)
@@ -3008,6 +3016,15 @@ class WarehouseCountController extends Controller
                     ->whereRaw('UPPER(TRIM(internal_material_receipt_lines.internal_item_code)) = ?', [mb_strtoupper($line['internal_item_code'])])
                     ->whereRaw('ABS(internal_material_receipt_lines.quantity - ?) < 0.0001', [$line['quantity']]);
 
+                foreach (['production_order', 'size', 'color', 'side'] as $field) {
+                    if ($line[$field] !== '') {
+                        $query->whereRaw(
+                            "UPPER(TRIM(COALESCE(internal_material_receipt_lines.{$field}, ''))) = ?",
+                            [mb_strtoupper($line[$field])]
+                        );
+                    }
+                }
+
                 if (!empty($data['exclude_receipt_id'])) {
                     $query->where('r.id', '!=', (int) $data['exclude_receipt_id']);
                 }
@@ -3018,6 +3035,10 @@ class WarehouseCountController extends Controller
                         'r.receipt_code',
                         'r.receipt_date',
                         'internal_material_receipt_lines.internal_item_code',
+                        'internal_material_receipt_lines.production_order',
+                        'internal_material_receipt_lines.size',
+                        'internal_material_receipt_lines.color',
+                        'internal_material_receipt_lines.side',
                         'internal_material_receipt_lines.quantity',
                     ])
                     ->orderByDesc('r.id')
@@ -3032,6 +3053,10 @@ class WarehouseCountController extends Controller
                     'line_index' => $line['index'],
                     'internal_item_code' => $line['internal_item_code'],
                     'quantity' => $line['quantity'],
+                    'production_order' => $line['production_order'],
+                    'size' => $line['size'],
+                    'color' => $line['color'],
+                    'side' => $line['side'],
                     'matches' => $matches,
                 ];
             })
@@ -3337,27 +3362,31 @@ class WarehouseCountController extends Controller
             'location_code' => $receipt->location_code,
         ];
 
-        $force = $request->boolean('force');
+        $force = $request->boolean('force') || $request->boolean('cascade');
+        $linkSummary = $this->receiptLinkSummary($receipt);
         $linkedIssues = InternalMaterialIssue::query()
-            ->where(function ($query) use ($receipt) {
-                $query->where('source_receipt_id', $receipt->id)
-                    ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%');
-            })
+            ->whereIn('id', collect($linkSummary['issues'])->pluck('id')->filter()->values())
             ->get();
 
         if ($linkedIssues->isNotEmpty() && !$force) {
             return response()->json([
                 'message' => 'Phiếu nhập có phiếu xuất liên quan. Nếu chắc chắn xóa, hệ thống sẽ xóa phiếu xuất liên quan trước rồi mới xóa phiếu nhập.',
                 'force_required' => true,
-                'linked_issues' => $linkedIssues->map(fn ($issue) => [
-                    'id' => $issue->id,
-                    'issue_code' => $issue->issue_code,
-                    'issue_date' => optional($issue->issue_date)->format('Y-m-d'),
-                ])->values(),
+                'cascade_required' => true,
+                'links' => $linkSummary,
+                'linked_issues' => collect($linkSummary['issues'])->values(),
             ], 409);
         }
 
+        if ($force && !($linkSummary['can_cascade_delete'] ?? true)) {
+            return response()->json([
+                'message' => $linkSummary['block_reason'] ?: 'Khong the xoa day chuyen phieu nay.',
+                'links' => $linkSummary,
+            ], 422);
+        }
+
         if ($linkedIssues->isNotEmpty() && $force) {
+            $this->resetBtpOrdersForIssues($linkedIssues);
             foreach ($linkedIssues as $issue) {
                 app(InternalMaterialIssueController::class)->destroy($issue);
             }

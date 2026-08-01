@@ -1552,30 +1552,66 @@ class InternalItemCatalogController extends Controller
     {
         $data = $request->validate([
             'item_code' => 'required|string|max:200',
+            'source_item_code' => 'nullable|string|max:200',
+            'production_order_line_id' => 'nullable|integer|min:1',
+            'source_catalog_id' => 'nullable|integer|min:1',
             'item_name' => 'nullable|string|max:500',
             'unit' => 'nullable|string|max:50',
             'size' => 'nullable|string|max:255',
             'color' => 'nullable|string|max:1000',
             'item_group' => 'nullable|string|max:100',
+            'image_url' => 'nullable|string|max:2048',
         ]);
 
-        $sourceItemCode = trim((string) $data['item_code']);
-        $itemCode = trim(preg_replace('/-{2,}/', '-', preg_replace('/[\s\x{00A0}]+/u', '-', $sourceItemCode)), '-');
+        $sourceItemCode = trim((string) ($data['source_item_code'] ?? $data['item_code']));
+        $requestedItemCode = trim((string) $data['item_code']);
+        $itemCode = trim(preg_replace('/-{2,}/', '-', preg_replace('/[\s\x{00A0}]+/u', '-', $requestedItemCode)), '-');
         $normalizedCode = mb_strtoupper($itemCode);
         $itemName = trim((string) ($data['item_name'] ?? ''));
         $unit = trim((string) ($data['unit'] ?? ''));
         $size = trim((string) ($data['size'] ?? ''));
         $color = trim((string) ($data['color'] ?? ''));
-        $itemGroup = trim((string) ($data['item_group'] ?? '')) ?: 'TP';
+        $itemGroup = trim((string) ($data['item_group'] ?? ''));
+        $linkOrderId = (int) ($data['production_order_line_id'] ?? 0);
+        $linkOrder = $linkOrderId > 0
+            ? InternalProductionOrder::query()->find($linkOrderId)
+            : null;
+        if ($linkOrderId > 0 && !$linkOrder) {
+            return response()->json([
+                'message' => 'Dòng Lệnh SX trung tâm cần liên kết không còn tồn tại.',
+            ], 422);
+        }
+        $sourceCatalog = !empty($data['source_catalog_id'])
+            ? InternalItemCatalog::query()->find((int) $data['source_catalog_id'])
+            : null;
+        if ($itemGroup === '') {
+            $sourceRawData = is_array($sourceCatalog->raw_data ?? null) ? $sourceCatalog->raw_data : [];
+            $itemGroup = trim((string) ($sourceRawData['loai'] ?? '')) ?: 'TP';
+        }
+        $imageUrl = trim((string) ($data['image_url'] ?? ''))
+            ?: trim((string) ($sourceCatalog->image_url ?? ''));
 
-        $catalog = InternalItemCatalog::query()
+        $catalogMatches = InternalItemCatalog::query()
             ->whereRaw('UPPER(TRIM(item_code)) = ?', [$normalizedCode])
-            ->first();
+            ->orderBy('source_row')
+            ->limit(2)
+            ->get();
+        if ($catalogMatches->count() > 1) {
+            return response()->json([
+                'message' => "Mã {$itemCode} đang có nhiều dòng trong Danh mục nội bộ. Hãy chọn đúng dòng, không append thêm.",
+            ], 409);
+        }
+        $catalog = $catalogMatches->first();
 
         if ($catalog && (int) $catalog->source_row >= 2) {
             if (!$catalog->is_active) {
                 $catalog->is_active = true;
                 $catalog->save();
+            }
+            if ($linkOrder) {
+                $linkOrder->standard_item_code = trim((string) $catalog->item_code);
+                $linkOrder->standard_catalog_id = (int) $catalog->id;
+                $linkOrder->save();
             }
 
             return response()->json([
@@ -1588,6 +1624,7 @@ class InternalItemCatalogController extends Controller
                     'source_row' => (int) $catalog->source_row,
                     'created_from_order' => false,
                     'appended_to_sheet' => false,
+                    'linked_order_line_id' => $linkOrder ? (int) $linkOrder->id : null,
                 ],
             ]);
         }
@@ -1621,6 +1658,7 @@ class InternalItemCatalogController extends Controller
                     'LOAI' => $itemGroup,
                     'KE' => '',
                     'TON DAU' => 0,
+                    'ANH' => $imageUrl,
                 ]]);
                 $sourceRow = (int) ($appendedRows[0] ?? 0);
                 $appendedToSheet = true;
@@ -1647,12 +1685,19 @@ class InternalItemCatalogController extends Controller
                 $size,
                 $color,
                 $itemGroup,
-                $sourceRow
+                $sourceRow,
+                $imageUrl,
+                $sourceCatalog
             ) {
-                $existing = InternalItemCatalog::query()
+                $existingMatches = InternalItemCatalog::query()
                     ->whereRaw('UPPER(TRIM(item_code)) = ?', [$normalizedCode])
                     ->lockForUpdate()
-                    ->first();
+                    ->limit(2)
+                    ->get();
+                if ($existingMatches->count() > 1) {
+                    throw new \RuntimeException("Mã {$itemCode} đang có nhiều dòng trong Danh mục nội bộ.");
+                }
+                $existing = $existingMatches->first();
 
                 $sourceOwner = InternalItemCatalog::query()
                     ->where('source_row', $sourceRow)
@@ -1674,13 +1719,18 @@ class InternalItemCatalogController extends Controller
                         'size' => trim((string) $existing->size) ?: $size,
                         'mau' => trim((string) $existing->color) ?: $color,
                         'loai' => $raw['loai'] ?? $itemGroup,
-                        '_internal_origin' => 'production_order_image',
+                        'anh' => trim((string) $existing->image_url) ?: $imageUrl,
+                        '_internal_origin' => 'production_order_standard_code',
                     ]);
                     $existing->source_row = $sourceRow;
                     $existing->item_name = trim((string) $existing->item_name) ?: $itemName;
                     $existing->unit = trim((string) $existing->unit) ?: $unit;
                     $existing->size = trim((string) $existing->size) ?: $size;
                     $existing->color = trim((string) $existing->color) ?: $color;
+                    $existing->image_url = trim((string) $existing->image_url) ?: ($imageUrl ?: null);
+                    $existing->image_public_id = $existing->image_public_id ?: ($sourceCatalog->image_public_id ?? null);
+                    $existing->image_source = $existing->image_source ?: ($sourceCatalog->image_source ?? null);
+                    $existing->image_uploaded_at = $existing->image_uploaded_at ?: ($sourceCatalog->image_uploaded_at ?? null);
                     $existing->raw_data = $raw;
                     $existing->source_hash = hash('sha256', json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                     $existing->sync_batch = 'internal-image';
@@ -1698,7 +1748,8 @@ class InternalItemCatalogController extends Controller
                     'size' => $size,
                     'mau' => $color,
                     'loai' => $itemGroup,
-                    '_internal_origin' => 'production_order_image',
+                    'anh' => $imageUrl,
+                    '_internal_origin' => 'production_order_standard_code',
                 ];
 
                 return InternalItemCatalog::query()->create([
@@ -1708,6 +1759,10 @@ class InternalItemCatalogController extends Controller
                     'unit' => $unit,
                     'size' => $size,
                     'color' => $color,
+                    'image_url' => $imageUrl ?: null,
+                    'image_public_id' => $sourceCatalog->image_public_id ?? null,
+                    'image_source' => $sourceCatalog->image_source ?? ($imageUrl !== '' ? 'catalog_copy' : null),
+                    'image_uploaded_at' => $sourceCatalog->image_uploaded_at ?? null,
                     'opening_quantity' => 0,
                     'raw_data' => $raw,
                     'source_hash' => hash('sha256', json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
@@ -1716,12 +1771,16 @@ class InternalItemCatalogController extends Controller
                 ]);
             });
 
-            InternalProductionOrder::query()
-                ->whereRaw('UPPER(TRIM(item_code)) = ?', [mb_strtoupper($sourceItemCode)])
-                ->update([
-                    'standard_item_code' => $catalog->item_code,
-                    'standard_catalog_id' => $catalog->id,
-                ]);
+            $linkQuery = InternalProductionOrder::query();
+            if ($linkOrder) {
+                $linkQuery->whereKey($linkOrder->id);
+            } else {
+                $linkQuery->whereRaw('UPPER(TRIM(item_code)) = ?', [mb_strtoupper($sourceItemCode)]);
+            }
+            $linkQuery->update([
+                'standard_item_code' => $catalog->item_code,
+                'standard_catalog_id' => $catalog->id,
+            ]);
         } catch (\Throwable $error) {
             return response()->json([
                 'message' => 'Google Sheet đã có mã nhưng không liên kết được database nội bộ: ' . $error->getMessage(),
@@ -1742,6 +1801,7 @@ class InternalItemCatalogController extends Controller
                 'source_row' => (int) $catalog->source_row,
                 'created_from_order' => (bool) $catalog->wasRecentlyCreated,
                 'appended_to_sheet' => $appendedToSheet,
+                'linked_order_line_id' => $linkOrder ? (int) $linkOrder->id : null,
             ],
         ], $appendedToSheet || $catalog->wasRecentlyCreated ? 201 : 200);
     }

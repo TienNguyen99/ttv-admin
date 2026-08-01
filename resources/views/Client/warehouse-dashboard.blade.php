@@ -251,9 +251,38 @@
         const dashboardCharts = {};
         const chartFont = '"Plus Jakarta Sans", "Inter", "Segoe UI", Arial, sans-serif';
 
-        function dashboardJson(response) {
-            if (!response.ok) throw new Error('Không tải được dữ liệu kho');
-            return response.json();
+        async function dashboardFetch(path, label) {
+            let lastError = null;
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+                try {
+                    const response = await fetch(path, {
+                        headers: {'Accept': 'application/json'},
+                        cache: 'no-store',
+                    });
+                    if (!response.ok) {
+                        const payload = await response.json().catch(() => ({}));
+                        throw new Error(payload.message || `HTTP ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    lastError = error;
+                    if (attempt === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 350));
+                    }
+                }
+            }
+            throw new Error(`${label}: ${lastError?.message || 'mất kết nối'}`);
+        }
+
+        async function loadDashboardData() {
+            // The local PHP server may drop requests when all endpoints start at once.
+            const stock = await dashboardFetch('/api/ton-kho-noi-bo?month=' + month, 'Tồn kho');
+            const receipts = await dashboardFetch('/api/kiem-ton-kho/phieu-nhap-tp?receipt_date=' + today + '&limit=50', 'Phiếu nhập');
+            const issues = await dashboardFetch('/api/xuat-vat-tu-noi-bo?from_date=' + today + '&to_date=' + today, 'Phiếu xuất');
+            const quality = await dashboardFetch('/api/canh-bao-kho?month=' + month, 'Cảnh báo kho');
+            const wip = await dashboardFetch('/api/theo-doi-san-xuat', 'Đang sản xuất');
+            const flow = await dashboardFetch('/api/kho-noi-bo/nhap-xuat-ngay?days=7&to=' + today, 'Nhập xuất theo ngày');
+            return [stock, receipts, issues, quality, wip, flow];
         }
 
         function pct(value, total) {
@@ -291,7 +320,7 @@
             const segments = [
                 { label: 'Có vị trí', value: positiveAssigned, color: '#15803d' },
                 { label: 'Chưa xếp', value: unassigned, color: '#d97706' },
-                { label: '�m tn', value: negative, color: '#b91c1c' },
+                { label: 'Âm tồn', value: negative, color: '#b91c1c' },
                 { label: 'Thiếu danh mục', value: missingCatalog, color: '#0f5fa8' },
             ];
             document.getElementById('stockStatusMeta').textContent = `${dashboardNum(stockRows.length)} dòng tồn`;
@@ -489,14 +518,7 @@
             `;
         }
 
-        Promise.all([
-            fetch('/api/ton-kho-noi-bo?month=' + month).then(dashboardJson),
-            fetch('/api/kiem-ton-kho/phieu-nhap-tp?receipt_date=' + today + '&limit=50').then(dashboardJson),
-            fetch('/api/xuat-vat-tu-noi-bo?from_date=' + today + '&to_date=' + today).then(dashboardJson),
-            fetch('/api/canh-bao-kho?month=' + month).then(dashboardJson),
-            fetch('/api/theo-doi-san-xuat').then(dashboardJson),
-            fetch('/api/kho-noi-bo/nhap-xuat-ngay?days=7&to=' + today).then(dashboardJson)
-        ]).then(([stock, receipts, issues, quality, wip, flow]) => {
+        loadDashboardData().then(([stock, receipts, issues, quality, wip, flow]) => {
             const weeklyFlow = (flow.data || []).map(row => ({
                 label: row.label,
                 receipt: Number(row.receipt_quantity || 0),

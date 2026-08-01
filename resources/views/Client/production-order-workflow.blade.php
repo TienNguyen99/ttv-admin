@@ -43,6 +43,16 @@
         .item-chip__edit { padding: 0 3px; border: 0; background: transparent; color: #2563eb; font-weight: 800; }
         .item-chip__source { display: block; margin-top: 2px; color: #64748b; font-size: 10px; }
         .item-chip__image { margin-left:4px; vertical-align:middle; }
+        .standard-catalog-preview { display:grid; grid-template-columns:64px minmax(0,1fr); gap:12px; align-items:center; min-height:76px; margin-top:10px; padding:10px; border:1px solid #d7e5f4; border-radius:10px; background:#f8fbff; }
+        .standard-catalog-preview[hidden] { display:none; }
+        .standard-catalog-preview__image { display:grid; place-items:center; width:64px; height:64px; overflow:hidden; border:1px solid #c8d9ec; border-radius:8px; background:#fff; color:#7890aa; }
+        .standard-catalog-preview__image img { width:100%; height:100%; object-fit:contain; }
+        .standard-catalog-preview__code { color:#0b5fc7; font-family:Consolas,"SFMono-Regular",monospace; font-size:13px; font-weight:850; }
+        .standard-catalog-preview__detail { margin-top:3px; color:#55708c; font-size:12px; overflow-wrap:anywhere; }
+        .standard-catalog-create { margin-top:10px; padding:10px 12px; border:1px solid #f0c36a; border-radius:10px; background:#fff9e9; color:#704b00; }
+        .standard-catalog-create[hidden] { display:none; }
+        .standard-catalog-create .form-check-label { font-size:13px; font-weight:750; }
+        .standard-catalog-create small { display:block; margin:3px 0 0 24px; color:#806229; }
         .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 850; white-space: nowrap; }
         .status-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
         .status-planned { background: #eef4fb; color: #45627f; }
@@ -178,6 +188,14 @@
                         <input id="standardCatalogId" type="hidden">
                         <input id="standardItemCode" class="form-control" autocomplete="off" placeholder="G&#245; m&#227;, t&#234;n h&#224;ng ho&#7863;c m&#224;u">
                         <select id="standardCatalogResults" class="form-select mt-2" size="6"></select>
+                        <div id="standardCatalogPreview" class="standard-catalog-preview" hidden></div>
+                        <div id="standardCatalogCreate" class="standard-catalog-create" hidden>
+                            <div class="form-check">
+                                <input id="createStandardCatalog" class="form-check-input" type="checkbox">
+                                <label id="createStandardCatalogLabel" class="form-check-label" for="createStandardCatalog"></label>
+                            </div>
+                            <small>Sao chép tên, ĐVT, size, màu và ảnh từ dòng lệnh hiện tại.</small>
+                        </div>
                         <div class="form-text">C&#249;ng m&#7897;t m&#227; c&#243; th&#7875; c&#243; nhi&#7873;u d&#242;ng m&#224;u. H&#227;y ch&#7885;n &#273;&#250;ng t&#234;n h&#224;ng v&#224; m&#224;u.</div>
                     </div>
                     <div id="standardItemStatus" class="small mt-2"></div>
@@ -204,7 +222,15 @@
         const standardItemCodeEl = document.getElementById('standardItemCode');
         const standardCatalogIdEl = document.getElementById('standardCatalogId');
         const standardCatalogResultsEl = document.getElementById('standardCatalogResults');
+        const standardCatalogPreviewEl = document.getElementById('standardCatalogPreview');
+        const standardCatalogCreateEl = document.getElementById('standardCatalogCreate');
+        const createStandardCatalogEl = document.getElementById('createStandardCatalog');
+        const createStandardCatalogLabelEl = document.getElementById('createStandardCatalogLabel');
         const standardItemStatusEl = document.getElementById('standardItemStatus');
+        let standardCatalogRows = [];
+        let resetStandardRequested = false;
+        let catalogRequestSequence = 0;
+        let standardSourceItem = {};
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
         const statuses = {
@@ -233,7 +259,7 @@
                 </button>` : '';
                 return `<span class="item-chip">
                 <strong>${esc(item.item_code || 'Mã trống')}</strong>
-                <button type="button" class="item-chip__edit" title="Sửa mã chuẩn" data-edit-standard="${esc(item.id)}" data-production-order="${esc(item.production_order || '')}" data-source-code="${esc(item.source_item_code || '')}" data-standard-code="${esc(item.standard_item_code || '')}" data-standard-catalog-id="${esc(item.standard_catalog_id || '')}">&#9998;</button>
+                <button type="button" class="item-chip__edit" title="Sửa mã chuẩn" data-edit-standard="${esc(item.id)}" data-production-order="${esc(item.production_order || '')}" data-source-code="${esc(item.source_item_code || '')}" data-standard-code="${esc(item.standard_item_code || '')}" data-standard-catalog-id="${esc(item.standard_catalog_id || '')}" data-item-name="${esc(item.description || '')}" data-unit="${esc(item.unit || '')}" data-size="${esc(item.size || '')}" data-color="${esc(item.color || '')}" data-image-url="${esc(image)}">&#9998;</button>
                 ${imageAction}
                 ${item.standard_item_code ? `<span class="item-chip__source">Gốc: ${esc(item.source_item_code || '-')}</span>` : ''}
                 ${item.size ? ` · Size ${esc(item.size)}` : ''}
@@ -253,12 +279,24 @@
         }
 
         function openStandardItemEditor(button) {
+            resetStandardRequested = false;
+            standardSourceItem = {
+                item_name: button.dataset.itemName || '',
+                unit: button.dataset.unit || '',
+                size: button.dataset.size || '',
+                color: button.dataset.color || '',
+                image_url: button.dataset.imageUrl || '',
+                catalog_id: button.dataset.standardCatalogId || '',
+            };
             document.getElementById('standardLineId').value = button.dataset.editStandard || '';
             document.getElementById('standardProductionOrder').value = button.dataset.productionOrder || '';
             document.getElementById('sourceItemCode').value = button.dataset.sourceCode || '';
             standardCatalogIdEl.value = button.dataset.standardCatalogId || '';
             standardItemCodeEl.value = button.dataset.standardCode || button.dataset.sourceCode || '';
             standardCatalogResultsEl.innerHTML = '';
+            standardCatalogRows = [];
+            renderStandardCatalogPreview(null);
+            renderStandardCatalogCreate(false);
             standardItemStatusEl.textContent = '';
             standardModal.show();
             loadCatalogOptions();
@@ -268,37 +306,155 @@
             }, 180);
         }
 
+        function renderStandardCatalogPreview(row) {
+            if (!row) {
+                standardCatalogPreviewEl.hidden = true;
+                standardCatalogPreviewEl.innerHTML = '';
+                return;
+            }
+            const image = imageUrl(row.image_url || '');
+            const imageHtml = image
+                ? `<img src="${esc(image)}" alt="${esc(row.item_code || 'Ảnh danh mục')}">`
+                : '<i data-lucide="image-off"></i>';
+            const detail = [
+                row.item_name,
+                row.color ? `Màu ${row.color}` : '',
+                row.size ? `Size ${row.size}` : '',
+                row.source_row ? `Dòng Sheet ${num(row.source_row)}` : '',
+            ].filter(Boolean).join(' · ');
+            standardCatalogPreviewEl.innerHTML = `
+                <div class="standard-catalog-preview__image">${imageHtml}</div>
+                <div>
+                    <div class="standard-catalog-preview__code">${esc(row.item_code || '')}</div>
+                    <div class="standard-catalog-preview__detail">${esc(detail || 'Chưa có mô tả')}</div>
+                    <div class="standard-catalog-preview__detail">${image ? 'Đã có ảnh danh mục' : 'Chưa có ảnh danh mục'}</div>
+                </div>`;
+            standardCatalogPreviewEl.hidden = false;
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function renderStandardCatalogCreate(visible) {
+            const code = standardItemCodeEl.value.trim();
+            standardCatalogCreateEl.hidden = !visible;
+            createStandardCatalogEl.checked = Boolean(visible);
+            createStandardCatalogLabelEl.textContent = visible
+                ? `Tạo mã ${code} ở dòng cuối Google Sheet DANH MỤC`
+                : '';
+        }
+
+        function selectStandardCatalog(row) {
+            if (!row) return false;
+            standardCatalogIdEl.value = String(row.id || '');
+            standardItemCodeEl.value = row.item_code || '';
+            standardCatalogResultsEl.value = String(row.id || '');
+            renderStandardCatalogPreview(row);
+            renderStandardCatalogCreate(false);
+            standardItemStatusEl.textContent = '';
+            return Boolean(row.id);
+        }
+
+        function exactCatalogMatches() {
+            const code = standardItemCodeEl.value.trim().toLocaleUpperCase('vi-VN');
+            if (!code) return [];
+            return standardCatalogRows.filter(row => String(row.item_code || '').trim().toLocaleUpperCase('vi-VN') === code);
+        }
+
         function loadCatalogOptions() {
             const keyword = standardItemCodeEl.value.trim();
             clearTimeout(catalogTimer);
-            if (keyword.length < 2) return;
+            if (keyword.length < 2) {
+                catalogRequestSequence++;
+                standardCatalogRows = [];
+                standardCatalogResultsEl.innerHTML = '';
+                renderStandardCatalogPreview(null);
+                renderStandardCatalogCreate(false);
+                return;
+            }
             catalogTimer = setTimeout(() => {
+                const requestSequence = ++catalogRequestSequence;
                 fetch(`/api/danh-muc-noi-bo?keyword=${encodeURIComponent(keyword)}&limit=50`)
                     .then(response => response.json())
                     .then(result => {
+                        if (requestSequence !== catalogRequestSequence) return;
                         const selectedId = String(standardCatalogIdEl.value || '');
-                        standardCatalogResultsEl.innerHTML = (result.data || []).filter(item => item.item_code).map(item => {
-                            const detail = [item.item_code, item.item_name, item.color, item.size, item.source_row ? `D\u00f2ng ${item.source_row}` : ''].filter(Boolean).join(' - ');
-                            return `<option value="${esc(item.id)}" data-code="${esc(item.item_code || '')}" ${String(item.id) === selectedId ? 'selected' : ''}>${esc(detail)}</option>`;
+                        standardCatalogRows = (result.data || []).filter(item => item.item_code);
+                        standardCatalogResultsEl.innerHTML = '<option value="">-- Chọn đúng dòng danh mục --</option>' + standardCatalogRows.map(item => {
+                            const detail = [item.item_code, item.item_name, item.color, item.size, item.image_url ? 'Có ảnh' : 'Chưa ảnh', item.source_row ? `Dòng ${item.source_row}` : ''].filter(Boolean).join(' - ');
+                            return `<option value="${esc(item.id)}" ${String(item.id) === selectedId ? 'selected' : ''}>${esc(detail)}</option>`;
                         }).join('');
+                        const selectedRow = standardCatalogRows.find(item => String(item.id) === selectedId);
+                        if (selectedRow) {
+                            selectStandardCatalog(selectedRow);
+                            return;
+                        }
+                        const exactMatches = exactCatalogMatches();
+                        if (exactMatches.length === 1) {
+                            selectStandardCatalog(exactMatches[0]);
+                            return;
+                        }
+                        standardCatalogIdEl.value = '';
+                        renderStandardCatalogPreview(null);
+                        renderStandardCatalogCreate(exactMatches.length === 0);
+                        if (exactMatches.length > 1) {
+                            standardItemStatusEl.className = 'small mt-2 text-warning';
+                            standardItemStatusEl.textContent = `Có ${exactMatches.length} dòng cùng mã. Hãy chọn đúng dòng theo màu hoặc ảnh.`;
+                        }
                     })
-                    .catch(() => {});
+                    .catch(() => {
+                        standardItemStatusEl.className = 'small mt-2 text-danger';
+                        standardItemStatusEl.textContent = 'Không tải được Danh mục nội bộ.';
+                    });
             }, 120);
         }
 
         function saveStandardItem(event) {
             event.preventDefault();
             const lineId = document.getElementById('standardLineId').value;
+            if (!resetStandardRequested && !standardCatalogIdEl.value) {
+                const exactMatches = exactCatalogMatches();
+                if (exactMatches.length === 1) selectStandardCatalog(exactMatches[0]);
+            }
+            const createNewCatalog = !resetStandardRequested
+                && !standardCatalogIdEl.value
+                && !standardCatalogCreateEl.hidden
+                && createStandardCatalogEl.checked;
+            if (!resetStandardRequested && !standardCatalogIdEl.value && !createNewCatalog) {
+                standardItemStatusEl.className = 'small mt-2 text-danger';
+                standardItemStatusEl.textContent = exactCatalogMatches().length > 1
+                    ? 'Mã đang bị trùng. Hãy chọn đúng một dòng theo tên, màu hoặc ảnh.'
+                    : 'Mã chưa có trong Danh mục. Hãy xác nhận append dòng mới trước khi lưu.';
+                return;
+            }
             standardItemStatusEl.className = 'small mt-2 text-primary';
-            standardItemStatusEl.textContent = 'Đang lưu...';
-            fetch(`/api/lenh-san-xuat-trung-tam/dong/${encodeURIComponent(lineId)}`, {
-                method: 'PATCH',
+            standardItemStatusEl.textContent = createNewCatalog ? 'Đang append vào Google Sheet...' : 'Đang lưu...';
+            const requestUrl = createNewCatalog
+                ? '/api/danh-muc-noi-bo/tao-tu-lenh'
+                : `/api/lenh-san-xuat-trung-tam/dong/${encodeURIComponent(lineId)}`;
+            const requestBody = createNewCatalog
+                ? {
+                    item_code: standardItemCodeEl.value.trim(),
+                    source_item_code: document.getElementById('sourceItemCode').value.trim(),
+                    production_order_line_id: Number(lineId),
+                    source_catalog_id: standardSourceItem.catalog_id ? Number(standardSourceItem.catalog_id) : null,
+                    item_name: standardSourceItem.item_name || '',
+                    unit: standardSourceItem.unit || '',
+                    size: standardSourceItem.size || '',
+                    color: standardSourceItem.color || '',
+                    image_url: standardSourceItem.image_url || '',
+                }
+                : {
+                    standard_catalog_id: standardCatalogIdEl.value ? Number(standardCatalogIdEl.value) : null,
+                    standard_item_code: standardItemCodeEl.value.trim() || null,
+                    reset: resetStandardRequested,
+                };
+            fetch(requestUrl, {
+                method: createNewCatalog ? 'POST' : 'PATCH',
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                 },
-                body: JSON.stringify({ standard_catalog_id: standardCatalogIdEl.value ? Number(standardCatalogIdEl.value) : null }),
+                body: JSON.stringify(requestBody),
             })
                 .then(async response => {
                     const result = await response.json().catch(() => ({}));
@@ -306,6 +462,7 @@
                     return result;
                 })
                 .then(() => {
+                    resetStandardRequested = false;
                     standardModal.hide();
                     load();
                 })
@@ -480,14 +637,28 @@
                 button.innerHTML = `<img loading="lazy" src="${esc(url)}" alt="${esc(data.item_code || 'Ảnh danh mục')}">`;
             });
         });
-        standardItemCodeEl.addEventListener('input', loadCatalogOptions);
+        standardItemCodeEl.addEventListener('input', () => {
+            resetStandardRequested = false;
+            standardCatalogIdEl.value = '';
+            standardCatalogResultsEl.value = '';
+            renderStandardCatalogPreview(null);
+            renderStandardCatalogCreate(false);
+            loadCatalogOptions();
+        });
         standardCatalogResultsEl.addEventListener('change', () => {
-            const option = standardCatalogResultsEl.selectedOptions[0];
-            standardCatalogIdEl.value = option?.value || '';
-            if (option?.dataset.code) standardItemCodeEl.value = option.dataset.code;
+            const row = standardCatalogRows.find(item => String(item.id) === String(standardCatalogResultsEl.value || ''));
+            if (row) {
+                resetStandardRequested = false;
+                selectStandardCatalog(row);
+            } else {
+                standardCatalogIdEl.value = '';
+                renderStandardCatalogPreview(null);
+                renderStandardCatalogCreate(false);
+            }
         });
         document.getElementById('standardItemForm').addEventListener('submit', saveStandardItem);
         document.getElementById('resetStandardItem').addEventListener('click', () => {
+            resetStandardRequested = true;
             standardCatalogIdEl.value = '';
             standardItemCodeEl.value = '';
             document.getElementById('standardItemForm').requestSubmit();
