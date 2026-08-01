@@ -382,7 +382,7 @@ class InternalProductionOrderController extends Controller
             : $rowsQuery->limit($limit)->get();
         $totalRows = (clone $summaryQuery)->count();
 
-        if (($request->boolean('unfinished') || $request->boolean('with_progress')) && $rows->isNotEmpty()) {
+        if (($request->boolean('unfinished') || $request->boolean('with_progress') || $productionOrder !== '') && $rows->isNotEmpty()) {
             $orderCodes = $rows->pluck('production_order')->filter()->unique()->values();
             $plannedByOrder = InternalProductionOrder::query()
                 ->where('is_active', true)
@@ -390,22 +390,61 @@ class InternalProductionOrderController extends Controller
                 ->get()
                 ->groupBy('production_order')
                 ->map(fn ($lines) => $this->plannedQuantityForOrderLines($lines));
-            $receivedByOrder = DB::connection('internal')
-                ->table('internal_material_receipt_lines as receipt_line')
-                ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'receipt_line.receipt_id')
-                ->whereIn('receipt_line.production_order', $orderCodes)
-                ->where('receipt.source', 'Phieu nhap thanh pham')
-                ->select('receipt_line.production_order', DB::raw('SUM(receipt_line.quantity) as received_quantity'))
-                ->groupBy('receipt_line.production_order')
-                ->pluck('received_quantity', 'receipt_line.production_order');
+            $receiptsByOrder = collect();
+            $issuesByOrder = collect();
+            try {
+                $receiptsByOrder = DB::connection('internal')
+                    ->table('internal_material_receipt_lines as receipt_line')
+                    ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'receipt_line.receipt_id')
+                    ->whereIn('receipt_line.production_order', $orderCodes)
+                    ->where('receipt.source', 'Phieu nhap thanh pham')
+                    ->select(
+                        'receipt_line.production_order',
+                        DB::raw('SUM(receipt_line.quantity) as received_quantity'),
+                        DB::raw("GROUP_CONCAT(DISTINCT receipt.receipt_code ORDER BY receipt.receipt_date SEPARATOR ',') as receipt_codes")
+                    )
+                    ->groupBy('receipt_line.production_order')
+                    ->get()
+                    ->keyBy('production_order');
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+            try {
+                $issuesByOrder = DB::connection('internal')
+                    ->table('internal_material_issue_lines as issue_line')
+                    ->join('internal_material_issues as issue', 'issue.id', '=', 'issue_line.issue_id')
+                    ->whereIn('issue_line.production_order', $orderCodes)
+                    ->select(
+                        'issue_line.production_order',
+                        DB::raw("SUM(CASE WHEN issue.issue_type = 'production' THEN issue_line.quantity ELSE 0 END) as production_issue_quantity"),
+                        DB::raw("SUM(CASE WHEN issue.issue_type = 'customer' THEN issue_line.quantity ELSE 0 END) as customer_issue_quantity"),
+                        DB::raw("GROUP_CONCAT(DISTINCT CASE WHEN issue.issue_type = 'production' THEN issue.issue_code END ORDER BY issue.issue_date SEPARATOR ',') as production_issue_codes"),
+                        DB::raw("GROUP_CONCAT(DISTINCT CASE WHEN issue.issue_type = 'customer' THEN issue.issue_code END ORDER BY issue.issue_date SEPARATOR ',') as customer_issue_codes")
+                    )
+                    ->groupBy('issue_line.production_order')
+                    ->get()
+                    ->keyBy('production_order');
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
 
-            $rows->each(function ($row) use ($plannedByOrder, $receivedByOrder) {
+            $rows->each(function ($row) use ($plannedByOrder, $receiptsByOrder, $issuesByOrder) {
                 $planned = (float) ($plannedByOrder[$row->production_order] ?? 0);
-                $received = (float) ($receivedByOrder[$row->production_order] ?? 0);
+                $receipt = $receiptsByOrder->get($row->production_order);
+                $issue = $issuesByOrder->get($row->production_order);
+                $received = (float) ($receipt->received_quantity ?? 0);
+                $issuedToProduction = (float) ($issue->production_issue_quantity ?? 0);
+                $issuedToCustomer = (float) ($issue->customer_issue_quantity ?? 0);
                 $row->setAttribute('planned_quantity', $planned);
                 $row->setAttribute('has_planned_quantity', $planned > 0);
                 $row->setAttribute('received_quantity', $received);
                 $row->setAttribute('remaining_quantity', max($planned - $received, 0));
+                $row->setAttribute('available_quantity', $received - $issuedToCustomer);
+                $row->setAttribute('production_issue_quantity', $issuedToProduction);
+                $row->setAttribute('customer_issue_quantity', $issuedToCustomer);
+                $row->setAttribute('receipt_codes', $this->splitCodes($receipt->receipt_codes ?? ''));
+                $row->setAttribute('production_issue_codes', $this->splitCodes($issue->production_issue_codes ?? ''));
+                $row->setAttribute('customer_issue_codes', $this->splitCodes($issue->customer_issue_codes ?? ''));
             });
         }
 
@@ -432,23 +471,27 @@ class InternalProductionOrderController extends Controller
         if ($productionOrder !== '') {
             $plannedQuantity = $this->plannedQuantityForOrderLines($rows);
             $orderDate = optional((clone $summaryQuery)->orderBy('received_date')->first())->received_date;
-            // Count every finished-goods receipt, including lots later consumed by FIFO.
-            $linkedReceiptQuery = DB::connection('internal')
-                ->table('internal_material_receipt_lines as receipt_line')
-                ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'receipt_line.receipt_id')
-                ->where('receipt_line.production_order', $productionOrder)
-                ->where('receipt.source', 'Phieu nhap thanh pham');
-            $hasLinkedFinishedReceipt = (clone $linkedReceiptQuery)->exists();
-            $receivedQuantity = (float) $linkedReceiptQuery->sum('receipt_line.quantity');
+            $progressRow = $rows->first();
+            $receivedQuantity = (float) ($progressRow->received_quantity ?? 0);
+            $receiptCodes = $progressRow->receipt_codes ?? [];
+            $productionIssueCodes = $progressRow->production_issue_codes ?? [];
+            $customerIssueCodes = $progressRow->customer_issue_codes ?? [];
             $receiptProgress = [
                 'planned_quantity' => $plannedQuantity,
+                'has_planned_quantity' => $plannedQuantity > 0,
                 'received_quantity' => $receivedQuantity,
                 'remaining_quantity' => max($plannedQuantity - $receivedQuantity, 0),
                 'excess_quantity' => max($receivedQuantity - $plannedQuantity, 0),
                 'is_over_received' => $receivedQuantity > $plannedQuantity + 0.0001,
+                'available_quantity' => (float) ($progressRow->available_quantity ?? $receivedQuantity),
+                'production_issue_quantity' => (float) ($progressRow->production_issue_quantity ?? 0),
+                'customer_issue_quantity' => (float) ($progressRow->customer_issue_quantity ?? 0),
+                'receipt_codes' => $receiptCodes,
+                'production_issue_codes' => $productionIssueCodes,
+                'customer_issue_codes' => $customerIssueCodes,
                 'order_date' => $orderDate ? $orderDate->format('Y-m-d') : null,
                 'receipt_data_start_date' => $firstFinishedReceiptDate,
-                'has_linked_finished_receipt' => $hasLinkedFinishedReceipt,
+                'has_linked_finished_receipt' => count($receiptCodes) > 0,
             ];
         }
 

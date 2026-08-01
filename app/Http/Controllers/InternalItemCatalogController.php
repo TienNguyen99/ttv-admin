@@ -539,9 +539,10 @@ class InternalItemCatalogController extends Controller
         });
 
         $colorVersion = Cache::get('internal_color_mapping_version', '1');
-        $cacheKey = 'internal_catalog_suggestions:v6:' . md5($normalizedKeyword . '|' . $limit . '|' . (int) $withColor . '|' . $colorVersion);
-        $data = Cache::remember($cacheKey, now()->addMinutes(10), function () use ($query, $keyword, $limit, $withColor) {
-            return $query
+        $catalogVersion = Cache::get('internal_catalog_version', '1');
+        $cacheKey = 'internal_catalog_suggestions:v6:' . md5($normalizedKeyword . '|' . $limit . '|' . (int) $withColor . '|' . $colorVersion . '|' . $catalogVersion);
+        $loadData = function () use ($query, $keyword, $limit, $withColor) {
+            return (clone $query)
                 ->orderByRaw("CASE WHEN item_code IS NULL OR item_code = '' THEN 1 ELSE 0 END")
                 ->orderByRaw("CASE WHEN item_code = ? THEN 0 WHEN item_code LIKE ? THEN 1 ELSE 2 END", [
                     $keyword,
@@ -553,9 +554,14 @@ class InternalItemCatalogController extends Controller
                 ->get()
                 ->map(function ($row) use ($withColor) {
                     $code = trim((string) $row->item_code);
-                    $match = $withColor
-                        ? app(PantoneColorMatcher::class)->matchCatalog($row)
-                        : ['pantone' => '', 'hex' => '', 'source' => ''];
+                    $match = ['pantone' => '', 'hex' => '', 'name' => '', 'source' => ''];
+                    if ($withColor) {
+                        try {
+                            $match = app(PantoneColorMatcher::class)->matchCatalog($row);
+                        } catch (\Throwable $exception) {
+                            report($exception);
+                        }
+                    }
 
                     return [
                         'code' => $code,
@@ -587,7 +593,13 @@ class InternalItemCatalogController extends Controller
                 })
                 ->take($limit)
                 ->values();
-        });
+        };
+        try {
+            $data = Cache::remember($cacheKey, now()->addMinutes(10), $loadData);
+        } catch (\Throwable $exception) {
+            report($exception);
+            $data = $loadData();
+        }
 
         return response()->json([
             'data' => $data,
@@ -691,6 +703,7 @@ class InternalItemCatalogController extends Controller
             $archiveQuery->update(['is_active' => false]);
         });
         Cache::forget('internal_catalog_customer_map_v1');
+        Cache::forever('internal_catalog_version', (string) Str::uuid());
 
         return response()->json([
             'message' => 'Đã đồng bộ DANH MỤC vào database nội bộ.',
@@ -1593,17 +1606,12 @@ class InternalItemCatalogController extends Controller
 
         $catalogMatches = InternalItemCatalog::query()
             ->whereRaw('UPPER(TRIM(item_code)) = ?', [$normalizedCode])
+            ->orderByDesc('is_active')
             ->orderBy('source_row')
-            ->limit(2)
             ->get();
-        if ($catalogMatches->count() > 1) {
-            return response()->json([
-                'message' => "Mã {$itemCode} đang có nhiều dòng trong Danh mục nội bộ. Hãy chọn đúng dòng, không append thêm.",
-            ], 409);
-        }
         $catalog = $catalogMatches->first();
 
-        if ($catalog && (int) $catalog->source_row >= 2) {
+        if ($catalogMatches->count() === 1 && $catalog && (int) $catalog->source_row >= 2) {
             if (!$catalog->is_active) {
                 $catalog->is_active = true;
                 $catalog->save();
@@ -1692,21 +1700,29 @@ class InternalItemCatalogController extends Controller
                 $existingMatches = InternalItemCatalog::query()
                     ->whereRaw('UPPER(TRIM(item_code)) = ?', [$normalizedCode])
                     ->lockForUpdate()
-                    ->limit(2)
                     ->get();
-                if ($existingMatches->count() > 1) {
-                    throw new \RuntimeException("Mã {$itemCode} đang có nhiều dòng trong Danh mục nội bộ.");
-                }
-                $existing = $existingMatches->first();
+                $existing = $existingMatches->firstWhere('source_row', $sourceRow)
+                    ?: $existingMatches->firstWhere('is_active', true)
+                    ?: $existingMatches->first();
+
+                // The sheet row is authoritative. Preserve stale duplicates for history,
+                // but release obsolete row links before attaching the current row.
+                $existingMatches
+                    ->reject(fn ($match) => $existing && (int) $match->id === (int) $existing->id)
+                    ->each(function ($match) {
+                        $match->source_row = null;
+                        $match->is_active = false;
+                        $match->save();
+                    });
 
                 $sourceOwner = InternalItemCatalog::query()
                     ->where('source_row', $sourceRow)
                     ->lockForUpdate()
                     ->first();
                 if ($sourceOwner && (!$existing || (int) $sourceOwner->id !== (int) $existing->id)) {
-                    throw new \RuntimeException(
-                        "Dòng Google Sheet {$sourceRow} đang liên kết với mã {$sourceOwner->item_code}."
-                    );
+                    $sourceOwner->source_row = null;
+                    $sourceOwner->is_active = false;
+                    $sourceOwner->save();
                 }
 
                 if ($existing) {
@@ -1788,6 +1804,7 @@ class InternalItemCatalogController extends Controller
         }
 
         Cache::forget('internal_catalog_customer_map_v1');
+        Cache::forever('internal_catalog_version', (string) Str::uuid());
 
         return response()->json([
             'message' => $appendedToSheet

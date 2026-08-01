@@ -457,6 +457,27 @@
 
         .quick-status.is-error { color: #b91c1c; }
         .quick-status.is-ok { color: var(--quick-good); }
+        .order-history-toast {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            z-index: 2100;
+            width: min(460px, calc(100vw - 36px));
+            padding: 13px 15px;
+            border: 1px solid #bfdbfe;
+            border-left: 4px solid #2563eb;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 18px 48px rgba(15, 46, 90, .22);
+            color: #17375e;
+            opacity: 0;
+            transform: translateY(12px);
+            visibility: hidden;
+            transition: opacity .18s ease, transform .18s ease, visibility .18s ease;
+        }
+        .order-history-toast.is-visible { opacity: 1; transform: translateY(0); visibility: visible; }
+        .order-history-toast strong { display: block; margin-bottom: 5px; color: #0f2f63; font-size: 14px; }
+        .order-history-toast span { display: block; white-space: pre-line; font-size: 12px; line-height: 1.55; }
         .operation-loader {
             position: fixed;
             inset: 0;
@@ -685,6 +706,11 @@
         </div>
     </div>
 
+    <div id="orderHistoryToast" class="order-history-toast" role="status" aria-live="polite">
+        <strong id="orderHistoryToastTitle"></strong>
+        <span id="orderHistoryToastText"></span>
+    </div>
+
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
@@ -697,6 +723,7 @@
         let latestCatalogSearchKey = '';
         const productionOrderSearchTimers = new WeakMap();
         const productionOrderSearchRequests = new WeakMap();
+        const productionOrderSuggestionCache = new Map();
         let pendingVariantOrder = '';
         let pendingVariantPlans = [];
         let pendingVariantSizes = [];
@@ -706,6 +733,28 @@
         let variantCheckPromise = Promise.resolve();
         let variantCheckError = null;
         let receiptRequestPending = false;
+        let orderHistoryToastTimer = null;
+
+        function showOrderHistoryToast(orderCode, progress = {}) {
+            const toast = document.getElementById('orderHistoryToast');
+            const planned = Number(progress.planned_quantity || 0);
+            const received = Number(progress.received_quantity || 0);
+            const customerIssued = Number(progress.customer_issue_quantity || 0);
+            const receiptCodes = progress.receipt_codes || [];
+            const customerIssueCodes = progress.customer_issue_codes || [];
+            const productionIssueCodes = progress.production_issue_codes || [];
+            const details = [
+                progress.has_planned_quantity === false ? 'Đơn hàng: chưa có số lượng' : `Đơn hàng: ${fmt(planned)}`,
+                `Đã nhập: ${fmt(received)}${receiptCodes.length ? ` · ${receiptCodes.join(', ')}` : ' · chưa có phiếu nhập'}`,
+                `Đã xuất khách: ${fmt(customerIssued)}${customerIssueCodes.length ? ` · ${customerIssueCodes.join(', ')}` : ' · chưa có phiếu xuất'}`,
+            ];
+            if (productionIssueCodes.length) details.push(`Xuất sản xuất: ${productionIssueCodes.join(', ')}`);
+            document.getElementById('orderHistoryToastTitle').textContent = `Lệnh ${orderCode}`;
+            document.getElementById('orderHistoryToastText').textContent = details.join('\n');
+            toast.classList.add('is-visible');
+            clearTimeout(orderHistoryToastTimer);
+            orderHistoryToastTimer = setTimeout(() => toast.classList.remove('is-visible'), 7500);
+        }
 
         function setOperationLoading(loading, title = 'Đang xử lý phiếu', detail = 'Vui lòng chờ, không đóng trang.') {
             const loader = document.getElementById('operationLoader');
@@ -893,6 +942,10 @@
                         if (orderCode && !byOrder.has(orderCode)) byOrder.set(orderCode, order);
                     });
                     const orders = Array.from(byOrder.values());
+                    orders.forEach(order => {
+                        const orderCode = String(order.production_order || '').trim().toUpperCase();
+                        if (orderCode) productionOrderSuggestionCache.set(orderCode, order);
+                    });
                     if (!orders.length) {
                         select.disabled = true;
                         select.innerHTML = '<option value="">Không có lệnh chưa hoàn tất cho mã này</option>';
@@ -902,10 +955,14 @@
                     select.disabled = false;
                     select.innerHTML = `<option value="">${orders.length} l&#7879;nh ch&#432;a ho&#224;n t&#7845;t - ch&#7885;n l&#7879;nh</option>` + orders.map(order => {
                         const orderDate = order.received_date ? `Nh\u1eadn l\u1ec7nh ${String(order.received_date).split('-').reverse().join('/')}` : '';
+                        const orderQuantity = order.has_planned_quantity === false
+                            ? '\u0110H ch\u01b0a c\u00f3 SL'
+                            : `\u0110H ${fmt(order.planned_quantity || 0)}`;
+                        const received = `\u0110\u00e3 nh\u1eadp ${fmt(order.received_quantity || 0)}`;
                         const remaining = order.has_planned_quantity === false
                             ? 'Ch\u01b0a c\u00f3 SL k\u1ebf ho\u1ea1ch'
                             : `C\u00f2n ${fmt(order.remaining_quantity || 0)}`;
-                        const detail = [order.production_order, remaining, orderDate, order.customer, order.purchase_order].filter(Boolean).join(' - ');
+                        const detail = [order.production_order, orderQuantity, received, remaining, orderDate, order.customer, order.purchase_order].filter(Boolean).join(' - ');
                         return `<option value="${esc(order.production_order || '')}">${esc(detail)}</option>`;
                     }).join('');
                     select.classList.remove('d-none');
@@ -972,6 +1029,10 @@
                             }
                             return Number(right.remaining_quantity || 0) - Number(left.remaining_quantity || 0);
                         });
+                        options.forEach(order => {
+                            const orderCode = String(order.production_order || '').trim().toUpperCase();
+                            if (orderCode) productionOrderSuggestionCache.set(orderCode, order);
+                        });
 
                         if (!options.length) {
                             select.disabled = true;
@@ -989,6 +1050,8 @@
                                     : `Còn ${fmt(order.remaining_quantity || 0)}`;
                             const label = [
                                 order.production_order,
+                                order.has_planned_quantity === false ? '\u0110H ch\u01b0a c\u00f3 SL' : `\u0110H ${fmt(order.planned_quantity || 0)}`,
+                                `\u0110\u00e3 nh\u1eadp ${fmt(order.received_quantity || 0)}`,
                                 progressLabel,
                                 order.received_date ? `Nhận lệnh ${String(order.received_date).split('-').reverse().join('/')}` : '',
                                 order.customer,
@@ -1020,6 +1083,11 @@
             const code = input.value.trim().toUpperCase();
             if (!code || input.dataset.appliedOrder === code || input.dataset.loadingOrder === code) return false;
             input.dataset.loadingOrder = code;
+            const cachedOrder = productionOrderSuggestionCache.get(code);
+            if (cachedOrder) {
+                // Fill the selected order immediately. Progress/catalog lookups must not clear this data.
+                fillQuickRow(input.closest('tr'), cachedOrder);
+            }
             fetch(`/api/lenh-san-xuat-sheet?production_order=${encodeURIComponent(input.value.trim())}&limit=500`)
                 .then(response => jsonOrError(response, 'Không tải được chi tiết lệnh sản xuất'))
                 .then(result => {
@@ -1044,6 +1112,7 @@
                         return;
                     }
                     expandProductionOrder(input, variants, progress);
+                    showOrderHistoryToast(input.value.trim(), progress);
                     if (selectedReceiptKind === 'finished') {
                         variantCheckError = null;
                         variantCheckPromise = prepareProductionVariants(input.value.trim())
@@ -1061,7 +1130,13 @@
                         setStatus(`\u0110\u00e3 n\u1ea1p ${variants.length} d\u00f2ng t\u1eeb l\u1ec7nh ${input.value}. C\u00f2n c\u00f3 th\u1ec3 nh\u1eadp ${fmt(progress.remaining_quantity || 0)}.`);
                     }
                 })
-                .catch(error => setStatus(error.message, 'error'))
+                .catch(error => {
+                    if (cachedOrder) {
+                        setStatus(`Đã điền mã ${cachedOrder.item_code || ''} từ lệnh ${cachedOrder.production_order}. Chưa tải được tiến độ: ${error.message}`, 'error');
+                        return;
+                    }
+                    setStatus(error.message, 'error');
+                })
                 .finally(() => delete input.dataset.loadingOrder);
             return true;
         }
@@ -1760,6 +1835,15 @@
             return confirm(`C\u1ea2NH B\u00c1O NH\u1eacP D\u01af THEO L\u1ec6NH\n\n${warnings.join('\n')}\n\nFIFO \u0111\u00e3 \u0111\u01b0\u1ee3c t\u00ednh trong s\u1ed1 \u0111\u00e3 nh\u1eadp. V\u1eabn l\u01b0u phi\u1ebfu?`);
         }
         async function saveAndPrint() {
+            if (receiptRequestPending) return;
+            receiptRequestPending = true;
+            const saveButton = document.getElementById('savePrintBtn');
+            saveButton.disabled = true;
+            let receiptPrintWindow = null;
+            let issuePrintWindow = null;
+            setOperationLoading(true, 'Đang kiểm tra phiếu', 'Đang kiểm tra lệnh sản xuất, mã nội bộ và dữ liệu danh mục.');
+
+            try {
             await variantCheckPromise;
             if (variantCheckError) {
                 setStatus(`Chưa kiểm tra được size/màu: ${variantCheckError.message}`, 'error');
@@ -1778,6 +1862,7 @@
                 return;
             }
             setStatus('Đang kiểm tra mã danh mục...');
+            setOperationLoading(true, 'Đang kiểm tra danh mục', 'Đối chiếu mã nội bộ trước khi lưu phiếu.');
             const invalidCatalogCodes = await checkAllCatalog();
             let lines = validLines();
             updateSummary();
@@ -1788,6 +1873,7 @@
             let catalogCreation = {createdCount:0, appendedCount:0};
             if (invalidCatalogCodes.length) {
                 setStatus(`Đang thêm ${invalidCatalogCodes.length} mã mới vào DANH MỤC...`);
+                setOperationLoading(true, 'Đang thêm mã mới', `Đang append ${invalidCatalogCodes.length} mã vào Google Sheet DANH MỤC.`);
                 try {
                     catalogCreation = await ensureMissingCatalogCodes(invalidCatalogCodes);
                 } catch (error) {
@@ -1804,6 +1890,7 @@
                 updateSummary();
                 setStatus(`Đã tạo ${catalogCreation.createdCount} mã danh mục; ${catalogCreation.appendedCount} mã được append vào Google Sheet.`);
             }
+            setOperationLoading(true, 'Đang kiểm tra phiếu', 'Kiểm tra trùng và số lượng theo lệnh sản xuất.');
             if (!await warnDuplicates(lines)) {
                 setStatus('Đã hủy lưu vì phiếu có dòng nghi trùng.', 'error');
                 return;
@@ -1834,20 +1921,16 @@
                 return;
             }
 
-            if (receiptRequestPending) return;
-            receiptRequestPending = true;
-            const saveButton = document.getElementById('savePrintBtn');
-            saveButton.disabled = true;
             setOperationLoading(
                 true,
                 exportImmediately ? 'Đang nhập và xuất thành phẩm' : (isBtp ? 'Đang tạo phiếu BTP' : 'Đang lưu phiếu nhập'),
                 exportImmediately ? 'Đang ghi tồn kho, trừ FIFO và tạo phiếu xuất.' : 'Đang ghi dữ liệu và chuẩn bị phiếu in.'
             );
 
-            const receiptPrintWindow = window.open('', '_blank');
-            const issuePrintWindow = exportImmediately ? window.open('', '_blank') : null;
+            receiptPrintWindow = window.open('', '_blank');
+            issuePrintWindow = exportImmediately ? window.open('', '_blank') : null;
             setStatus(exportImmediately ? 'Đang nhập kho và tạo phiếu xuất...' : 'Đang lưu phiếu nhập...');
-            fetch('/api/kiem-ton-kho/phieu-nhap-tp', {
+            await fetch('/api/kiem-ton-kho/phieu-nhap-tp', {
                 method: 'POST',
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({
@@ -1889,18 +1972,17 @@
                         issuePrintWindow.close();
                     }
                     returnToChooser();
-                })
-                .catch(error => {
-                    if (receiptPrintWindow) receiptPrintWindow.close();
-                    if (issuePrintWindow) issuePrintWindow.close();
-                    setStatus(error.message, 'error');
-                    alert(error.message);
-                })
-                .finally(() => {
-                    receiptRequestPending = false;
-                    saveButton.disabled = false;
-                    setOperationLoading(false);
                 });
+            } catch (error) {
+                if (receiptPrintWindow) receiptPrintWindow.close();
+                if (issuePrintWindow) issuePrintWindow.close();
+                setStatus(error.message, 'error');
+                alert(error.message);
+            } finally {
+                receiptRequestPending = false;
+                saveButton.disabled = false;
+                setOperationLoading(false);
+            }
         }
 
         function resetRows(clearHeader = true) {

@@ -210,6 +210,27 @@
         .suggestion span { grid-row: 1 / 3; grid-column: 2; align-self: center; color: #475569; font-size: 11px; }
         .row-state { min-height: 16px; margin-top: 3px; color: var(--good); font-size: 10px; font-weight: 700; }
         .row-state.is-new { color: #a16207; }
+        .order-history-toast {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            z-index: 2100;
+            width: min(460px, calc(100vw - 36px));
+            padding: 13px 15px;
+            border: 1px solid #bfdbfe;
+            border-left: 4px solid #2563eb;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 18px 48px rgba(15, 46, 90, .22);
+            color: #17375e;
+            opacity: 0;
+            transform: translateY(12px);
+            visibility: hidden;
+            transition: opacity .18s ease, transform .18s ease, visibility .18s ease;
+        }
+        .order-history-toast.is-visible { opacity: 1; transform: translateY(0); visibility: visible; }
+        .order-history-toast strong { display: block; margin-bottom: 5px; color: #0f2f63; font-size: 14px; }
+        .order-history-toast span { display: block; white-space: pre-line; font-size: 12px; line-height: 1.55; }
         .remove-row {
             width: 34px;
             height: 34px;
@@ -394,6 +415,11 @@
     </div>
 </div>
 
+<div id="orderHistoryToast" class="order-history-toast" role="status" aria-live="polite">
+    <strong id="orderHistoryToastTitle"></strong>
+    <span id="orderHistoryToastText"></span>
+</div>
+
 <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
 <script>
 (() => {
@@ -402,6 +428,7 @@
     const statusBox = document.getElementById('formStatus');
     const saveButton = document.getElementById('saveIssueBtn');
     let rowSequence = 0;
+    let orderHistoryToastTimer = null;
     const suggestionTimers = new WeakMap();
 
     function setOperationLoading(loading, title = 'Đang xử lý phiếu xuất', detail = 'Vui lòng chờ, không đóng trang.') {
@@ -422,6 +449,27 @@
     const numberFormat = value => new Intl.NumberFormat('vi-VN', {
         maximumFractionDigits: 3
     }).format(Number(value || 0));
+
+    function showOrderHistoryToast(item = {}) {
+        const toast = document.getElementById('orderHistoryToast');
+        const planned = Number(item.planned_quantity || item.order_quantity || 0);
+        const received = Number(item.received_quantity || 0);
+        const customerIssued = Number(item.customer_issue_quantity || 0);
+        const receiptCodes = item.receipt_codes || [];
+        const customerIssueCodes = item.customer_issue_codes || [];
+        const productionIssueCodes = item.production_issue_codes || [];
+        const details = [
+            item.has_planned_quantity === false ? 'Đơn hàng: chưa có số lượng' : `Đơn hàng: ${numberFormat(planned)}`,
+            `Đã nhập: ${numberFormat(received)}${receiptCodes.length ? ` · ${receiptCodes.join(', ')}` : ' · chưa có phiếu nhập'}`,
+            `Đã xuất khách: ${numberFormat(customerIssued)}${customerIssueCodes.length ? ` · ${customerIssueCodes.join(', ')}` : ' · chưa có phiếu xuất'}`,
+        ];
+        if (productionIssueCodes.length) details.push(`Xuất sản xuất: ${productionIssueCodes.join(', ')}`);
+        document.getElementById('orderHistoryToastTitle').textContent = `Lệnh ${item.production_order || ''}`;
+        document.getElementById('orderHistoryToastText').textContent = details.join('\n');
+        toast.classList.add('is-visible');
+        clearTimeout(orderHistoryToastTimer);
+        orderHistoryToastTimer = setTimeout(() => toast.classList.remove('is-visible'), 7500);
+    }
 
     const localIsoDate = () => new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Asia/Ho_Chi_Minh',
@@ -694,6 +742,7 @@
         panel.innerHTML = items.map((item, index) => {
             const planned = Number(item.planned_quantity || item.order_quantity || 0);
             const received = Number(item.received_quantity || 0);
+            const issued = Number(item.customer_issue_quantity || 0);
             const date = item.received_date
                 ? String(item.received_date).slice(0, 10).split('-').reverse().join('/')
                 : '';
@@ -704,9 +753,12 @@
                 item.size ? `Size ${item.size}` : '',
                 item.color ? `Màu ${item.color}` : '',
             ].filter(Boolean).join(' · ');
-            const progress = received > 0
-                ? `Đã nhập ${numberFormat(received)}${planned > 0 ? ` / KH ${numberFormat(planned)}` : ''}`
-                : 'Chưa nhập TP';
+            const progress = [
+                item.has_planned_quantity === false ? 'ĐH chưa có SL' : `ĐH ${numberFormat(planned)}`,
+                `Nhập ${numberFormat(received)}`,
+                `Xuất ${numberFormat(issued)}`,
+                `Còn ${numberFormat(item.available_quantity || 0)}`,
+            ].join(' · ');
             return `
                 <button class="suggestion" type="button" data-index="${index}">
                     <strong>${escapeHtml(item.production_order)}</strong>
@@ -782,6 +834,7 @@
         }
         row.querySelector('.order-suggestions').classList.add('d-none');
         row.querySelector('.row-state').textContent = 'Từ lệnh sản xuất';
+        showOrderHistoryToast(item);
         applyExactCatalog(row).finally(() => row.querySelector('.quantity').focus());
         updateSummary();
     }
