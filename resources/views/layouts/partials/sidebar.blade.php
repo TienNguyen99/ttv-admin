@@ -1,3 +1,4 @@
+<script src="{{ asset('js/vietnam-date-input.js') }}?v=20260801" defer></script>
 <style>
     :root { 
         --summary-sidebar-width: 240px; 

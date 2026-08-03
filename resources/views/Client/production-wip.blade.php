@@ -192,9 +192,12 @@
         const trackingNum = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits: 3});
         const trackingEsc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
         const trackingLocalDate = () => {
-            const date = new Date();
-            date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-            return date.toISOString().slice(0, 10);
+            if (window.VietnamDate) return window.VietnamDate.todayIso();
+            const parts = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit'
+            }).formatToParts(new Date());
+            const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+            return `${values.year}-${values.month}-${values.day}`;
         };
         let trackingTimer = null;
         let selectedProductionLineIds = new Set();
