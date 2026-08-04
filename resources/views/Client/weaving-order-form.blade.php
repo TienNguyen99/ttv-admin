@@ -12,6 +12,7 @@
         html,body { max-width:100%; overflow-x:hidden; }
         .designer-create { max-width:1600px; min-width:0; margin:0 auto; }
         .designer-find { position:relative; padding:16px; border:1px solid var(--designer-border); background:#fff; border-radius:8px; }
+        .designer-find [hidden] { display:none !important; }
         .designer-find-row { display:grid; grid-template-columns:minmax(280px,1fr) auto; gap:10px; }
         .designer-find-input { position:relative; min-width:0; }
         .designer-find-input input,.designer-form-panel,.designer-preview,.designer-field { width:100%; min-width:0; }
@@ -23,6 +24,7 @@
         .designer-suggestion:last-child { border-bottom:0; }
         .designer-suggestion strong { color:#155fc0; }
         .designer-workspace { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(360px,.65fr); gap:14px; margin-top:12px; align-items:start; }
+        .designer-workspace[hidden],.designer-actions[hidden] { display:none !important; }
         .designer-form-panel,.designer-preview { border:1px solid var(--designer-border); border-radius:8px; background:#fff; overflow:hidden; }
         .designer-section { border-bottom:1px solid #e1eaf6; }
         .designer-section:last-child { border-bottom:0; }
@@ -36,15 +38,26 @@
         .designer-field input { min-height:39px; }
         .designer-field input[readonly] { background:#f3f7fc; color:#49657f; }
         .designer-bom-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
-        .designer-bom-list { display:grid; gap:8px; }
-        .designer-bom-row { display:grid; grid-template-columns:36px 90px minmax(115px,.75fr) minmax(170px,1.35fr) 80px 88px 88px 34px; gap:7px; align-items:end; padding:9px; border:1px solid #dbe7f6; border-radius:8px; background:#fbfdff; }
-        .designer-bom-row .designer-field label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .designer-bom-index { align-self:center; display:grid; place-items:center; width:28px; height:28px; border-radius:6px; background:#e7f1ff; color:#1764c0; font-size:12px; font-weight:900; }
-        .designer-icon-btn { display:grid; place-items:center; width:34px; height:39px; border:1px solid #f1b6bd; border-radius:6px; background:#fff; color:#c93646; }
+        .designer-bom-title { display:flex; align-items:center; gap:10px; min-width:0; }
+        .designer-bom-summary { padding:4px 8px; border:1px solid #c9dcf5; border-radius:999px; background:#f4f8ff; color:#315f95; font-size:11px; font-weight:800; white-space:nowrap; }
+        .designer-bom-editor { overflow-x:auto; border:1px solid #cbdcf4; border-radius:8px; background:#fff; scrollbar-color:#9bb9df #edf4fc; scrollbar-width:thin; }
+        .designer-bom-columns,.designer-bom-row { display:grid; grid-template-columns:34px 64px 112px 66px minmax(140px,1fr) 82px 82px 34px; min-width:700px; }
+        .designer-bom-columns { position:sticky; top:0; z-index:3; background:#eaf3ff; color:#284c75; border-bottom:1px solid #c2d5ed; }
+        .designer-bom-columns > span { padding:9px 8px; border-right:1px solid #d2e0f2; font-size:10px; font-weight:900; line-height:1.2; text-transform:uppercase; }
+        .designer-bom-columns > span:last-child { border-right:0; }
+        .designer-bom-list { min-width:700px; }
+        .designer-bom-row { align-items:center; border-bottom:1px solid #e1eaf6; background:#fff; transition:background-color .16s ease; }
+        .designer-bom-row:last-child { border-bottom:0; }
+        .designer-bom-row:focus-within { background:#f4f8ff; box-shadow:inset 3px 0 0 #3b82f6; }
+        .designer-bom-cell { min-width:0; padding:7px 5px; }
+        .designer-bom-cell .form-control { min-height:38px; padding:7px 8px; border-color:#b8cce7; font-size:12px; }
+        .designer-bom-cell .form-control:focus { border-color:#4f8fe8; box-shadow:0 0 0 2px rgba(59,130,246,.12); }
+        .designer-bom-index { justify-self:center; display:grid; place-items:center; width:25px; height:25px; border-radius:6px; background:#e7f1ff; color:#1764c0; font-size:11px; font-weight:900; }
+        .designer-icon-btn { display:grid; place-items:center; width:32px; height:34px; margin:auto; border:1px solid #f1b6bd; border-radius:6px; background:#fff; color:#c93646; }
         .designer-icon-btn svg { width:16px; }
         .designer-color-field { position:relative; }
-        .designer-color-field .form-control { padding-left:42px; }
-        .designer-color-swatch { position:absolute; z-index:2; left:8px; top:50%; width:25px; height:25px; transform:translateY(-50%); border:1px solid #8fa5bf; border-radius:6px; background-color:var(--swatch-color,#fff); box-shadow:inset 0 0 0 1px rgba(255,255,255,.7); }
+        .designer-color-field .form-control { padding-left:39px; }
+        .designer-color-swatch { position:absolute; z-index:2; left:7px; top:50%; width:24px; height:24px; transform:translateY(-50%); border:1px solid #8fa5bf; border-radius:5px; background-color:var(--swatch-color,#fff); box-shadow:inset 0 0 0 1px rgba(255,255,255,.7); }
         .designer-color-swatch.is-empty { background:repeating-linear-gradient(135deg,#eef3f9 0,#eef3f9 5px,#cbd8e8 5px,#cbd8e8 7px); }
         .designer-preview-swatch { display:inline-block; width:18px; height:18px; margin-right:5px; border:1px solid #8295aa; border-radius:4px; background-color:var(--swatch-color,#fff); vertical-align:middle; }
         .designer-preview-swatch.is-empty { background:repeating-linear-gradient(135deg,#eef3f9 0,#eef3f9 4px,#cbd8e8 4px,#cbd8e8 6px); }
@@ -82,7 +95,7 @@
         .designer-loader__panel small { display:block; margin-top:2px; color:#647b96; font-size:11px; }
         body.is-designer-loading { overflow:hidden; }
         @media (max-width:1250px) { .designer-workspace { grid-template-columns:1fr; } .designer-preview { position:static; } }
-        @media (max-width:900px) { .designer-field-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .designer-bom-row { grid-template-columns:32px 80px 1fr 1fr; } .designer-bom-row .bom-consumption,.designer-bom-row .bom-waste,.designer-bom-row .bom-total { grid-column:auto; } }
+        @media (max-width:900px) { .designer-field-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
         @media (max-width:620px) {
             .designer-create { width:100% !important; padding:80px 12px 120px !important; }
             .designer-create > *,.designer-create .wms-heading > div { min-width:0; max-width:100%; }
@@ -93,8 +106,8 @@
             .designer-find-row,.designer-field-grid { grid-template-columns:minmax(0,1fr); }
             .designer-field-grid .span-2,.designer-field-grid .span-3 { grid-column:auto; }
             .designer-suggestion { grid-template-columns:minmax(0,1fr); gap:3px; }
-            .designer-bom-row { grid-template-columns:32px minmax(0,1fr); }
-            .designer-bom-row > :not(.designer-bom-index) { grid-column:2; }
+            .designer-bom-head { align-items:flex-start; }
+            .designer-bom-title { align-items:flex-start; flex-direction:column; gap:4px; }
             .designer-actions { position:sticky; right:auto; bottom:8px; left:auto; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; margin:12px 0 0; }
             .designer-actions .wms-btn { width:100%; min-width:0; padding-inline:8px; justify-content:center; white-space:normal; }
             .designer-actions .wms-btn:last-child { grid-column:1 / -1; }
@@ -125,11 +138,11 @@
                 <input id="orderSearch" class="form-control" autocomplete="off" placeholder="Gõ số lệnh, mã hàng, PO hoặc khách hàng...">
                 <div id="orderSuggestions" class="designer-suggestions d-none"></div>
             </div>
-            <button id="clearOrderBtn" class="wms-btn" type="button"><i data-lucide="rotate-ccw"></i>Chọn lệnh khác</button>
+            <button id="clearOrderBtn" class="wms-btn" type="button" hidden><i data-lucide="rotate-ccw"></i>Chọn lệnh khác</button>
         </div>
     </section>
 
-    <div class="designer-workspace">
+    <div id="designerWorkspace" class="designer-workspace" hidden>
         <section class="designer-form-panel">
             <div class="designer-section">
                 <button class="designer-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#generalSection">
@@ -159,7 +172,7 @@
                 <button class="designer-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#technicalSection">
                     <span><i data-lucide="ruler"></i> Công đoạn và quy cách</span><i data-lucide="chevron-down"></i>
                 </button>
-                <div id="technicalSection" class="collapse show">
+                <div id="technicalSection" class="collapse">
                     <div class="designer-section-body">
                         <div class="designer-field-grid">
                             <div class="designer-field span-2"><label>Ui keo</label><input id="op_ui_keo" class="form-control" data-operation data-preview></div>
@@ -208,11 +221,16 @@
             <div class="designer-section">
                 <div class="designer-section-body">
                     <div class="designer-bom-head">
-                        <div><strong>Định mức sợi</strong><div class="text-secondary small">Tối đa 7 dòng để khớp mẫu LENH_DET.</div></div>
-                        <button id="addBomRowBtn" class="wms-btn" type="button"><i data-lucide="plus"></i>Thêm sợi</button>
+                        <div class="designer-bom-title"><strong>Định mức sợi</strong><span id="bomSummary" class="designer-bom-summary">0/7 dòng · 0 g</span></div>
+                        <button id="addBomRowBtn" class="wms-btn" type="button"><i data-lucide="plus"></i>Thêm dòng</button>
                     </div>
-                    <div id="bomRows" class="designer-bom-list">
-                        <div class="wms-empty">Chọn lệnh để nạp định mức.</div>
+                    <div class="designer-bom-editor" role="table" aria-label="Định mức sợi">
+                        <div class="designer-bom-columns" role="row">
+                            <span>STT</span><span>Loại</span><span>Mã sợi *</span><span>Kệ</span><span>Tên màu sợi</span><span title="Trọng lượng cho một sản phẩm">TL/1PCS (g) *</span><span title="Tổng trọng lượng">T.L (g)</span><span></span>
+                        </div>
+                        <div id="bomRows" class="designer-bom-list" role="rowgroup">
+                            <div class="wms-empty">Chọn lệnh để nạp định mức.</div>
+                        </div>
                     </div>
                     <datalist id="materialOptions"></datalist>
                 </div>
@@ -231,7 +249,7 @@
         </aside>
     </div>
 
-    <div class="designer-actions">
+    <div id="designerActions" class="designer-actions" hidden>
         <button id="saveDraftBtn" class="wms-btn" type="button" disabled><i data-lucide="save"></i>Lưu nháp</button>
         <button id="exportBtn" class="wms-btn" type="button" disabled><i data-lucide="file-spreadsheet"></i>Xuất Excel</button>
         <button id="issueBtn" class="wms-btn wms-btn--primary" type="button" disabled><i data-lucide="send"></i>Lưu + gửi sản xuất</button>
@@ -368,6 +386,9 @@ async function selectOrder(code) {
         const result = await api(`/api/lenh-det/production-order-plan?production_order=${encodeURIComponent(code)}`);
         selectedPlan = result;
         populateForm(result);
+        document.getElementById('designerWorkspace').hidden = false;
+        document.getElementById('designerActions').hidden = false;
+        document.getElementById('clearOrderBtn').hidden = false;
         document.querySelectorAll('#saveDraftBtn,#exportBtn,#issueBtn').forEach(button => button.disabled = false);
         setSteps((result.source_items?.[0]?.materials || []).length ? 4 : 3);
         renderPreview();
@@ -413,6 +434,7 @@ function renderBomRows(lines) {
     const box = document.getElementById('bomRows');
     box.innerHTML = lines.slice(0, 7).map((line, index) => bomRow(line, index)).join('');
     document.getElementById('addBomRowBtn').disabled = lines.length >= 7;
+    updateBomSummary();
     if (window.lucide) lucide.createIcons();
 }
 function bomRow(line = {}, index) {
@@ -420,17 +442,17 @@ function bomRow(line = {}, index) {
     const colorHex = normalizeHex(line.color_hex);
     const colorLabel = swatchLabel(line);
     return `
-        <div class="designer-bom-row" data-bom-row>
+        <div class="designer-bom-row" data-bom-row data-total-manual="${Number(total) > 0 ? '1' : '0'}" role="row">
             <div class="designer-bom-index">${index + 1}</div>
-            <div class="designer-field"><label>Loại</label><input class="form-control" data-bom="type" value="${esc(line.type || '')}"></div>
-            <div class="designer-field"><label>Mã sợi *</label><input class="form-control" list="materialOptions" data-bom="material_code" data-material-code value="${esc(line.material_code || '')}"></div>
-            <div class="designer-field"><label>Tên màu sợi</label><div class="designer-color-field">
+            <div class="designer-bom-cell"><input class="form-control" data-bom="type" value="${esc(line.type || '')}" aria-label="Loại sợi" placeholder="75D"></div>
+            <div class="designer-bom-cell"><input class="form-control" list="materialOptions" data-bom="material_code" data-material-code value="${esc(line.material_code || '')}" aria-label="Mã sợi" placeholder="Mã sợi"></div>
+            <div class="designer-bom-cell"><input class="form-control" data-bom="shelf_hint" value="${esc(line.first_location || line.catalog_shelf_code || line.shelf_hint || '')}" aria-label="Kệ" placeholder="A1"></div>
+            <div class="designer-bom-cell"><div class="designer-color-field">
                 <span class="designer-color-swatch${colorHex ? '' : ' is-empty'}" data-color-swatch style="${colorHex ? `--swatch-color:${colorHex}` : ''}" title="${esc(colorLabel)}" aria-label="${esc(colorLabel)}"></span>
-                <input class="form-control" data-bom="material_name" value="${esc(line.catalog_name || line.material_name || '')}">
+                <input class="form-control" data-bom="material_name" value="${esc(line.catalog_name || line.material_name || '')}" aria-label="Tên màu sợi" placeholder="Tự điền theo mã">
             </div></div>
-            <div class="designer-field"><label>Kệ</label><input class="form-control" data-bom="shelf_hint" value="${esc(line.first_location || line.catalog_shelf_code || line.shelf_hint || '')}"></div>
-            <div class="designer-field bom-consumption"><label>TL/1PCS *</label><input type="text" inputmode="decimal" class="form-control" data-bom="consumption_per_unit" value="${esc(line.consumption_per_unit || '')}" placeholder="0,38"></div>
-            <div class="designer-field bom-total"><label>T.L(g)</label><input type="text" inputmode="decimal" class="form-control" data-bom="total_grams" value="${esc(total)}" placeholder="Nhập để tính ngược" title="Nhập tổng trọng lượng để tự tính TL/1PCS"></div>
+            <div class="designer-bom-cell bom-consumption"><input type="text" inputmode="decimal" class="form-control" data-bom="consumption_per_unit" value="${esc(line.consumption_per_unit || '')}" placeholder="0,38" aria-label="Trọng lượng trên một sản phẩm"></div>
+            <div class="designer-bom-cell bom-total"><input type="text" inputmode="decimal" class="form-control" data-bom="total_grams" value="${esc(total)}" placeholder="Tự tính" title="Có thể nhập tổng gram để tính ngược TL/1PCS" aria-label="Tổng trọng lượng gram"></div>
             <button class="designer-icon-btn" type="button" data-remove-row title="Xóa dòng"><i data-lucide="x"></i></button>
             <input type="hidden" data-bom="line_role" value="${esc(line.line_role || `DONG-${index + 1}`)}">
             <input type="hidden" data-bom="unit" value="${esc(line.bom_unit || line.unit || 'gam')}">
@@ -440,6 +462,13 @@ function bomRow(line = {}, index) {
             <input type="hidden" data-color-name value="${esc(line.color_name || line.catalog_color || '')}">
         </div>
     `;
+}
+
+function updateBomSummary() {
+    const rows = Array.from(document.querySelectorAll('[data-bom-row]'));
+    const used = rows.filter(row => row.querySelector('[data-bom="material_code"]')?.value.trim()).length;
+    const total = rows.reduce((sum, row) => sum + decimalValue(row.querySelector('[data-bom="total_grams"]')?.value), 0);
+    document.getElementById('bomSummary').textContent = `${used}/7 dòng · ${num(total)} g`;
 }
 
 function normalizeHex(value) {
@@ -509,10 +538,11 @@ function recalculateBom(skipTotalRow = null) {
     document.querySelectorAll('[data-bom-row]').forEach(row => {
         const consumption = decimalValue(row.querySelector('[data-bom="consumption_per_unit"]').value);
         const waste = decimalValue(row.querySelector('[data-bom="waste_percent"]').value);
-        if (row !== skipTotalRow) {
+        if (row !== skipTotalRow && row.dataset.totalManual !== '1') {
             row.querySelector('[data-bom="total_grams"]').value = consumption > 0 ? (quantity * consumption * (1 + waste / 100)).toFixed(3).replace(/\.?0+$/, '') : '';
         }
     });
+    updateBomSummary();
 }
 
 async function loadMaterialSuggestions(keyword) {
@@ -673,10 +703,14 @@ function clearForm(clearSearch = true) {
     if (clearSearch) setValue('orderSearch','');
     document.querySelectorAll('.designer-form-panel input').forEach(input => input.value = '');
     document.getElementById('bomRows').innerHTML = '<div class="wms-empty">Chọn lệnh để nạp định mức.</div>';
+    document.getElementById('bomSummary').textContent = '0/7 dòng · 0 g';
     document.getElementById('sheetPreview').innerHTML = '<div class="designer-sheet-title">LỆNH DỆT</div><div class="designer-sheet-empty p-5">Chọn một lệnh sản xuất để bắt đầu.</div>';
     document.getElementById('completeness').textContent = 'Chưa chọn lệnh';
     document.getElementById('completeness').classList.remove('is-ready');
     document.querySelectorAll('#saveDraftBtn,#exportBtn,#issueBtn').forEach(button => button.disabled = true);
+    document.getElementById('designerWorkspace').hidden = true;
+    document.getElementById('designerActions').hidden = true;
+    document.getElementById('clearOrderBtn').hidden = true;
     setSteps(1);
 }
 
@@ -699,9 +733,14 @@ document.addEventListener('click', event => {
 });
 document.getElementById('clearOrderBtn').addEventListener('click', () => clearForm(true));
 document.getElementById('addBomRowBtn').addEventListener('click', () => {
-    const rows = collectBomLines();
-    if (document.querySelectorAll('[data-bom-row]').length >= 7) return toast('Mẫu chỉ có 7 dòng sợi đầy đủ.', true);
-    renderBomRows([...rows, {}]);
+    const box = document.getElementById('bomRows');
+    const count = document.querySelectorAll('[data-bom-row]').length;
+    if (count >= 7) return toast('Mẫu chỉ có 7 dòng sợi đầy đủ.', true);
+    box.insertAdjacentHTML('beforeend', bomRow({}, count));
+    document.getElementById('addBomRowBtn').disabled = count + 1 >= 7;
+    updateBomSummary();
+    if (window.lucide) lucide.createIcons();
+    box.querySelector('[data-bom-row]:last-child [data-material-code]')?.focus();
     renderPreview();
 });
 document.getElementById('bomRows').addEventListener('click', event => {
@@ -710,7 +749,16 @@ document.getElementById('bomRows').addEventListener('click', event => {
     button.closest('[data-bom-row]').remove();
     Array.from(document.querySelectorAll('[data-bom-row]')).forEach((row,index) => row.querySelector('.designer-bom-index').textContent = index + 1);
     document.getElementById('addBomRowBtn').disabled = document.querySelectorAll('[data-bom-row]').length >= 7;
+    updateBomSummary();
     renderPreview();
+});
+document.getElementById('bomRows').addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || !event.target.matches('input:not([type="hidden"])')) return;
+    event.preventDefault();
+    const inputs = Array.from(document.querySelectorAll('#bomRows [data-bom-row] input:not([type="hidden"])'));
+    const next = inputs[inputs.indexOf(event.target) + 1];
+    if (next) return next.focus();
+    document.getElementById('addBomRowBtn').click();
 });
 document.getElementById('bomRows').addEventListener('input', event => {
     if (event.target.matches('[data-material-code]')) {
@@ -720,7 +768,13 @@ document.getElementById('bomRows').addEventListener('input', event => {
     const totalRow = event.target.matches('[data-bom="total_grams"]')
         ? event.target.closest('[data-bom-row]')
         : null;
-    if (totalRow) calculateConsumptionFromTotal(totalRow);
+    if (totalRow) {
+        totalRow.dataset.totalManual = '1';
+        calculateConsumptionFromTotal(totalRow);
+    }
+    if (event.target.matches('[data-bom="consumption_per_unit"]')) {
+        event.target.closest('[data-bom-row]').dataset.totalManual = '0';
+    }
     renderPreview(totalRow);
 });
 document.getElementById('bomRows').addEventListener('change', event => {

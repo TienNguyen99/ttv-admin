@@ -150,7 +150,7 @@ class InternalWeavingController extends Controller
         return response()->json([
             'data' => $rows,
             'summary' => $summary,
-            'charts' => $this->designerChartData($scopeRows),
+            'charts' => $request->boolean('compact') ? null : $this->designerChartData($scopeRows),
             'customers' => $customers,
             'filters' => [
                 'year' => $year,

@@ -180,6 +180,7 @@ Route::post('/api/xnt/dong-bo', [InternalXntController::class, 'sync']);
 Route::post('/api/xnt/tao-phieu-xuat', [InternalXntController::class, 'createIssue']);
 Route::prefix('client/quan-ly-det')->name('weaving.')->controller(WeavingManagementPageController::class)->group(function () {
     Route::get('/', 'dashboard')->name('dashboard');
+    Route::get('/theo-doi', 'tracking')->name('tracking');
     Route::get('/tao-lenh', 'createOrder')->name('orders.create');
     Route::get('/dinh-muc', 'bom')->name('bom');
     Route::get('/xuat-excel', 'exports')->name('exports.index');

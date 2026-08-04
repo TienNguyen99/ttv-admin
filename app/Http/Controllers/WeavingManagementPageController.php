@@ -6,6 +6,11 @@ class WeavingManagementPageController extends Controller
 {
     public function dashboard()
     {
+        return view('client.weaving-quick');
+    }
+
+    public function tracking()
+    {
         return view('client.weaving-dashboard');
     }
 

@@ -569,10 +569,8 @@
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/theo-doi-san-xuat*') ? 'is-active' : '' }}" href="{{ url('/client/theo-doi-san-xuat') }}"><i data-lucide="workflow"></i>Đang sản xuất</a>
             <details class="summary-sidebar__group summary-sidebar__subgroup" {{ request()->is('client/quan-ly-det*') ? 'open' : '' }}>
                 <summary class="summary-sidebar__summary"><i data-lucide="swatch-book"></i>Quản lý dệt</summary>
-                <a class="summary-sidebar__link summary-sidebar__child summary-sidebar__deep-child {{ request()->routeIs('weaving.dashboard') ? 'is-active' : '' }}" href="{{ route('weaving.dashboard') }}">Tổng quan dệt</a>
-                <a class="summary-sidebar__link summary-sidebar__child summary-sidebar__deep-child {{ request()->routeIs('weaving.orders.create') ? 'is-active' : '' }}" href="{{ route('weaving.orders.create') }}">Tạo lệnh dệt</a>
-                <a class="summary-sidebar__link summary-sidebar__child summary-sidebar__deep-child {{ request()->routeIs('weaving.bom') ? 'is-active' : '' }}" href="{{ route('weaving.bom') }}">Định mức sợi</a>
-                <a class="summary-sidebar__link summary-sidebar__child summary-sidebar__deep-child {{ request()->routeIs('weaving.exports.index') ? 'is-active' : '' }}" href="{{ route('weaving.exports.index') }}">Xuất lệnh Excel</a>
+                <a class="summary-sidebar__link summary-sidebar__child summary-sidebar__deep-child {{ request()->routeIs('weaving.dashboard') ? 'is-active' : '' }}" href="{{ route('weaving.dashboard') }}">Quản lý dệt nhanh</a>
+                <a class="summary-sidebar__link summary-sidebar__child summary-sidebar__deep-child {{ request()->routeIs('weaving.tracking') ? 'is-active' : '' }}" href="{{ route('weaving.tracking') }}">Theo dõi chi tiết</a>
             </details>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/home') ? 'is-active' : '' }}" href="{{ url('/client/home') }}"><i data-lucide="list-tree"></i>Tổng quan lệnh</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/view-all-sx-data') ? 'is-active' : '' }}" href="{{ url('/client/view-all-sx-data') }}"><i data-lucide="chart-no-axes-combined"></i>Tổng hợp sản xuất</a>
