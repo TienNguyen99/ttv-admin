@@ -20,6 +20,7 @@ use App\Services\InternalBtpOrderMatcher;
 use App\Services\InternalCatalogValidator;
 use App\Services\InternalDocumentNumber;
 use App\Services\GoogleSheetInternalCatalog;
+use App\Services\InternalProductionOrderLineResolver;
 use App\Services\InternalUnitConverter;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -365,6 +366,7 @@ class InternalMaterialIssueController extends Controller
             ->with('lines:id,issue_id,production_order')
             ->withCount('lines')
             ->withSum('lines', 'quantity')
+            ->orderByDesc('issue_date')
             ->orderByDesc('created_at')
             ->orderByDesc('id');
 
@@ -385,8 +387,13 @@ class InternalMaterialIssueController extends Controller
                     ->orWhere('department', 'like', '%' . $keyword . '%')
                     ->orWhere('production_order', 'like', '%' . $keyword . '%')
                     ->orWhereHas('lines', function ($lineQuery) use ($keyword) {
-                        $lineQuery->where('ma_hh', 'like', '%' . $keyword . '%')
+                        $lineQuery->where('production_order', 'like', '%' . $keyword . '%')
+                            ->orWhere('ma_hh', 'like', '%' . $keyword . '%')
+                            ->orWhere('internal_item_code', 'like', '%' . $keyword . '%')
                             ->orWhere('ten_hh', 'like', '%' . $keyword . '%')
+                            ->orWhere('size', 'like', '%' . $keyword . '%')
+                            ->orWhere('color', 'like', '%' . $keyword . '%')
+                            ->orWhere('side', 'like', '%' . $keyword . '%')
                             ->orWhere('location_code', 'like', '%' . $keyword . '%');
                     });
             });
@@ -497,6 +504,8 @@ class InternalMaterialIssueController extends Controller
                 if (trim((string) ($line['production_order'] ?? '')) !== '') {
                     $matchedProductionOrders[] = trim((string) $line['production_order']);
                 }
+
+                $line['production_order_id'] = app(InternalProductionOrderLineResolver::class)->resolve($line);
 
                 $base = $this->baseQuantityForLine($line);
 
@@ -1511,6 +1520,7 @@ class InternalMaterialIssueController extends Controller
             ]);
 
             foreach ($data['lines'] as $line) {
+                $line['production_order_id'] = app(InternalProductionOrderLineResolver::class)->resolve($line);
                 $base = $this->baseQuantityForLine($line);
 
                 $issueLine = $issue->lines()->create([

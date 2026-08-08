@@ -156,7 +156,7 @@
     </div>
 
     <div class="modal fade" id="inventoryReportModal" tabindex="-1" aria-labelledby="inventoryReportModalTitle" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <div>
@@ -180,6 +180,15 @@
                             <label class="form-label" for="inventoryReportItem">Mã hàng nội bộ</label>
                             <input id="inventoryReportItem" type="text" class="form-control" list="inventoryReportItemOptions" autocomplete="off" placeholder="Để trống nếu lấy tất cả">
                             <datalist id="inventoryReportItemOptions"></datalist>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="inventoryReportCustomer">Khách hàng</label>
+                            <input id="inventoryReportCustomer" type="text" class="form-control" list="inventoryReportCustomerOptions" autocomplete="off" placeholder="Để trống nếu lấy tất cả">
+                            <datalist id="inventoryReportCustomerOptions"></datalist>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="inventoryReportCustomerGroup">Nhóm khách</label>
+                            <select id="inventoryReportCustomerGroup" class="form-select"><option value="">Tất cả nhóm khách</option></select>
                         </div>
                     </div>
 
@@ -219,10 +228,12 @@
         let searchTimer = null;
         let reportOrderTimer = null;
         let reportItemTimer = null;
+        let reportCustomerTimer = null;
         let mappingSearchTimer = null;
         let stockLocationPayload = null;
         let locationOptionsLoaded = false;
         let reportGroupsLoaded = false;
+        let reportCustomersLoaded = false;
 
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits: 3});
@@ -727,9 +738,31 @@
                 });
         }
 
+        function loadReportCustomers(keyword = '') {
+            clearTimeout(reportCustomerTimer);
+            return new Promise(resolve => {
+                reportCustomerTimer = setTimeout(() => {
+                    fetch(`/api/khach-hang-noi-bo/goi-y?keyword=${encodeURIComponent(keyword.trim())}&limit=100`)
+                        .then(response => jsonOrError(response, 'Không tải được danh mục khách hàng'))
+                        .then(result => {
+                            document.getElementById('inventoryReportCustomerOptions').innerHTML = (result.data || [])
+                                .map(customer => `<option value="${esc(customer.name)}">${esc(customer.customer_group || 'Chưa phân loại')}</option>`)
+                                .join('');
+                            if (!reportCustomersLoaded) {
+                                document.getElementById('inventoryReportCustomerGroup').innerHTML = '<option value="">Tất cả nhóm khách</option>'
+                                    + (result.groups || []).map(group => `<option value="${esc(group)}">${esc(group)}</option>`).join('');
+                                reportCustomersLoaded = true;
+                            }
+                            resolve();
+                        })
+                        .catch(() => resolve());
+                }, keyword ? 120 : 0);
+            });
+        }
+
         document.getElementById('openInventoryReportBtn').addEventListener('click', () => {
             document.getElementById('inventoryReportMonth').value = stockMonthEl.value || '{{ now()->format('Y-m') }}';
-            loadReportGroups()
+            Promise.all([loadReportGroups(), loadReportCustomers()])
                 .then(() => inventoryReportModal.show())
                 .catch(error => alert(error.message));
         });
@@ -747,6 +780,8 @@
             const groups = reportGroupCheckboxes().filter(checkbox => checkbox.checked).map(checkbox => checkbox.value);
             const productionOrder = document.getElementById('inventoryReportOrder').value.trim();
             const itemCode = document.getElementById('inventoryReportItem').value.trim();
+            const customer = document.getElementById('inventoryReportCustomer').value.trim();
+            const customerGroup = document.getElementById('inventoryReportCustomerGroup').value;
             if (!month) return alert('Chọn tháng cần xuất báo cáo.');
             if (!groups.length) return alert('Chọn ít nhất một loại hàng.');
 
@@ -754,6 +789,8 @@
             groups.forEach(group => params.append('groups[]', group));
             if (productionOrder) params.set('production_order', productionOrder);
             if (itemCode) params.set('item_code', itemCode);
+            if (customer) params.set('customer', customer);
+            if (customerGroup) params.set('customer_group', customerGroup);
             window.location.href = `/api/bao-cao-nhap-xuat-ton/xuat?${params.toString()}`;
         });
 
@@ -762,6 +799,9 @@
         });
         document.getElementById('inventoryReportItem').addEventListener('input', event => {
             loadReportItemOptions(event.target.value);
+        });
+        document.getElementById('inventoryReportCustomer').addEventListener('input', event => {
+            loadReportCustomers(event.target.value);
         });
 
         topKeywordEl.value = keywordEl.value;

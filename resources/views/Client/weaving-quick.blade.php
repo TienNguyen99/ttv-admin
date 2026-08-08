@@ -201,7 +201,7 @@
             <div class="weave-summary__item"><span>Tổng lệnh</span><strong id="summaryTotal">0</strong></div>
             <div class="weave-summary__item"><span>Chờ sản xuất</span><strong id="summaryWaiting">0</strong></div>
             <div class="weave-summary__item"><span>Đang sản xuất</span><strong id="summaryProducing">0</strong></div>
-            <div class="weave-summary__item"><span>Đã nhập kho</span><strong id="summaryCompleted">0</strong></div>
+            <div class="weave-summary__item"><span>Hoàn thành</span><strong id="summaryCompleted">0</strong></div>
         </div>
 
         <div class="weave-filterbar">
@@ -210,7 +210,7 @@
                 <button class="weave-segment" type="button" data-status="waiting">Chờ SX</button>
                 <button class="weave-segment" type="button" data-status="producing">Đang SX</button>
                 <button class="weave-segment" type="button" data-status="partial">Nhập một phần</button>
-                <button class="weave-segment" type="button" data-status="completed">Đã nhập kho</button>
+                <button class="weave-segment" type="button" data-status="completed">Hoàn thành</button>
                 <button class="weave-segment" type="button" data-status="overdue">Trễ hạn</button>
             </div>
             <span id="resultCount" class="weave-count">0 kết quả</span>
@@ -260,7 +260,7 @@
         const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
         return match ? `${match[3]}/${match[2]}/${match[1]}` : '-';
     };
-    const statusLabels = { waiting: 'Chờ sản xuất', producing: 'Đang sản xuất', partial: 'Nhập một phần', completed: 'Đã nhập kho' };
+    const statusLabels = { waiting: 'Chờ sản xuất', producing: 'Đang sản xuất', partial: 'Nhập một phần', completed: 'Hoàn thành' };
 
     function toast(message, error = false) {
         const element = document.getElementById('quickToast');
@@ -294,7 +294,7 @@
                 <div><span class="weave-code">${esc(row.order_code)}</span><span class="weave-sub">${date(row.order_date)} · Hạn ${date(row.due_date)}</span></div>
                 <div class="weave-product"><strong>${esc(row.item_code || '-')}</strong><span class="weave-sub">${esc(row.item_name || '-')}</span></div>
                 <div><strong>${esc(row.customer || '-')}</strong><span class="weave-sub">PO ${esc(row.po_number || '-')}</span></div>
-                <div><span class="weave-qty">${num(row.received_quantity)} / ${num(row.order_quantity)} ${esc(row.unit || '')}</span><div class="weave-progress" aria-label="Tiến độ ${progress}%"><span style="width:${progress}%"></span></div><span class="weave-sub">Còn ${num(row.remaining_quantity)} · ${num(progress)}%</span></div>
+                <div><span class="weave-qty">Đã nhập ${num(row.received_quantity)} ${esc(row.unit || '')}</span><div class="weave-progress" aria-label="Tiến độ ${progress}%"><span style="width:${progress}%"></span></div><span class="weave-sub">Kế hoạch ${num(row.order_quantity)} · Còn ${num(row.remaining_quantity)} · ${num(progress)}%</span></div>
                 <div><span class="weave-status weave-status--${esc(row.workflow_status)}">${esc(statusLabels[row.workflow_status] || row.workflow_status)}</span>${row.is_overdue ? '<span class="weave-overdue">TRỄ HẠN</span>' : ''}</div>
                 <div class="weave-row-actions">
                     ${row.workflow_status === 'waiting' ? `<button class="weave-btn weave-btn--primary" type="button" data-send-id="${esc(row.id)}" data-send-code="${esc(row.order_code)}" aria-label="Gửi lệnh ${esc(row.order_code)} xuống sản xuất" title="Gửi sản xuất"><i data-lucide="send"></i>Gửi SX</button>` : ''}

@@ -63,7 +63,7 @@
         <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="clipboard-list"></i></div><div><div class="wms-kpi__label">Tổng lệnh</div><div id="kpiTotal" class="wms-kpi__value">0</div></div></article>
         <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="clock-3"></i></div><div><div class="wms-kpi__label">Chờ sản xuất</div><div id="kpiWaiting" class="wms-kpi__value">0</div></div></article>
         <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="factory"></i></div><div><div class="wms-kpi__label">Đang sản xuất</div><div id="kpiProducing" class="wms-kpi__value">0</div></div></article>
-        <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="package-check"></i></div><div><div class="wms-kpi__label">Đã nhập kho</div><div id="kpiCompleted" class="wms-kpi__value">0</div></div></article>
+        <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="package-check"></i></div><div><div class="wms-kpi__label">Hoàn thành</div><div id="kpiCompleted" class="wms-kpi__value">0</div></div></article>
         <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="triangle-alert"></i></div><div><div class="wms-kpi__label">Trễ hạn</div><div id="kpiOverdue" class="wms-kpi__value">0</div></div></article>
     </section>
 
@@ -96,7 +96,7 @@
             <div><label for="keyword">Tìm kiếm</label><input id="keyword" class="form-control" placeholder="Lệnh, mã hàng, khách, PO, design..."></div>
             <div><label for="year">Năm lệnh</label><select id="year" class="form-select"><option value="{{ now('Asia/Ho_Chi_Minh')->format('Y') }}">{{ now('Asia/Ho_Chi_Minh')->format('Y') }}</option></select></div>
             <div><label for="customer">Khách hàng</label><select id="customer" class="form-select"><option value="">Tất cả khách hàng</option></select></div>
-            <div><label for="status">Trạng thái</label><select id="status" class="form-select"><option value="">Tất cả trạng thái</option><option value="waiting">Chờ sản xuất</option><option value="producing">Đang sản xuất</option><option value="partial">Nhập một phần</option><option value="completed">Đã nhập kho</option><option value="overdue">Trễ hạn</option></select></div>
+            <div><label for="status">Trạng thái</label><select id="status" class="form-select"><option value="">Tất cả trạng thái</option><option value="waiting">Chờ sản xuất</option><option value="producing">Đang sản xuất</option><option value="partial">Nhập một phần</option><option value="completed">Hoàn thành</option><option value="overdue">Trễ hạn</option></select></div>
             <button id="clearFilter" class="wms-btn" type="button"><i data-lucide="filter-x"></i>Xóa lọc</button>
         </div>
         <div class="wms-table-wrap">
@@ -200,7 +200,7 @@ function renderCharts(data) {
 }
 
 function statusHtml(row) {
-    const labels = {waiting:'Chờ sản xuất',producing:'Đang sản xuất',partial:'Nhập một phần',completed:'Đã nhập kho'};
+    const labels = {waiting:'Chờ sản xuất',producing:'Đang sản xuất',partial:'Nhập một phần',completed:'Hoàn thành'};
     return `<span class="designer-status designer-status--${esc(row.workflow_status)}">${esc(labels[row.workflow_status] || row.workflow_status)}</span>${row.is_overdue ? '<span class="designer-overdue">TRỄ HẠN</span>' : ''}`;
 }
 

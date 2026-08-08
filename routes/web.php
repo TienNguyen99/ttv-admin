@@ -28,6 +28,7 @@ use App\Http\Controllers\InternalXntController;
 use App\Http\Controllers\InternalWeavingController;
 use App\Http\Controllers\WeavingManagementPageController;
 use App\Http\Controllers\InternalInventoryReportController;
+use App\Http\Controllers\InternalCustomerController;
 use App\Http\Controllers\LocalQrCodeController;
 use Google\Service\Dfareporting\Order;
 
@@ -245,6 +246,14 @@ Route::get('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::cl
 Route::put('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'update']);
 Route::delete('/api/lenh-btp/{btpOrder}', [InternalBtpProductionOrderController::class, 'destroy']);
 Route::get('/client/danh-muc-noi-bo', [InternalItemCatalogController::class, 'index']);
+Route::get('/client/khach-hang-noi-bo', [InternalCustomerController::class, 'page']);
+Route::get('/api/khach-hang-noi-bo', [InternalCustomerController::class, 'index']);
+Route::get('/api/khach-hang-noi-bo/goi-y', [InternalCustomerController::class, 'suggestions']);
+Route::get('/api/khach-hang-noi-bo/kiem-tra', [InternalCustomerController::class, 'check']);
+Route::post('/api/khach-hang-noi-bo/dong-bo', [InternalCustomerController::class, 'sync']);
+Route::post('/api/khach-hang-noi-bo', [InternalCustomerController::class, 'store']);
+Route::patch('/api/khach-hang-noi-bo/{customer}', [InternalCustomerController::class, 'update']);
+Route::delete('/api/khach-hang-noi-bo/{customer}', [InternalCustomerController::class, 'destroy']);
 Route::get('/client/mau-noi-bo', [InternalColorMappingController::class, 'page']);
 Route::get('/api/mau-noi-bo', [InternalColorMappingController::class, 'index']);
 Route::post('/api/mau-noi-bo', [InternalColorMappingController::class, 'store']);

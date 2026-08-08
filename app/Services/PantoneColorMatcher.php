@@ -15,7 +15,9 @@ class PantoneColorMatcher
 
     private array $byName = [];
 
-    private array $nameKeys = [];
+    private int $maxNameWords = 1;
+
+    private array $nameMatchCache = [];
 
     private array $byInternalCode = [];
 
@@ -25,8 +27,6 @@ class PantoneColorMatcher
         $this->loadTcxColors();
         $this->loadInternalColors();
 
-        $this->nameKeys = array_keys($this->byName);
-        usort($this->nameKeys, fn ($a, $b) => strlen($b) <=> strlen($a));
     }
 
     public function matchCatalog(?InternalItemCatalog $catalog): array
@@ -140,18 +140,38 @@ class PantoneColorMatcher
 
     private function matchColorName(string $text): array
     {
-        if (empty($this->nameKeys)) {
+        if (empty($this->byName)) {
             return $this->emptyMatch();
         }
 
-        $haystack = ' ' . $this->normalizeSearch($text) . ' ';
-        foreach ($this->nameKeys as $nameKey) {
-            if ($nameKey !== '' && strpos($haystack, ' ' . $nameKey . ' ') !== false) {
-                return array_merge($this->byName[$nameKey], ['source' => 'color_name']);
-            }
+        $normalized = trim($this->normalizeSearch($text));
+        if ($normalized === '') {
+            return $this->emptyMatch();
+        }
+        if (array_key_exists($normalized, $this->nameMatchCache)) {
+            return $this->nameMatchCache[$normalized];
         }
 
-        return $this->emptyMatch();
+        $words = preg_split('/\s+/', $normalized) ?: [];
+        $maxWords = min(count($words), $this->maxNameWords);
+        $matchedNameKey = '';
+        for ($wordCount = $maxWords; $wordCount >= 1; $wordCount--) {
+            $lastStart = count($words) - $wordCount;
+            for ($start = 0; $start <= $lastStart; $start++) {
+                $nameKey = implode(' ', array_slice($words, $start, $wordCount));
+                if (isset($this->byName[$nameKey]) && strlen($nameKey) > strlen($matchedNameKey)) {
+                    $matchedNameKey = $nameKey;
+                }
+            }
+        }
+        if ($matchedNameKey !== '') {
+            return $this->nameMatchCache[$normalized] = array_merge(
+                $this->byName[$matchedNameKey],
+                ['source' => 'color_name']
+            );
+        }
+
+        return $this->nameMatchCache[$normalized] = $this->emptyMatch();
     }
 
     private function matchCommonColor(array $values): array
@@ -364,6 +384,7 @@ class PantoneColorMatcher
         $nameKey = $this->normalizeSearch($name);
         if ($nameKey !== '') {
             $this->byName[$nameKey] = $color;
+            $this->maxNameWords = max($this->maxNameWords, substr_count($nameKey, ' ') + 1);
         }
     }
 

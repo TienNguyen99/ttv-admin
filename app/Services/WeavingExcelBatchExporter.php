@@ -2,8 +2,12 @@
 
 namespace App\Services;
 
+use App\Support\LocalQrCode;
+use GuzzleHttp\Client;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 use ZipArchive;
@@ -191,9 +195,14 @@ class WeavingExcelBatchExporter
             throw new RuntimeException('Mẫu Excel không có tab LENH_DET.');
         }
         foreach ($this->templateWriter->buildRanges($plan) as $rangeData) {
+            if (in_array($rangeData['range'], ['J2', 'G19'], true)) {
+                continue;
+            }
             $startCell = explode(':', $rangeData['range'], 2)[0];
             $sheet->fromArray($rangeData['values'], null, $startCell, true);
         }
+        $this->writeExcelBomValues($sheet, $plan);
+        $this->embedExcelImages($sheet, $plan);
         $sheet->setSelectedCell('A1');
         $spreadsheet->setActiveSheetIndex($spreadsheet->getIndex($sheet));
 
@@ -201,6 +210,131 @@ class WeavingExcelBatchExporter
         $writer->setPreCalculateFormulas(false);
         $writer->save($path);
         $spreadsheet->disconnectWorksheets();
+    }
+
+    private function writeExcelBomValues(Worksheet $sheet, array $plan): void
+    {
+        $order = (array) ($plan['order'] ?? []);
+        $sourceItem = (array) ($plan['source_items'][0] ?? []);
+        $lines = array_values((array) ($sourceItem['materials'] ?? []));
+        if (empty($lines)) {
+            $lines = array_values((array) ($plan['data'] ?? []));
+        }
+        $quantity = (float) ($order['planned_quantity'] ?? $sourceItem['order_quantity'] ?? 0);
+
+        for ($index = 0; $index < 7; $index++) {
+            $row = $index + 6;
+            $line = (array) ($lines[$index] ?? []);
+            $consumption = (float) ($line['consumption_per_unit'] ?? 0);
+            $total = (float) ($line['total_grams'] ?? $line['required_quantity_raw'] ?? 0);
+            if ($total <= 0 && $consumption > 0 && $quantity > 0) {
+                $waste = (float) ($line['waste_percent'] ?? 0);
+                $total = $quantity * $consumption * (1 + $waste / 100);
+            }
+
+            $sheet->setCellValue('J' . $row, $consumption > 0 ? round($consumption, 6) : null);
+            $sheet->setCellValue('K' . $row, $total > 0 ? round($total, 6) : null);
+        }
+    }
+
+    private function embedExcelImages(Worksheet $sheet, array $plan): void
+    {
+        $order = (array) ($plan['order'] ?? []);
+        $sourceItem = (array) ($plan['source_items'][0] ?? []);
+        $metadata = array_merge(
+            (array) ($sourceItem['metadata'] ?? []),
+            (array) ($order['metadata'] ?? [])
+        );
+        $orderCode = trim((string) ($order['production_order'] ?? $order['order_code'] ?? ''));
+
+        $sheet->setCellValue('J2', '');
+        if ($orderCode !== '') {
+            $this->addMemoryDrawing(
+                $sheet,
+                LocalQrCode::png($orderCode, 180, 3),
+                'J2',
+                54,
+                8,
+                2,
+                'QR ' . $orderCode
+            );
+        }
+
+        $sheet->setCellValue('G19', '');
+        $imageUrl = $this->firstText(
+            $order['image_url'] ?? '',
+            $sourceItem['image_url'] ?? '',
+            $metadata['image_url'] ?? ''
+        );
+        $image = $this->downloadImage($imageUrl);
+        if ($image !== null) {
+            $this->addMemoryDrawing($sheet, $image, 'G19', 185, 12, 6, 'Hình ảnh mã hàng');
+        }
+    }
+
+    private function addMemoryDrawing(
+        Worksheet $sheet,
+        string $binary,
+        string $coordinate,
+        int $height,
+        int $offsetX,
+        int $offsetY,
+        string $name
+    ): void {
+        $resource = @imagecreatefromstring($binary);
+        if ($resource === false) {
+            return;
+        }
+
+        $drawing = new MemoryDrawing();
+        $drawing->setName($name);
+        $drawing->setDescription($name);
+        $drawing->setImageResource($resource);
+        $drawing->setRenderingFunction(MemoryDrawing::RENDERING_PNG);
+        $drawing->setMimeType(MemoryDrawing::MIMETYPE_PNG);
+        $drawing->setCoordinates($coordinate);
+        $drawing->setHeight($height);
+        $drawing->setOffsetX($offsetX);
+        $drawing->setOffsetY($offsetY);
+        $drawing->setWorksheet($sheet);
+    }
+
+    private function downloadImage(string $url): ?string
+    {
+        if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL) || stripos($url, 'https://') !== 0) {
+            return null;
+        }
+
+        try {
+            $response = (new Client([
+                'connect_timeout' => 3,
+                'timeout' => 6,
+                'allow_redirects' => ['max' => 3, 'strict' => true],
+                'http_errors' => false,
+            ]))->get($url, ['headers' => ['Accept' => 'image/*']]);
+            $contentType = strtolower($response->getHeaderLine('Content-Type'));
+            $body = (string) $response->getBody();
+
+            return $response->getStatusCode() === 200
+                && str_starts_with($contentType, 'image/')
+                && strlen($body) <= 5 * 1024 * 1024
+                ? $body
+                : null;
+        } catch (\Throwable $error) {
+            return null;
+        }
+    }
+
+    private function firstText(...$values): string
+    {
+        foreach ($values as $value) {
+            $text = trim((string) $value);
+            if ($text !== '') {
+                return $text;
+            }
+        }
+
+        return '';
     }
 
     public function mark(string $token, string $productionOrder, string $status, ?string $file = null, ?string $error = null): array

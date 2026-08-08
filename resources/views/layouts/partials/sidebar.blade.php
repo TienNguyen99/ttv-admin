@@ -582,9 +582,10 @@
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('orders') ? 'is-active' : '' }}" href="{{ url('/orders') }}"><i data-lucide="building-2"></i>Đơn hàng công ty</a>
         </details>
 
-        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/danh-muc-noi-bo*', 'client/mau-noi-bo*', 'client/quy-doi-don-vi*') ? 'open' : '' }}>
+        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/danh-muc-noi-bo*', 'client/khach-hang-noi-bo*', 'client/mau-noi-bo*', 'client/quy-doi-don-vi*') ? 'open' : '' }}>
             <summary class="summary-sidebar__summary"><i data-lucide="book-open"></i>Danh mục</summary>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/danh-muc-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/danh-muc-noi-bo') }}"><i data-lucide="barcode"></i>Danh mục nội bộ</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/khach-hang-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/khach-hang-noi-bo') }}"><i data-lucide="users"></i>Khách hàng</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/mau-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/mau-noi-bo') }}"><i data-lucide="palette"></i>Màu nội bộ</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/quy-doi-don-vi*') ? 'is-active' : '' }}" href="{{ url('/client/quy-doi-don-vi') }}"><i data-lucide="repeat-2"></i>Quy đổi ĐVT</a>
         </details>

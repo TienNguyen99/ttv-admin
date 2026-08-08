@@ -135,6 +135,10 @@ class InternalProductionOrderController extends Controller
                     $sourceItemCode = trim((string) $line->item_code);
                     $standardItemCode = trim((string) $line->standard_item_code);
                     $catalog = $line->standard_catalog_id ? $catalogsById->get($line->standard_catalog_id) : null;
+                    if ($catalog && $standardItemCode !== ''
+                        && mb_strtoupper(trim((string) $catalog->item_code)) !== mb_strtoupper($standardItemCode)) {
+                        $catalog = null;
+                    }
                     if (!$catalog) {
                         $catalog = $catalogsByCode->get(
                             mb_strtoupper($standardItemCode !== '' ? $standardItemCode : $sourceItemCode)
@@ -364,6 +368,15 @@ class InternalProductionOrderController extends Controller
         }
 
         $summaryQuery = clone $query;
+        $summaryStats = (clone $summaryQuery)
+            ->selectRaw("COUNT(DISTINCT production_order) as order_count")
+            ->selectRaw('COUNT(*) as variant_count')
+            ->selectRaw('COALESCE(SUM(order_quantity), 0) as total_quantity')
+            ->selectRaw("SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late_count")
+            ->selectRaw("SUM(CASE WHEN status = 'due' THEN 1 ELSE 0 END) as due_count")
+            ->selectRaw('COUNT(DISTINCT customer) as customer_count')
+            ->selectRaw('(SELECT MAX(sync_order.updated_at) FROM internal_production_orders AS sync_order) as last_synced_at')
+            ->first();
         $isPaged = $request->has('page') || $request->has('per_page');
         $page = max((int) $request->query('page', 1), 1);
         $perPage = min(max((int) $request->query('per_page', 100), 25), 300);
@@ -380,7 +393,7 @@ class InternalProductionOrderController extends Controller
         $rows = $isPaged
             ? $rowsQuery->skip(($page - 1) * $perPage)->take($perPage)->get()
             : $rowsQuery->limit($limit)->get();
-        $totalRows = (clone $summaryQuery)->count();
+        $totalRows = (int) ($summaryStats->variant_count ?? 0);
 
         if (($request->boolean('unfinished') || $request->boolean('with_progress') || $productionOrder !== '') && $rows->isNotEmpty()) {
             $orderCodes = $rows->pluck('production_order')->filter()->unique()->values();
@@ -449,14 +462,39 @@ class InternalProductionOrderController extends Controller
         }
 
         // API consumers use the central standard code while the synced source code stays intact.
-        $dataCatalogsById = InternalItemCatalog::query()
-            ->whereIn('id', $rows->pluck('standard_catalog_id')->filter()->unique()->values())
-            ->get()
-            ->keyBy('id');
-        $rows->each(function ($row) use ($dataCatalogsById) {
+        $dataCatalogIds = $rows->pluck('standard_catalog_id')->filter()->unique()->values();
+        $dataCatalogCodes = $rows->pluck('standard_item_code')
+            ->map(fn ($code) => trim((string) $code))
+            ->filter()
+            ->unique()
+            ->values();
+        $dataCatalogs = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->where(function ($query) use ($dataCatalogIds, $dataCatalogCodes) {
+                if ($dataCatalogIds->isNotEmpty()) {
+                    $query->whereIn('id', $dataCatalogIds->all());
+                }
+                if ($dataCatalogCodes->isNotEmpty()) {
+                    $method = $dataCatalogIds->isNotEmpty() ? 'orWhereIn' : 'whereIn';
+                    $query->{$method}('item_code', $dataCatalogCodes->all());
+                }
+            })
+            ->get();
+        $dataCatalogsById = $dataCatalogs->keyBy('id');
+        $dataCatalogsByCode = $dataCatalogs->keyBy(
+            fn ($catalog) => mb_strtoupper(trim((string) $catalog->item_code))
+        );
+        $rows->each(function ($row) use ($dataCatalogsById, $dataCatalogsByCode) {
             $sourceItemCode = trim((string) $row->item_code);
             $standardItemCode = trim((string) $row->standard_item_code);
             $catalog = $row->standard_catalog_id ? $dataCatalogsById->get($row->standard_catalog_id) : null;
+            if ($catalog && $standardItemCode !== ''
+                && mb_strtoupper(trim((string) $catalog->item_code)) !== mb_strtoupper($standardItemCode)) {
+                $catalog = null;
+            }
+            if (!$catalog && $standardItemCode !== '') {
+                $catalog = $dataCatalogsByCode->get(mb_strtoupper($standardItemCode));
+            }
             $row->setAttribute('source_item_code', $sourceItemCode);
             $row->setAttribute('item_code', trim((string) ($catalog->item_code ?? '')) ?: ($standardItemCode !== '' ? $standardItemCode : $sourceItemCode));
             if ($catalog) {
@@ -498,13 +536,13 @@ class InternalProductionOrderController extends Controller
         return response()->json([
             'data' => $rows,
             'summary' => [
-                'order_count' => (clone $summaryQuery)->distinct()->count('production_order'),
-                'variant_count' => (clone $summaryQuery)->count(),
-                'total_quantity' => (float) (clone $summaryQuery)->sum('order_quantity'),
-                'late_count' => (clone $summaryQuery)->where('status', 'late')->count(),
-                'due_count' => (clone $summaryQuery)->where('status', 'due')->count(),
-                'customer_count' => (clone $summaryQuery)->whereNotNull('customer')->distinct('customer')->count('customer'),
-                'last_synced_at' => InternalProductionOrder::query()->max('updated_at'),
+                'order_count' => (int) ($summaryStats->order_count ?? 0),
+                'variant_count' => (int) ($summaryStats->variant_count ?? 0),
+                'total_quantity' => (float) ($summaryStats->total_quantity ?? 0),
+                'late_count' => (int) ($summaryStats->late_count ?? 0),
+                'due_count' => (int) ($summaryStats->due_count ?? 0),
+                'customer_count' => (int) ($summaryStats->customer_count ?? 0),
+                'last_synced_at' => $summaryStats->last_synced_at ?? null,
                 'receipt_progress' => $receiptProgress,
             ],
             'pagination' => [
@@ -629,6 +667,8 @@ class InternalProductionOrderController extends Controller
             }
             $archiveQuery->update(['is_active' => false]);
         });
+        $relinkedDocumentLines = $this->reconcileDocumentProductionOrderLinks();
+        $customerSync = app(\App\Services\InternalCustomerCatalogSync::class)->syncFromProductionOrders();
         Cache::forget('internal_catalog_customer_map_v1');
 
         return response()->json([
@@ -639,9 +679,112 @@ class InternalProductionOrderController extends Controller
                 'unchanged' => $unchanged,
                 'skipped' => $skipped,
                 'active_variants' => count(array_unique($activeKeys)),
+                'relinked_document_lines' => $relinkedDocumentLines,
+                'customers' => $customerSync,
                 'sheet' => self::SHEET_NAME,
             ],
         ]);
+    }
+
+    private function reconcileDocumentProductionOrderLinks(): int
+    {
+        $candidateIds = [];
+        $candidateIdsByVariant = [];
+        $candidateIdsBySize = [];
+        $candidateIdsByParentAndCode = [];
+        $candidateIdsByParentAndSize = [];
+        InternalProductionOrder::query()
+            ->where('is_active', true)
+            ->whereNotNull('production_order')
+            ->where('production_order', '<>', '')
+            ->select(['id', 'production_order', 'item_code', 'standard_item_code', 'size', 'color', 'variant_parent_id'])
+            ->orderBy('id')
+            ->chunkById(500, function ($orders) use (&$candidateIds, &$candidateIdsByVariant, &$candidateIdsBySize, &$candidateIdsByParentAndCode, &$candidateIdsByParentAndSize) {
+                foreach ($orders as $order) {
+                    $orderCode = mb_strtoupper(trim((string) $order->production_order));
+                    $size = mb_strtoupper(trim((string) $order->size));
+                    $color = mb_strtoupper(trim((string) $order->color));
+                    foreach ([$order->standard_item_code, $order->item_code] as $itemCode) {
+                        $itemCode = mb_strtoupper(trim((string) $itemCode));
+                        if ($orderCode === '' || $itemCode === '') {
+                            continue;
+                        }
+                        $candidateIds[$orderCode . '|' . $itemCode][(int) $order->id] = true;
+                        if ($order->variant_parent_id) {
+                            $candidateIdsByParentAndCode[(int) $order->variant_parent_id . '|' . $itemCode][(int) $order->id] = true;
+                        }
+                    }
+                    if ($orderCode !== '' && $size !== '' && $color !== '') {
+                        $candidateIdsByVariant[$orderCode . '|' . $size . '|' . $color][(int) $order->id] = true;
+                    }
+                    foreach ([$size, $color] as $variantValue) {
+                        if ($orderCode !== '' && $variantValue !== '') {
+                            $candidateIdsBySize[$orderCode . '|' . $variantValue][(int) $order->id] = true;
+                        }
+                        if ($order->variant_parent_id && $variantValue !== '') {
+                            $candidateIdsByParentAndSize[(int) $order->variant_parent_id . '|' . $variantValue][(int) $order->id] = true;
+                        }
+                    }
+                }
+            });
+
+        $uniqueMaps = [];
+        foreach ([$candidateIds, $candidateIdsByVariant, $candidateIdsBySize, $candidateIdsByParentAndCode, $candidateIdsByParentAndSize] as $map) {
+            $uniqueMap = [];
+            foreach ($map as $key => $ids) {
+                if (count($ids) === 1) {
+                    $uniqueMap[$key] = (int) array_key_first($ids);
+                }
+            }
+            $uniqueMaps[] = $uniqueMap;
+        }
+        [$uniqueIdByKey, $uniqueIdByVariant, $uniqueIdBySize, $uniqueIdByParentAndCode, $uniqueIdByParentAndSize] = $uniqueMaps;
+
+        $updated = 0;
+        foreach (['internal_material_receipt_lines', 'internal_material_issue_lines'] as $table) {
+            DB::connection('internal')->table($table)
+                ->where(function ($query) {
+                    $query->where(function ($query) {
+                        $query->whereNotNull('production_order')
+                            ->where('production_order', '<>', '');
+                    })->orWhereNotNull('production_order_id');
+                })
+                ->whereNotNull('internal_item_code')
+                ->where('internal_item_code', '<>', '')
+                ->select(['id', 'production_order_id', 'production_order', 'internal_item_code', 'size', 'color'])
+                ->orderBy('id')
+                ->chunkById(500, function ($lines) use ($table, $uniqueIdByKey, $uniqueIdByVariant, $uniqueIdBySize, $uniqueIdByParentAndCode, $uniqueIdByParentAndSize, &$updated) {
+                    foreach ($lines as $line) {
+                        $orderCode = mb_strtoupper(trim((string) $line->production_order));
+                        $itemCode = mb_strtoupper(trim((string) $line->internal_item_code));
+                        $size = mb_strtoupper(trim((string) $line->size));
+                        $color = mb_strtoupper(trim((string) $line->color));
+                        $productionOrderId = $uniqueIdByKey[$orderCode . '|' . $itemCode] ?? null;
+                        if (!$productionOrderId && $size !== '' && $color !== '') {
+                            $productionOrderId = $uniqueIdByVariant[$orderCode . '|' . $size . '|' . $color] ?? null;
+                        }
+                        if (!$productionOrderId && $size !== '') {
+                            $productionOrderId = $uniqueIdBySize[$orderCode . '|' . $size] ?? null;
+                        }
+                        if (!$productionOrderId && $line->production_order_id) {
+                            $productionOrderId = $uniqueIdByParentAndCode[(int) $line->production_order_id . '|' . $itemCode] ?? null;
+                        }
+                        if (!$productionOrderId && $line->production_order_id && $size !== '') {
+                            $productionOrderId = $uniqueIdByParentAndSize[(int) $line->production_order_id . '|' . $size] ?? null;
+                        }
+                        if (!$productionOrderId || (int) $line->production_order_id === $productionOrderId) {
+                            continue;
+                        }
+
+                        DB::connection('internal')->table($table)->where('id', $line->id)->update([
+                            'production_order_id' => $productionOrderId,
+                        ]);
+                        $updated++;
+                    }
+                });
+        }
+
+        return $updated;
     }
 
     private function workflowStatus(float $planned, float $received, float $issuedProduction, bool $completedIssue, float $issuedCustomer): string

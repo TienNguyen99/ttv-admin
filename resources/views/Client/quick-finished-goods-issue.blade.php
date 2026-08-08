@@ -356,11 +356,12 @@
         <div class="issue-meta">
             <div>
                 <label for="issueDate">Ngày xuất *</label>
-                <input id="issueDate" class="form-control" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/yyyy">
+                <input id="issueDate" class="form-control" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="dd/mm/yyyy">
             </div>
             <div>
                 <label for="customerName">Khách hàng *</label>
-                <input id="customerName" class="form-control" autocomplete="off" placeholder="UNIPAX, ELITE...">
+                <input id="customerName" class="form-control" list="quickCustomerOptions" autocomplete="off" placeholder="Gõ để chọn khách hàng">
+                <datalist id="quickCustomerOptions"></datalist>
             </div>
             <div>
                 <label for="receiverName">Người nhận</label>
@@ -427,8 +428,10 @@
     const rowsBody = document.getElementById('issueRows');
     const statusBox = document.getElementById('formStatus');
     const saveButton = document.getElementById('saveIssueBtn');
+    const customerNameInput = document.getElementById('customerName');
     let rowSequence = 0;
     let orderHistoryToastTimer = null;
+    let customerSuggestionTimer = null;
     const suggestionTimers = new WeakMap();
 
     function setOperationLoading(loading, title = 'Đang xử lý phiếu xuất', detail = 'Vui lòng chờ, không đóng trang.') {
@@ -510,6 +513,29 @@
         error.payload = payload;
         error.status = response.status;
         throw error;
+    }
+
+    function loadCustomerSuggestions(keyword = '') {
+        clearTimeout(customerSuggestionTimer);
+        customerSuggestionTimer = setTimeout(async () => {
+            try {
+                const result = await fetch(`/api/khach-hang-noi-bo/goi-y?keyword=${encodeURIComponent(keyword.trim())}&limit=50`).then(jsonOrError);
+                document.getElementById('quickCustomerOptions').innerHTML = (result.data || []).map(customer => {
+                    const label = [customer.customer_code, customer.customer_group].filter(Boolean).join(' · ');
+                    return `<option value="${escapeHtml(customer.name)}">${escapeHtml(label)}</option>`;
+                }).join('');
+            } catch (error) {
+                document.getElementById('quickCustomerOptions').innerHTML = '';
+            }
+        }, keyword ? 120 : 0);
+    }
+
+    async function requireCatalogCustomer(name) {
+        const result = await fetch(`/api/khach-hang-noi-bo/kiem-tra?name=${encodeURIComponent(name.trim())}`).then(jsonOrError);
+        if (!result.valid || !result.data) {
+            throw new Error('Khách hàng chưa có trong Danh mục khách hàng. Hãy chọn đúng gợi ý hoặc thêm khách hàng trước.');
+        }
+        return result.data;
     }
 
     function rowTemplate(index) {
@@ -991,7 +1017,7 @@
     }
 
     async function saveIssue(allowNegative = false) {
-        const customer = document.getElementById('customerName').value.trim();
+        let customer = document.getElementById('customerName').value.trim();
         const issueDate = displayToIsoDate(document.getElementById('issueDate').value);
         let lines = collectLines();
         if (!issueDate) {
@@ -1002,6 +1028,16 @@
         if (!customer) {
             setStatus('Nhập khách hàng.', 'error');
             document.getElementById('customerName').focus();
+            return;
+        }
+        try {
+            const customerRecord = await requireCatalogCustomer(customer);
+            customer = customerRecord.name;
+            customerNameInput.value = customerRecord.name;
+            lines = collectLines();
+        } catch (error) {
+            setStatus(error.message, 'error');
+            customerNameInput.focus();
             return;
         }
         if (!lines.length || lines.some(line => !line.internal_item_code || line.quantity <= 0)) {
@@ -1143,7 +1179,14 @@
     document.getElementById('addRowBtn').addEventListener('click', () => addRow(true));
     document.getElementById('resetBtn').addEventListener('click', () => resetForm(true));
     document.getElementById('saveIssueBtn').addEventListener('click', () => saveIssue(false));
+    customerNameInput.addEventListener('focus', () => loadCustomerSuggestions(customerNameInput.value));
+    customerNameInput.addEventListener('input', () => loadCustomerSuggestions(customerNameInput.value));
+    document.getElementById('issueDate').addEventListener('blur', event => {
+        const iso = displayToIsoDate(event.currentTarget.value);
+        if (iso) event.currentTarget.value = isoToDisplayDate(iso);
+    });
     document.getElementById('issueDate').value = isoToDisplayDate(localIsoDate());
+    loadCustomerSuggestions();
     resetForm(false);
     window.lucide?.createIcons();
 })();

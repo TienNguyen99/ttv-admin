@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ExampleTest extends TestCase
@@ -12,9 +11,9 @@ class ExampleTest extends TestCase
      *
      * @return void
      */
-    public function test_example()
+    public function test_static_material_calculator_page_is_available()
     {
-        $response = $this->get('/');
+        $response = $this->get('/client/material-calculator');
 
         $response->assertStatus(200);
     }

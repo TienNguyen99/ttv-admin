@@ -561,7 +561,6 @@
             .operation-loader__spinner { transition: none; animation: none; }
         }
     </style>
-    <script src="{{ asset('js/vietnam-date-input.js') }}?v=20260801" defer></script>
 </head>
 <body>
     <section id="modeChooser" class="quick-choice">
@@ -621,7 +620,7 @@
                 <div class="quick-form-row">
                     <div>
                         <label for="receiptDate">Ngày nhập</label>
-                        <input id="receiptDate" class="form-control" type="date">
+                        <input id="receiptDate" class="form-control" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="dd/mm/yyyy">
                     </div>
                     <div>
                         <label for="receiptNote">Ghi chú</label>
@@ -635,11 +634,12 @@
                     </div>
                     <div id="customerField" class="d-none">
                         <label for="customerName">Khách hàng *</label>
-                        <input id="customerName" class="form-control" autocomplete="off" placeholder="Nhập tên khách hàng">
+                        <input id="customerName" class="form-control" list="receiptCustomerOptions" autocomplete="off" placeholder="Gõ để chọn khách hàng">
+                        <datalist id="receiptCustomerOptions"></datalist>
                     </div>
                     <div id="issueDateField" class="d-none">
                         <label for="issueDate">Ngày xuất *</label>
-                        <input id="issueDate" class="form-control" type="date">
+                        <input id="issueDate" class="form-control" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="dd/mm/yyyy">
                     </div>
                 </div>
 
@@ -735,6 +735,7 @@
         let variantCheckError = null;
         let receiptRequestPending = false;
         let orderHistoryToastTimer = null;
+        let customerSuggestionTimer = null;
 
         function showOrderHistoryToast(orderCode, progress = {}) {
             const toast = document.getElementById('orderHistoryToast');
@@ -766,7 +767,6 @@
         }
 
         function localIsoDate() {
-            if (window.VietnamDate) return window.VietnamDate.todayIso();
             const parts = new Intl.DateTimeFormat('en-GB', {
                 timeZone: 'Asia/Ho_Chi_Minh',
                 year: 'numeric',
@@ -775,6 +775,22 @@
             }).formatToParts(new Date());
             const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
             return `${values.year}-${values.month}-${values.day}`;
+        }
+
+        function isoToDisplayDate(value) {
+            const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+        }
+
+        function displayToIsoDate(value) {
+            const match = String(value || '').trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+            if (!match) return '';
+            const day = Number(match[1]);
+            const month = Number(match[2]);
+            const year = Number(match[3]);
+            const date = new Date(Date.UTC(year, month - 1, day));
+            if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return '';
+            return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         }
 
         function esc(value) {
@@ -791,7 +807,36 @@
         }
 
         function selectedReceiptDate() {
-            return document.getElementById('receiptDate').value || localIsoDate();
+            return displayToIsoDate(document.getElementById('receiptDate').value);
+        }
+
+        function loadCustomerSuggestions(keyword = '') {
+            clearTimeout(customerSuggestionTimer);
+            customerSuggestionTimer = setTimeout(() => {
+                fetch(`/api/khach-hang-noi-bo/goi-y?keyword=${encodeURIComponent(keyword.trim())}&limit=50`)
+                    .then(response => jsonOrError(response, 'Không tải được danh mục khách hàng'))
+                    .then(result => {
+                        document.getElementById('receiptCustomerOptions').innerHTML = (result.data || []).map(customer => {
+                            const label = [customer.customer_code, customer.customer_group].filter(Boolean).join(' · ');
+                            return `<option value="${esc(customer.name)}">${esc(label)}</option>`;
+                        }).join('');
+                    })
+                    .catch(() => document.getElementById('receiptCustomerOptions').innerHTML = '');
+            }, keyword ? 120 : 0);
+        }
+
+        async function requireCatalogCustomer(name) {
+            const result = await fetch(`/api/khach-hang-noi-bo/kiem-tra?name=${encodeURIComponent(name.trim())}`)
+                .then(response => jsonOrError(response, 'Không kiểm tra được khách hàng'));
+            if (!result.valid || !result.data) {
+                throw new Error('Khách hàng chưa có trong Danh mục khách hàng. Hãy chọn đúng gợi ý hoặc thêm khách hàng trước.');
+            }
+            return result.data;
+        }
+
+        function normalizeDateField(input) {
+            const iso = displayToIsoDate(input.value);
+            if (iso) input.value = isoToDisplayDate(iso);
         }
 
         function allOrderQuery(keyword, limit) {
@@ -1161,6 +1206,9 @@
             orderInput.dataset.purchaseOrder = order.purchase_order || '';
             orderInput.dataset.customer = order.customer || '';
             orderInput.dataset.sourceItemCode = order.item_code || '';
+            if (!document.getElementById('customerName').value.trim() && order.customer) {
+                document.getElementById('customerName').value = order.customer;
+            }
             row.querySelector('.internal-code').value = order.item_code || '';
             row.querySelector('.item-name').value = order.description || order.specification || '';
             row.querySelector('.item-size').value = order.size || '';
@@ -1795,7 +1843,7 @@
                 method: 'POST',
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({
-                    checked_at: document.getElementById('receiptDate').value,
+                    checked_at: selectedReceiptDate(),
                     lines,
                 })
             });
@@ -1843,8 +1891,10 @@
         }
         async function saveAndPrint() {
             if (receiptRequestPending) return;
-            if (window.VietnamDate && !window.VietnamDate.syncAll()) {
-                document.querySelector('.vi-date-display.is-invalid')?.reportValidity();
+            const receiptDate = selectedReceiptDate();
+            if (!receiptDate) {
+                setStatus('Ngày nhập phải đúng định dạng dd/mm/yyyy.', 'error');
+                document.getElementById('receiptDate').focus();
                 return;
             }
             receiptRequestPending = true;
@@ -1913,19 +1963,30 @@
 
             const isBtp = selectedReceiptKind === 'semi_finished';
             const exportImmediately = !isBtp && document.getElementById('exportImmediately').checked;
-            const customerName = document.getElementById('customerName').value.trim();
-            const issueDate = document.getElementById('issueDate').value;
+            let customerName = document.getElementById('customerName').value.trim();
+            const issueDate = displayToIsoDate(document.getElementById('issueDate').value);
             if (exportImmediately && (!customerName || !issueDate)) {
-                setStatus('Chọn khách hàng và ngày xuất trước khi nhập + xuất.', 'error');
+                setStatus(!customerName ? 'Chọn khách hàng trước khi nhập + xuất.' : 'Ngày xuất phải đúng định dạng dd/mm/yyyy.', 'error');
                 (!customerName ? document.getElementById('customerName') : document.getElementById('issueDate')).focus();
                 return;
+            }
+            if (exportImmediately) {
+                try {
+                    const customer = await requireCatalogCustomer(customerName);
+                    customerName = customer.name;
+                    document.getElementById('customerName').value = customer.name;
+                } catch (error) {
+                    setStatus(error.message, 'error');
+                    document.getElementById('customerName').focus();
+                    return;
+                }
             }
 
             const total = lines.reduce((sum, line) => sum + line.quantity, 0);
             const confirmation = isBtp
                 ? `Tạo 1 phiếu nhập BTP gồm ${lines.length} dòng, ${lines.length} lệnh BTP con và 1 phiếu xuất nhóm sang sản xuất?\n\nTổng số lượng: ${fmt(total)}`
                 : exportImmediately
-                    ? `Nhập kho và xuất ngay ${lines.length} dòng cho ${customerName}?\n\nNgày xuất: ${issueDate.split('-').reverse().join('/')}\nTổng số lượng: ${fmt(total)}`
+                    ? `Nhập kho và xuất ngay ${lines.length} dòng cho ${customerName}?\n\nNgày xuất: ${isoToDisplayDate(issueDate)}\nTổng số lượng: ${fmt(total)}`
                     : `Lưu 1 phiếu nhập thành phẩm gồm ${lines.length} dòng?\n\nTổng số lượng: ${fmt(total)}`;
             if (!confirm(confirmation)) {
                 setStatus('Chưa lưu. Có thể bấm Chọn lại để đổi loại phiếu.');
@@ -1952,7 +2013,7 @@
                     issue_date: exportImmediately ? issueDate : null,
                     location_code: 'CHUA-XEP',
                     ma_ko: '',
-                    checked_at: document.getElementById('receiptDate').value,
+                    checked_at: receiptDate,
                     note: document.getElementById('receiptNote').value.trim(),
                     lines,
                 })
@@ -2047,7 +2108,7 @@
             document.getElementById('receiptNote').value = '';
             document.getElementById('exportImmediately').checked = false;
             document.getElementById('customerName').value = '';
-            document.getElementById('issueDate').value = document.getElementById('receiptDate').value || localIsoDate();
+            document.getElementById('issueDate').value = document.getElementById('receiptDate').value || isoToDisplayDate(localIsoDate());
             delete document.getElementById('issueDate').dataset.changedByUser;
             toggleImmediateExportFields();
             renderRows();
@@ -2070,7 +2131,7 @@
 
         function loadRecentReceipts() {
             const params = new URLSearchParams({
-                receipt_date: document.getElementById('receiptDate').value,
+                receipt_date: selectedReceiptDate(),
                 receipt_kind: selectedReceiptKind || 'finished',
             });
             fetch(`/api/kiem-ton-kho/phieu-nhap-tp?${params}`)
@@ -2099,7 +2160,7 @@
         document.getElementById('clearFormBtn').addEventListener('click', () => resetRows(true));
         document.getElementById('exportImmediately').addEventListener('change', () => {
             if (!document.getElementById('issueDate').value) {
-                document.getElementById('issueDate').value = document.getElementById('receiptDate').value || localIsoDate();
+                document.getElementById('issueDate').value = document.getElementById('receiptDate').value || isoToDisplayDate(localIsoDate());
             }
             toggleImmediateExportFields();
             if (document.getElementById('exportImmediately').checked) {
@@ -2130,13 +2191,20 @@
         document.querySelectorAll('[data-receipt-kind]').forEach(button => {
             button.addEventListener('click', () => chooseReceiptKind(button.dataset.receiptKind));
         });
+        const customerNameInput = document.getElementById('customerName');
+        customerNameInput.addEventListener('focus', () => loadCustomerSuggestions(customerNameInput.value));
+        customerNameInput.addEventListener('input', () => loadCustomerSuggestions(customerNameInput.value));
+        ['receiptDate', 'issueDate'].forEach(id => {
+            document.getElementById(id).addEventListener('blur', event => normalizeDateField(event.currentTarget));
+        });
 
-        document.getElementById('receiptDate').value = localIsoDate();
+        document.getElementById('receiptDate').value = isoToDisplayDate(localIsoDate());
         document.getElementById('issueDate').value = document.getElementById('receiptDate').value;
         renderRows();
         loadProductionOrderFromQuery();
         updateSummary();
         loadRecentReceipts();
+        loadCustomerSuggestions();
         if (window.lucide) lucide.createIcons();
     </script>
 </body>

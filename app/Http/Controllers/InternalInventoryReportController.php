@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternalItemCatalog;
+use App\Models\InternalCustomer;
+use App\Services\InternalCustomerCatalogSync;
 use App\Services\InternalItemGroupResolver;
 use App\Services\InternalStockLedger;
 use Carbon\Carbon;
@@ -49,6 +51,8 @@ class InternalInventoryReportController extends Controller
             'groups.*' => 'string|max:100',
             'production_order' => 'nullable|string|max:100',
             'item_code' => 'nullable|string|max:200',
+            'customer' => 'nullable|string|max:200',
+            'customer_group' => 'nullable|string|max:100',
         ]);
 
         $month = Carbon::createFromFormat('Y-m-d', $data['month'] . '-01')->startOfMonth();
@@ -56,7 +60,10 @@ class InternalInventoryReportController extends Controller
         $monthEnd = $month->copy()->endOfMonth()->format('Y-m-d');
         $productionOrder = trim((string) ($data['production_order'] ?? ''));
         $itemCode = trim((string) ($data['item_code'] ?? ''));
+        $customer = trim((string) ($data['customer'] ?? ''));
+        $customerGroup = trim((string) ($data['customer_group'] ?? ''));
         $catalogMap = $this->catalogMap($resolver);
+        $customerMap = $this->customerMap();
         $availableGroups = collect($catalogMap)->pluck('group')->filter()->unique()->values();
         $selectedGroups = collect($data['groups'] ?? [])
             ->map(fn ($group) => trim((string) $group))
@@ -76,20 +83,26 @@ class InternalInventoryReportController extends Controller
             $catalogMap,
             $resolver,
             $productionOrder,
-            $itemCode
+            $itemCode,
+            $customerMap,
+            $customer,
+            $customerGroup
         );
-        $summaryRows = $productionOrder !== ''
+        $summaryRows = ($productionOrder !== '' || $customer !== '' || $customerGroup !== '')
             ? $this->orderStockSummary(
                 $monthStart,
                 $monthEnd,
                 $catalogMap,
                 $resolver,
                 $productionOrder,
-                $itemCode
+                $itemCode,
+                $customerMap,
+                $customer,
+                $customerGroup
             )
             : $this->stockSummary($monthStart, $monthEnd, $catalogMap, $resolver, $itemCode);
 
-        if ($productionOrder !== '' || $itemCode !== '') {
+        if ($productionOrder !== '' || $itemCode !== '' || $customer !== '' || $customerGroup !== '') {
             $matchedGroups = $transactionRows
                 ->pluck('group')
                 ->merge($summaryRows->pluck('group'))
@@ -127,6 +140,8 @@ class InternalInventoryReportController extends Controller
                 [
                     'production_order' => $productionOrder,
                     'item_code' => $itemCode,
+                    'customer' => $customer,
+                    'customer_group' => $customerGroup,
                 ]
             );
         }
@@ -138,7 +153,12 @@ class InternalInventoryReportController extends Controller
                 $month,
                 collect(),
                 collect(),
-                ['production_order' => $productionOrder, 'item_code' => $itemCode]
+                [
+                    'production_order' => $productionOrder,
+                    'item_code' => $itemCode,
+                    'customer' => $customer,
+                    'customer_group' => $customerGroup,
+                ]
             );
         }
 
@@ -178,17 +198,36 @@ class InternalInventoryReportController extends Controller
         return $map;
     }
 
+    private function customerMap(): array
+    {
+        return InternalCustomer::query()
+            ->orderByDesc('is_active')
+            ->orderBy('id')
+            ->get(['name', 'customer_group'])
+            ->mapWithKeys(function ($customer) {
+                return [InternalCustomerCatalogSync::normalize($customer->name) => [
+                    'name' => trim((string) $customer->name),
+                    'group' => trim((string) $customer->customer_group) ?: 'Chưa phân loại',
+                ]];
+            })
+            ->all();
+    }
+
     private function transactions(
         string $monthStart,
         string $monthEnd,
         array $catalogMap,
         InternalItemGroupResolver $resolver,
         string $productionOrder = '',
-        string $itemCode = ''
+        string $itemCode = '',
+        array $customerMap = [],
+        string $customer = '',
+        string $customerGroup = ''
     ): Collection {
         $receiptsQuery = DB::connection('internal')
             ->table('internal_material_receipt_lines as l')
             ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
+            ->leftJoin('internal_production_orders as po', 'po.id', '=', 'l.production_order_id')
             ->where('r.source', 'Phieu nhap thanh pham')
             ->whereBetween('r.receipt_date', [$monthStart, $monthEnd]);
         if ($productionOrder !== '') {
@@ -203,6 +242,12 @@ class InternalInventoryReportController extends Controller
                 [mb_strtoupper($itemCode)]
             );
         }
+        if ($customer !== '') {
+            $receiptsQuery->whereRaw(
+                "UPPER(TRIM(COALESCE(NULLIF(l.customer, ''), po.customer, ''))) LIKE ?",
+                ['%' . mb_strtoupper($customer) . '%']
+            );
+        }
         $receipts = $receiptsQuery
             ->select([
                 DB::raw("'receipt' as transaction_type"),
@@ -214,6 +259,7 @@ class InternalInventoryReportController extends Controller
                 'l.ten_hh',
                 DB::raw('COALESCE(l.base_quantity, l.quantity) as quantity'),
                 DB::raw("COALESCE(NULLIF(l.base_dvt, ''), l.dvt, '') as unit"),
+                DB::raw("COALESCE(NULLIF(l.customer, ''), po.customer, '') as customer"),
                 'l.id as line_id',
             ])
             ->get();
@@ -221,6 +267,7 @@ class InternalInventoryReportController extends Controller
         $issuesQuery = DB::connection('internal')
             ->table('internal_material_issue_lines as l')
             ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->leftJoin('internal_production_orders as po', 'po.id', '=', 'l.production_order_id')
             ->whereRaw("COALESCE(i.issue_type, 'material') <> 'production'")
             ->whereBetween('i.issue_date', [$monthStart, $monthEnd]);
         if ($productionOrder !== '') {
@@ -235,6 +282,12 @@ class InternalInventoryReportController extends Controller
                 [mb_strtoupper($itemCode)]
             );
         }
+        if ($customer !== '') {
+            $issuesQuery->whereRaw(
+                "UPPER(TRIM(COALESCE(NULLIF(l.customer, ''), po.customer, NULLIF(i.receiver_name, ''), ''))) LIKE ?",
+                ['%' . mb_strtoupper($customer) . '%']
+            );
+        }
         $issues = $issuesQuery
             ->select([
                 DB::raw("'issue' as transaction_type"),
@@ -246,17 +299,20 @@ class InternalInventoryReportController extends Controller
                 'l.ten_hh',
                 DB::raw('COALESCE(l.base_quantity, l.quantity) as quantity'),
                 DB::raw("COALESCE(NULLIF(l.base_dvt, ''), l.dvt, '') as unit"),
+                DB::raw("COALESCE(NULLIF(l.customer, ''), po.customer, NULLIF(i.receiver_name, ''), '') as customer"),
                 'l.id as line_id',
             ])
             ->get();
 
         return $receipts
             ->concat($issues)
-            ->map(function ($row) use ($catalogMap, $resolver) {
+            ->map(function ($row) use ($catalogMap, $resolver, $customerMap) {
                 $code = trim((string) ($row->internal_item_code ?: $row->ma_hh));
                 $catalog = $catalogMap[mb_strtoupper($code)] ?? null;
                 $name = trim((string) ($catalog['name'] ?? $row->ten_hh ?? ''));
                 $unit = mb_strtoupper(trim((string) ($row->unit ?: ($catalog['unit'] ?? ''))));
+                $customerName = preg_replace('/\s+/u', ' ', trim((string) $row->customer));
+                $customerCatalog = $customerMap[InternalCustomerCatalogSync::normalize($customerName)] ?? null;
 
                 return [
                     'date' => (string) $row->transaction_date,
@@ -267,10 +323,18 @@ class InternalInventoryReportController extends Controller
                     'quantity' => (float) $row->quantity,
                     'unit' => $unit !== '' ? $unit : 'CHƯA CÓ ĐVT',
                     'operation' => $row->transaction_type === 'receipt' ? 'Nhập kho' : 'Xuất kho',
+                    'customer' => $customerCatalog['name'] ?? ($customerName !== '' ? $customerName : 'Chưa xác định'),
+                    'customer_group' => $customerCatalog['group'] ?? 'Chưa phân loại',
                     'group' => $catalog['group'] ?? $resolver->resolveName($name),
                     'line_id' => (int) $row->line_id,
                 ];
             })
+            ->when(
+                $customerGroup !== '',
+                fn ($rows) => $rows->filter(
+                    fn ($row) => mb_strtoupper($row['customer_group']) === mb_strtoupper($customerGroup)
+                )
+            )
             ->sortBy(fn ($row) => implode('|', [
                 $row['date'],
                 $row['document_code'],
@@ -345,7 +409,10 @@ class InternalInventoryReportController extends Controller
         array $catalogMap,
         InternalItemGroupResolver $resolver,
         string $productionOrder,
-        string $itemCode = ''
+        string $itemCode = '',
+        array $customerMap = [],
+        string $customer = '',
+        string $customerGroup = ''
     ): Collection {
         return $this->transactions(
             '1900-01-01',
@@ -353,7 +420,10 @@ class InternalInventoryReportController extends Controller
             $catalogMap,
             $resolver,
             $productionOrder,
-            $itemCode
+            $itemCode,
+            $customerMap,
+            $customer,
+            $customerGroup
         )
             ->groupBy(fn ($row) => $row['group'] . '|' . $row['unit'])
             ->map(function ($rows) use ($monthStart) {
@@ -390,7 +460,7 @@ class InternalInventoryReportController extends Controller
         array $filters = []
     ): void
     {
-        $sheet->mergeCells('A1:I1');
+        $sheet->mergeCells('A1:K1');
         $sheet->setCellValue('A1', 'BÁO CÁO NHẬP XUẤT TỒN - ' . mb_strtoupper($group));
         $subtitle = ['Tháng ' . $month->format('m/Y'), 'Dữ liệu kho nội bộ'];
         if (trim((string) ($filters['production_order'] ?? '')) !== '') {
@@ -399,9 +469,15 @@ class InternalInventoryReportController extends Controller
         if (trim((string) ($filters['item_code'] ?? '')) !== '') {
             $subtitle[] = 'Mã hàng: ' . trim((string) $filters['item_code']);
         }
-        $sheet->mergeCells('A2:I2');
+        if (trim((string) ($filters['customer'] ?? '')) !== '') {
+            $subtitle[] = 'Khách: ' . trim((string) $filters['customer']);
+        }
+        if (trim((string) ($filters['customer_group'] ?? '')) !== '') {
+            $subtitle[] = 'Nhóm khách: ' . trim((string) $filters['customer_group']);
+        }
+        $sheet->mergeCells('A2:K2');
         $sheet->setCellValue('A2', implode(' · ', $subtitle));
-        $headers = ['STT', 'Ngày', 'Số phiếu', 'Lệnh SX', 'Mã hàng', 'Tên hàng', 'Số lượng', 'Đơn vị tính', 'Nhập kho / Xuất kho'];
+        $headers = ['STT', 'Ngày', 'Số phiếu', 'Lệnh SX', 'Khách hàng', 'Nhóm khách', 'Mã hàng', 'Tên hàng', 'Số lượng', 'Đơn vị tính', 'Nhập kho / Xuất kho'];
         $sheet->fromArray($headers, null, 'A4');
 
         $rowNumber = 5;
@@ -410,73 +486,77 @@ class InternalInventoryReportController extends Controller
             $sheet->setCellValue('B' . $rowNumber, ExcelDate::PHPToExcel(Carbon::parse($row['date'])));
             $sheet->setCellValueExplicit('C' . $rowNumber, $row['document_code'], DataType::TYPE_STRING);
             $sheet->setCellValueExplicit('D' . $rowNumber, $row['production_order'], DataType::TYPE_STRING);
-            $sheet->setCellValueExplicit('E' . $rowNumber, $row['code'], DataType::TYPE_STRING);
-            $sheet->setCellValue('F' . $rowNumber, $row['name']);
-            $sheet->setCellValue('G' . $rowNumber, $row['quantity']);
-            $sheet->setCellValue('H' . $rowNumber, $row['unit']);
-            $sheet->setCellValue('I' . $rowNumber, $row['operation']);
+            $sheet->setCellValue('E' . $rowNumber, $row['customer']);
+            $sheet->setCellValue('F' . $rowNumber, $row['customer_group']);
+            $sheet->setCellValueExplicit('G' . $rowNumber, $row['code'], DataType::TYPE_STRING);
+            $sheet->setCellValue('H' . $rowNumber, $row['name']);
+            $sheet->setCellValue('I' . $rowNumber, $row['quantity']);
+            $sheet->setCellValue('J' . $rowNumber, $row['unit']);
+            $sheet->setCellValue('K' . $rowNumber, $row['operation']);
             $rowNumber++;
         }
 
         if ($rows->isEmpty()) {
-            $sheet->mergeCells('A5:I5');
+            $sheet->mergeCells('A5:K5');
             $sheet->setCellValue('A5', 'Không có giao dịch trong tháng.');
             $sheet->getStyle('A5')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $rowNumber = 6;
         }
 
         $summaryStart = $rowNumber + 1;
-        $sheet->fromArray(['SUBTOTAL', 'Đơn vị tính', 'Tồn đầu kỳ', 'Nhập kho', 'Xuất kho', 'Tồn cuối kỳ'], null, 'D' . $summaryStart);
+        $sheet->fromArray(['SUBTOTAL', 'Đơn vị tính', 'Tồn đầu kỳ', 'Nhập kho', 'Xuất kho', 'Tồn cuối kỳ'], null, 'F' . $summaryStart);
         $summaryRow = $summaryStart + 1;
         foreach ($summary->sortBy('unit') as $subtotal) {
-            $sheet->setCellValue('D' . $summaryRow, 'SUBTOTAL');
-            $sheet->setCellValue('E' . $summaryRow, $subtotal['unit']);
-            $sheet->setCellValue('F' . $summaryRow, $subtotal['opening']);
-            $sheet->setCellValue('G' . $summaryRow, $subtotal['receipt']);
-            $sheet->setCellValue('H' . $summaryRow, $subtotal['issue']);
-            $sheet->setCellValue('I' . $summaryRow, $subtotal['closing']);
+            $sheet->setCellValue('F' . $summaryRow, 'SUBTOTAL');
+            $sheet->setCellValue('G' . $summaryRow, $subtotal['unit']);
+            $sheet->setCellValue('H' . $summaryRow, $subtotal['opening']);
+            $sheet->setCellValue('I' . $summaryRow, $subtotal['receipt']);
+            $sheet->setCellValue('J' . $summaryRow, $subtotal['issue']);
+            $sheet->setCellValue('K' . $summaryRow, $subtotal['closing']);
             $summaryRow++;
         }
         if ($summary->isEmpty()) {
-            $sheet->mergeCells('D' . $summaryRow . ':I' . $summaryRow);
-            $sheet->setCellValue('D' . $summaryRow, 'Không có số dư cho loại hàng này.');
+            $sheet->mergeCells('F' . $summaryRow . ':K' . $summaryRow);
+            $sheet->setCellValue('F' . $summaryRow, 'Không có số dư cho loại hàng này.');
         }
 
         $lastRow = max($summaryRow, $summaryStart + 1);
-        $sheet->getStyle('A1:I1')->applyFromArray([
+        $sheet->getStyle('A1:K1')->applyFromArray([
             'font' => ['bold' => true, 'size' => 15, 'color' => ['rgb' => '123653']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'DDEEFF']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
         ]);
-        $sheet->getStyle('A2:I2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle('A4:I4')->applyFromArray([
+        $sheet->getStyle('A2:K2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle('A4:K4')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '173F6B']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
-        $sheet->getStyle('D' . $summaryStart . ':I' . $summaryStart)->applyFromArray([
+        $sheet->getStyle('F' . $summaryStart . ':K' . $summaryStart)->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => '173F6B']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'EAF4FF']],
         ]);
-        $sheet->getStyle('A4:I' . $lastRow)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('CAD8E5');
+        $sheet->getStyle('A4:K' . $lastRow)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('CAD8E5');
         $sheet->getStyle('B5:B' . max($rowNumber - 1, 5))->getNumberFormat()->setFormatCode('dd/mm/yyyy');
-        $sheet->getStyle('G5:G' . max($rowNumber - 1, 5))->getNumberFormat()->setFormatCode('#,##0.###');
-        $sheet->getStyle('F' . ($summaryStart + 1) . ':I' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.###');
-        $sheet->getStyle('A4:I' . $lastRow)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
-        $sheet->getStyle('F5:F' . max($rowNumber - 1, 5))->getAlignment()->setWrapText(true);
+        $sheet->getStyle('I5:I' . max($rowNumber - 1, 5))->getNumberFormat()->setFormatCode('#,##0.###');
+        $sheet->getStyle('H' . ($summaryStart + 1) . ':K' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.###');
+        $sheet->getStyle('A4:K' . $lastRow)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet->getStyle('H5:H' . max($rowNumber - 1, 5))->getAlignment()->setWrapText(true);
         $sheet->freezePane('A5');
         if ($rows->isNotEmpty()) {
-            $sheet->setAutoFilter('A4:I' . ($rowNumber - 1));
+            $sheet->setAutoFilter('A4:K' . ($rowNumber - 1));
         }
         $sheet->getColumnDimension('A')->setWidth(7);
         $sheet->getColumnDimension('B')->setWidth(13);
         $sheet->getColumnDimension('C')->setWidth(23);
         $sheet->getColumnDimension('D')->setWidth(20);
-        $sheet->getColumnDimension('E')->setWidth(22);
-        $sheet->getColumnDimension('F')->setWidth(48);
-        $sheet->getColumnDimension('G')->setWidth(16);
-        $sheet->getColumnDimension('H')->setWidth(15);
-        $sheet->getColumnDimension('I')->setWidth(20);
+        $sheet->getColumnDimension('E')->setWidth(24);
+        $sheet->getColumnDimension('F')->setWidth(20);
+        $sheet->getColumnDimension('G')->setWidth(22);
+        $sheet->getColumnDimension('H')->setWidth(48);
+        $sheet->getColumnDimension('I')->setWidth(16);
+        $sheet->getColumnDimension('J')->setWidth(15);
+        $sheet->getColumnDimension('K')->setWidth(20);
         $sheet->getRowDimension(1)->setRowHeight(26);
         $sheet->setShowGridlines(false);
     }

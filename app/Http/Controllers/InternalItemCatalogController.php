@@ -702,6 +702,7 @@ class InternalItemCatalogController extends Controller
             }
             $archiveQuery->update(['is_active' => false]);
         });
+        $relinkedOrders = $this->reconcileProductionOrderCatalogLinks();
         Cache::forget('internal_catalog_customer_map_v1');
         Cache::forever('internal_catalog_version', (string) Str::uuid());
 
@@ -713,9 +714,60 @@ class InternalItemCatalogController extends Controller
                 'unchanged' => $unchanged,
                 'skipped' => $skipped,
                 'active' => InternalItemCatalog::query()->where('is_active', true)->count(),
+                'relinked_orders' => $relinkedOrders,
                 'sheet' => self::SHEET_NAME,
             ],
         ]);
+    }
+
+    private function reconcileProductionOrderCatalogLinks(): int
+    {
+        $catalogIdsByCode = [];
+        InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereNotNull('item_code')
+            ->where('item_code', '<>', '')
+            ->get(['id', 'item_code'])
+            ->each(function (InternalItemCatalog $catalog) use (&$catalogIdsByCode) {
+                $code = mb_strtoupper(trim((string) $catalog->item_code));
+                if ($code !== '') {
+                    $catalogIdsByCode[$code][] = (int) $catalog->id;
+                }
+            });
+
+        $uniqueCatalogIdByCode = [];
+        foreach ($catalogIdsByCode as $code => $catalogIds) {
+            if (count($catalogIds) === 1) {
+                $uniqueCatalogIdByCode[$code] = $catalogIds[0];
+            }
+        }
+
+        if (!$uniqueCatalogIdByCode) {
+            return 0;
+        }
+
+        $updated = 0;
+        InternalProductionOrder::query()
+            ->whereNotNull('standard_item_code')
+            ->where('standard_item_code', '<>', '')
+            ->select(['id', 'standard_item_code', 'standard_catalog_id'])
+            ->orderBy('id')
+            ->chunkById(500, function ($orders) use ($uniqueCatalogIdByCode, &$updated) {
+                foreach ($orders as $order) {
+                    $code = mb_strtoupper(trim((string) $order->standard_item_code));
+                    $catalogId = $uniqueCatalogIdByCode[$code] ?? null;
+                    if (!$catalogId || (int) $order->standard_catalog_id === $catalogId) {
+                        continue;
+                    }
+
+                    InternalProductionOrder::query()->whereKey($order->id)->update([
+                        'standard_catalog_id' => $catalogId,
+                    ]);
+                    $updated++;
+                }
+            });
+
+        return $updated;
     }
 
     public function productionOrderVariants(Request $request, GoogleSheetCatalogWriter $writer)
@@ -879,6 +931,24 @@ class InternalItemCatalogController extends Controller
         }
 
         $submitted = collect($data['variants'] ?? [])->keyBy(fn ($row) => (string) $row['variant_key']);
+        $resolvedPlanCodes = $plans->map(function ($plan) use ($submitted) {
+            $input = $submitted->get((string) $plan['variant_key']);
+            $plan['resolved_code'] = $plan['exists']
+                ? mb_strtoupper(trim((string) $plan['proposed_code']))
+                : mb_strtoupper(trim((string) ($input['new_code'] ?? $plan['proposed_code'])));
+            return $plan;
+        });
+        $duplicateResolvedCode = $resolvedPlanCodes
+            ->groupBy('resolved_code')
+            ->first(function ($group, $code) {
+                return $code !== '' && $group->unique(fn ($plan) => mb_strtoupper(trim((string) $plan['size']))
+                    . '|' . mb_strtoupper(trim((string) $plan['color'])))->count() > 1;
+            });
+        if ($duplicateResolvedCode) {
+            return response()->json([
+                'message' => "Hai size/m\u{00E0}u kh\u{00E1}c nhau \u{0111}ang d\u{00F9}ng chung m\u{00E3} " . $duplicateResolvedCode->first()['resolved_code'] . ". H\u{00E3}y \u{0111}\u{1EB7}t m\u{00E3} ri\u{00EA}ng cho t\u{1EEB}ng bi\u{1EBF}n th\u{1EC3}.",
+            ], 422);
+        }
         $missingPlans = $plans->where('exists', false)->map(function ($plan) use ($submitted) {
             $input = $submitted->get((string) $plan['variant_key']);
             $plan['new_code'] = mb_strtoupper(trim((string) ($input['new_code'] ?? $plan['proposed_code'])));
@@ -1012,23 +1082,38 @@ class InternalItemCatalogController extends Controller
 
     private function syncManualProductionVariants(InternalProductionOrder $parent, $plans): array
     {
+        if ($parent->variant_parent_id) {
+            $parent = InternalProductionOrder::query()->find($parent->variant_parent_id) ?: $parent;
+        }
+
         $variantIds = [];
         DB::connection('internal')->transaction(function () use ($parent, $plans, &$variantIds) {
-            $activeKeys = [];
             foreach ($plans as $plan) {
                 $variantKey = (string) $plan['variant_key'];
-                $rowKey = hash('sha256', 'MANUAL_VARIANT|' . $parent->id . '|' . $variantKey);
-                $activeKeys[] = $rowKey;
+                $codeKey = mb_strtoupper(trim((string) ($plan['final_code'] ?? '')));
+                $variantIdentity = 'CODE|' . $codeKey;
+                $rowKey = hash('sha256', 'MANUAL_VARIANT|' . $parent->id . '|' . $variantIdentity);
                 $rawData = is_array($parent->raw_data) ? $parent->raw_data : [];
                 $rawData['_internal_variant'] = [
                     'parent_id' => (int) $parent->id,
                     'variant_key' => $variantKey,
+                    'variant_identity' => $variantIdentity,
                     'source_quantity' => (float) $parent->order_quantity,
                 ];
 
-                $variant = InternalProductionOrder::query()->updateOrCreate(
-                    ['row_key' => $rowKey],
-                    [
+                $variant = InternalProductionOrder::query()
+                    ->where('row_key', $rowKey)
+                    ->first();
+                if (!$variant) {
+                    $variant = InternalProductionOrder::query()
+                        ->where('variant_parent_id', $parent->id)
+                        ->where('is_manual_variant', true)
+                        ->whereRaw("UPPER(TRIM(COALESCE(standard_item_code, ''))) = ?", [$codeKey])
+                        ->first();
+                }
+                $variant = $variant ?: new InternalProductionOrder();
+                $variant->fill([
+                        'row_key' => $rowKey,
                         'production_order' => $parent->production_order,
                         'purchase_order' => $parent->purchase_order,
                         'tracking_staff' => $parent->tracking_staff,
@@ -1056,16 +1141,11 @@ class InternalItemCatalogController extends Controller
                         'source_hash' => null,
                         'sync_batch' => 'manual-variant',
                         'is_active' => true,
-                    ]
-                );
+                    ]);
+                $variant->save();
                 $variantIds[$variantKey] = (int) $variant->id;
             }
 
-            InternalProductionOrder::query()
-                ->where('variant_parent_id', $parent->id)
-                ->where('is_manual_variant', true)
-                ->when($activeKeys, fn ($query) => $query->whereNotIn('row_key', $activeKeys))
-                ->update(['is_active' => false]);
             $parent->update([
                 'is_variant_parent' => true,
                 'is_manual_variant' => false,

@@ -18,6 +18,7 @@ use App\Services\InternalCatalogValidator;
 use App\Services\InternalDocumentNumber;
 use App\Services\InternalStockLedger;
 use App\Services\InternalUnitConverter;
+use App\Services\InternalProductionOrderLineResolver;
 use App\Services\PantoneColorMatcher;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -652,6 +653,7 @@ class WarehouseCountController extends Controller
         $query = InternalMaterialReceipt::query()
             ->withCount('lines')
             ->withSum('lines as total_quantity', 'quantity')
+            ->orderByDesc('receipt_date')
             ->orderByDesc('created_at')
             ->orderByDesc('id');
 
@@ -692,9 +694,16 @@ class WarehouseCountController extends Controller
                 $q->where('receipt_code', 'like', '%' . $keyword . '%')
                     ->orWhere('note', 'like', '%' . $keyword . '%')
                     ->orWhereHas('lines', function ($lineQuery) use ($keyword) {
-                        $lineQuery->where('ma_hh', 'like', '%' . $keyword . '%')
+                        $lineQuery->where('production_order', 'like', '%' . $keyword . '%')
+                            ->orWhere('purchase_order', 'like', '%' . $keyword . '%')
+                            ->orWhere('customer', 'like', '%' . $keyword . '%')
+                            ->orWhere('ma_hh', 'like', '%' . $keyword . '%')
                             ->orWhere('internal_item_code', 'like', '%' . $keyword . '%')
-                            ->orWhere('ten_hh', 'like', '%' . $keyword . '%');
+                            ->orWhere('ten_hh', 'like', '%' . $keyword . '%')
+                            ->orWhere('size', 'like', '%' . $keyword . '%')
+                            ->orWhere('color', 'like', '%' . $keyword . '%')
+                            ->orWhere('logo_color', 'like', '%' . $keyword . '%')
+                            ->orWhere('side', 'like', '%' . $keyword . '%');
                     });
             });
         }
@@ -715,17 +724,6 @@ class WarehouseCountController extends Controller
                     'issued_quantity' => $issue ? (float) ($receipt->total_quantity ?? 0) : 0,
                     'remaining_quantity' => $issue ? 0 : (float) ($receipt->total_quantity ?? 0),
                 ];
-                $hasDirectCustomerIssue = $issue
-                    && (int) $issue->source_receipt_id === (int) $receipt->id
-                    && $issue->issue_type === 'customer';
-                if ($hasDirectCustomerIssue) {
-                    $fifo = [
-                        'issue_status' => 'exported',
-                        'issued_quantity' => (float) ($receipt->total_quantity ?? 0),
-                        'remaining_quantity' => 0.0,
-                    ];
-                }
-
                 return [
                     'id' => $receipt->id,
                     'receipt_code' => $receipt->receipt_code,
@@ -735,6 +733,13 @@ class WarehouseCountController extends Controller
                     'note' => $receipt->note,
                     'source' => $receipt->source,
                     'receipt_kind' => $receipt->source === 'Phieu nhap ban thanh pham' ? 'semi_finished' : 'finished',
+                    'production_orders' => $receipt->lines
+                        ->pluck('production_order')
+                        ->map(fn ($code) => trim((string) $code))
+                        ->filter()
+                        ->unique()
+                        ->values()
+                        ->all(),
                     'lines_count' => (int) $receipt->lines_count,
                     'total_quantity' => (float) ($receipt->total_quantity ?? 0),
                     'issue_status' => $fifo['issue_status'],
@@ -789,8 +794,43 @@ class WarehouseCountController extends Controller
             ->groupBy(fn ($line) => $this->stockFlowKey($line))
             ->only($lineKeys->all());
 
-        $issueQuantities = DB::connection('internal')->table('internal_material_issue_lines as l')
+        $directIssueQuantities = DB::connection('internal')->table('internal_material_issue_lines as l')
             ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->whereNotNull('i.source_receipt_id')
+            ->select(
+                'i.source_receipt_id',
+                'l.ma_hh',
+                'l.internal_item_code',
+                'l.size',
+                'l.color',
+                'l.side',
+                DB::raw('SUM(l.quantity) as quantity')
+            )
+            ->groupBy('i.source_receipt_id', 'l.ma_hh', 'l.internal_item_code', 'l.size', 'l.color', 'l.side')
+            ->get()
+            ->reduce(function ($carry, $line) {
+                $key = $this->stockFlowKey($line);
+                $receiptId = (int) $line->source_receipt_id;
+                $carry[$receiptId][$key] = ($carry[$receiptId][$key] ?? 0) + (float) $line->quantity;
+                return $carry;
+            }, []);
+
+        $consumedByLineId = [];
+        $directRemaining = $directIssueQuantities;
+        foreach ($allReceiptLines as $key => $lines) {
+            foreach ($lines as $line) {
+                $receiptId = (int) $line->receipt_id;
+                $received = (float) $line->quantity;
+                $remainingDirect = (float) ($directRemaining[$receiptId][$key] ?? 0);
+                $consumed = min($received, max($remainingDirect, 0));
+                $directRemaining[$receiptId][$key] = $remainingDirect - $consumed;
+                $consumedByLineId[(int) $line->id] = $consumed;
+            }
+        }
+
+        $fifoIssueQuantities = DB::connection('internal')->table('internal_material_issue_lines as l')
+            ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
+            ->whereNull('i.source_receipt_id')
             ->select(
                 'l.ma_hh',
                 'l.internal_item_code',
@@ -807,14 +847,15 @@ class WarehouseCountController extends Controller
                 return $carry;
             }, []);
 
-        $consumedByLineId = [];
         foreach ($allReceiptLines as $key => $lines) {
-            $remainingIssue = (float) ($issueQuantities[$key] ?? 0);
+            $remainingIssue = (float) ($fifoIssueQuantities[$key] ?? 0);
             foreach ($lines as $line) {
+                $lineId = (int) $line->id;
                 $received = (float) $line->quantity;
-                $consumed = min($received, max($remainingIssue, 0));
-                $remainingIssue -= $consumed;
-                $consumedByLineId[(int) $line->id] = $consumed;
+                $directConsumed = (float) ($consumedByLineId[$lineId] ?? 0);
+                $fifoConsumed = min(max($received - $directConsumed, 0), max($remainingIssue, 0));
+                $remainingIssue -= $fifoConsumed;
+                $consumedByLineId[$lineId] = $directConsumed + $fifoConsumed;
             }
         }
 
@@ -2799,6 +2840,8 @@ class WarehouseCountController extends Controller
                     }
                 }
 
+                $line['production_order_id'] = app(InternalProductionOrderLineResolver::class)->resolve($line);
+
                 $lineLocation = $location;
                 if ($line['location_code'] !== '' && $line['location_code'] !== $location->location_code) {
                     $lineLocation = WarehouseLocation::query()->firstOrCreate(
@@ -3258,6 +3301,8 @@ class WarehouseCountController extends Controller
                         $line['production_order_id'] = null;
                     }
                 }
+
+                $line['production_order_id'] = app(InternalProductionOrderLineResolver::class)->resolve($line);
 
                 $targetLocationCode = $line['location_code'] ?: $locationCode;
                 $lineLocation = WarehouseLocation::query()->firstOrCreate(

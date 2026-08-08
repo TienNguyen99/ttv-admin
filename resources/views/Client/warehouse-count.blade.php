@@ -565,8 +565,8 @@
             <div class="panel-body pb-2">
                 <div class="row g-2 align-items-end">
                     <div class="col-md-6">
-                        <label class="form-label">Tìm số phiếu, mã nội bộ, mã kế toán hoặc ghi chú</label>
-                        <input id="receiptKeyword" class="form-control" placeholder="Ví dụ: PNTP-20260612-0001">
+                        <label class="form-label">Tìm số phiếu, lệnh sản xuất, mã hàng hoặc ghi chú</label>
+                        <input id="receiptKeyword" class="form-control" placeholder="Ví dụ: 1750 hoặc PNTP-20260612-0001">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Ngày phiếu</label>
@@ -583,6 +583,7 @@
                         <tr>
                             <th>Số phiếu</th>
                             <th>Ngày</th>
+                            <th>Lệnh sản xuất</th>
                             <th>Vị trí</th>
                             <th class="text-end">Số dòng</th>
                             <th class="text-end">Tổng SL</th>
@@ -3112,6 +3113,7 @@
             return `<tr>
                 <td><strong>${escapeHtml(receipt.receipt_code)}</strong></td>
                 <td>${escapeHtml(isoToDateVn(receipt.receipt_date || ''))}</td>
+                <td>${escapeHtml((receipt.production_orders || []).join(', ') || '-')}</td>
                 <td>${escapeHtml(receipt.location_code || '')}</td>
                 <td class="text-end">${formatNumber(receipt.lines_count || 0)}</td>
                 <td class="text-end">${formatNumber(receipt.total_quantity || 0)}</td>
@@ -3140,8 +3142,8 @@
             if (value('receiptKeyword')) params.set('keyword', value('receiptKeyword'));
             fetch(`/api/kiem-ton-kho/phieu-nhap-tp?${params}`).then(r => r.json()).then(result => {
                 const rows = result.data || [];
-                document.getElementById('receiptRows').innerHTML = rows.map(renderReceiptRow).join('') || '<tr><td colspan="8" class="empty-state text-center">Chưa có phiếu nhập trong ngày/kho đang chn</td></tr>';
-                document.getElementById('receiptListSummary').textContent = `${formatNumber(result.summary?.receipt_count || 0)} phiếu · ${formatNumber(result.summary?.line_count || 0)} dòng · SL ${formatNumber(result.summary?.total_quantity || 0)} · ã xuất hết ${formatNumber(result.summary?.exported_count || 0)}`;
+                document.getElementById('receiptRows').innerHTML = rows.map(renderReceiptRow).join('') || '<tr><td colspan="9" class="empty-state text-center">Không có phiếu nhập phù hợp bộ lọc</td></tr>';
+                document.getElementById('receiptListSummary').textContent = `${formatNumber(result.summary?.receipt_count || 0)} phiếu · ${formatNumber(result.summary?.line_count || 0)} dòng · SL ${formatNumber(result.summary?.total_quantity || 0)} · Đã xuất hết ${formatNumber(result.summary?.exported_count || 0)}`;
                 refreshIcons();
             });
         }

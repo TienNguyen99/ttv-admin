@@ -54,17 +54,24 @@ class InternalWeavingController extends Controller
             ->get();
         $receiptTotals = collect();
         $orders->pluck('order_code')->filter()->unique()->chunk(500)->each(function ($orderCodes) use ($receiptTotals) {
+            $normalizedOrderCodes = $orderCodes
+                ->map(fn ($code) => mb_strtoupper(trim((string) $code)))
+                ->filter()
+                ->values();
+            if ($normalizedOrderCodes->isEmpty()) {
+                return;
+            }
             DB::connection('internal')->table('internal_material_receipt_lines as line')
                 ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'line.receipt_id')
-                ->whereIn('line.production_order', $orderCodes->values()->all())
+                ->whereIn(DB::raw('UPPER(TRIM(line.production_order))'), $normalizedOrderCodes->all())
                 ->where(function ($query) {
                     $query->whereNull('receipt.status')->orWhere('receipt.status', '<>', 'cancelled');
                 })
-                ->selectRaw('line.production_order as order_key')
+                ->selectRaw('UPPER(TRIM(line.production_order)) as order_key')
                 ->selectRaw('SUM(line.quantity) as received_quantity')
                 ->selectRaw('COUNT(DISTINCT line.receipt_id) as receipt_count')
                 ->selectRaw('MAX(receipt.receipt_date) as last_receipt_date')
-                ->groupBy('line.production_order')
+                ->groupBy(DB::raw('UPPER(TRIM(line.production_order))'))
                 ->get()
                 ->each(function ($row) use ($receiptTotals) {
                     $receiptTotals->put(mb_strtoupper(trim((string) $row->order_key)), $row);
@@ -77,19 +84,13 @@ class InternalWeavingController extends Controller
                 $planned = (float) $order->order_quantity;
                 $metadata = json_decode((string) ($order->metadata_json ?? ''), true) ?: [];
                 $sentToProduction = $order->status === 'issued' || !empty($metadata['sent_to_production_at']);
-                $rawReceived = (float) ($receipt->received_quantity ?? 0);
-                $rawReceiptCount = (int) ($receipt->receipt_count ?? 0);
-                $receivedBaseline = (float) ($metadata['receipt_quantity_baseline'] ?? 0);
-                $receiptCountBaseline = (int) ($metadata['receipt_count_baseline'] ?? 0);
-                $received = $sentToProduction ? max($rawReceived - $receivedBaseline, 0) : 0;
-                $receiptCount = $sentToProduction ? max($rawReceiptCount - $receiptCountBaseline, 0) : 0;
+                $received = max((float) ($receipt->received_quantity ?? 0), 0);
+                $receiptCount = max((int) ($receipt->receipt_count ?? 0), 0);
                 $remaining = max($planned - $received, 0);
                 $progress = $planned > 0 ? min(($received / $planned) * 100, 100) : 0;
-                $workflowStatus = !$sentToProduction
-                    ? 'waiting'
-                    : ($received > 0
-                        ? ($planned > 0 && $received + 0.0001 >= $planned ? 'completed' : 'partial')
-                        : 'producing');
+                $workflowStatus = $received > 0
+                    ? (($planned <= 0 || $received + 0.0001 >= $planned) ? 'completed' : 'partial')
+                    : ($sentToProduction ? 'producing' : 'waiting');
                 $isOverdue = $remaining > 0 && $order->due_date && $order->due_date->isBefore(now('Asia/Ho_Chi_Minh')->startOfDay());
 
                 return [

@@ -21,6 +21,10 @@ class WeavingExcelTemplateFactory
             throw new RuntimeException('File mẫu Excel không có tab LENH_DET.');
         }
         $sheet = $book->getSheetByName(GoogleSheetWeavingTemplateWriter::SHEET_NAME);
+        // IMAGE() is not supported by older desktop Excel versions. The Excel
+        // exporter embeds QR/product images as drawings instead.
+        $sheet->setCellValue('J2', '');
+        $sheet->setCellValue('G19', '');
         $sheet->getPageSetup()
             ->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE)
             ->setPaperSize(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_A4)

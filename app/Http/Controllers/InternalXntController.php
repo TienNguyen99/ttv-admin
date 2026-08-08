@@ -81,12 +81,12 @@ class InternalXntController extends Controller
 
         $response = Http::timeout(90)->withOptions(['verify' => false])->get($url);
         if (!$response->successful()) {
-            return response()->json(['message' => 'KhÃ´ng Ä‘á»c Ä‘Æ°á»£c tab XNT tá»« Google Sheet.'], 502);
+            return response()->json(['message' => 'Không đọc được tab XNT từ Google Sheet.'], 502);
         }
 
         $rows = $this->parseCsv($response->body());
         if (count($rows) < 2) {
-            return response()->json(['message' => 'Tab XNT khÃ´ng cÃ³ dá»¯ liá»‡u há»£p lá»‡.'], 422);
+            return response()->json(['message' => 'Tab XNT không có dữ liệu hợp lệ.'], 422);
         }
 
         $headers = array_map([$this, 'normalizeHeader'], array_shift($rows));
@@ -106,9 +106,9 @@ class InternalXntController extends Controller
                     }
                 }
 
-                $voucher = $this->pick($row, ['so phieu', 'sá»‘ phiáº¿u']);
-                $itemName = $this->pick($row, ['ten hang', 'tÃªn hÃ ng']);
-                $quantity = $this->number($this->pick($row, ['so luong', 'sá»‘ lÆ°á»£ng']));
+                $voucher = $this->pick($row, ['so phieu']);
+                $itemName = $this->pick($row, ['ten hang']);
+                $quantity = $this->number($this->pick($row, ['so luong']));
                 if ($voucher === '' && $itemName === '' && $quantity <= 0) {
                     $skipped++;
                     continue;
@@ -133,13 +133,13 @@ class InternalXntController extends Controller
                     [
                         'source_row' => $sourceRow,
                         'voucher_code' => $voucher,
-                        'issue_date' => $this->dateValue($this->pick($row, ['ngay xuat', 'ngÃ y xuáº¥t'])),
-                        'item_code' => $this->pick($row, ['ma hang', 'mÃ£ hÃ ng']),
+                        'issue_date' => $this->dateValue($this->pick($row, ['ngay xuat'])),
+                        'item_code' => $this->pick($row, ['ma hang']),
                         'item_name' => $itemName,
                         'quantity' => $quantity,
-                        'unit' => $this->pick($row, ['dvt', 'Ä‘vt']),
-                        'receiver_name' => $this->pick($row, ['nguoi nhan', 'ngÆ°á»i nháº­n']),
-                        'production_order' => $this->pick($row, ['lenh sx', 'lá»‡nh sx']),
+                        'unit' => $this->pick($row, ['dvt']),
+                        'receiver_name' => $this->pick($row, ['nguoi nhan']),
+                        'production_order' => $this->pick($row, ['lenh sx']),
                         'raw_data' => $row,
                         'source_hash' => $sourceHash,
                         'sync_batch' => $batch,
@@ -162,7 +162,7 @@ class InternalXntController extends Controller
             : ['created' => 0, 'linked' => 0, 'skipped' => 0, 'errors' => []];
 
         return response()->json([
-            'message' => 'ÄÃ£ Ä‘á»“ng bá»™ XNT.',
+            'message' => 'Đã đồng bộ XNT.',
             'data' => [
                 'created' => $created,
                 'updated' => $updated,
@@ -199,13 +199,13 @@ class InternalXntController extends Controller
             ->map(fn ($row) => $this->enrichRow($row));
 
         if ($rows->isEmpty()) {
-            return response()->json(['message' => 'KhÃ´ng cÃ³ dÃ²ng XNT há»£p lá»‡ Ä‘á»ƒ xuáº¥t.'], 422);
+            return response()->json(['message' => 'Không có dòng XNT hợp lệ để xuất.'], 422);
         }
 
         $alreadyIssued = $rows->whereNotNull('issue_id')->values();
         if ($alreadyIssued->isNotEmpty()) {
             return response()->json([
-                'message' => 'CÃ³ dÃ²ng XNT Ä‘Ã£ cÃ³ phiáº¿u xuáº¥t chá»‰. Bá» cÃ¡c dÃ²ng Ä‘Ã£ xuáº¥t Ä‘á»ƒ trÃ¡nh trá»« tá»“n trÃ¹ng.',
+                'message' => 'Có dòng XNT đã có phiếu xuất chỉ. Bỏ các dòng đã xuất để tránh trừ tồn trùng.',
                 'issued' => $alreadyIssued->map(fn ($row) => [
                     'id' => $row['id'],
                     'source_row' => $row['source_row'],
@@ -217,7 +217,7 @@ class InternalXntController extends Controller
         $missingOrder = $rows->filter(fn ($row) => trim((string) $row['production_order']) === '')->values();
         if ($missingOrder->isNotEmpty()) {
             return response()->json([
-                'message' => 'Chá»‰ táº¡o phiáº¿u xuáº¥t chá»‰ cho cÃ¡c dÃ²ng XNT cÃ³ Lá»‡nh SX.',
+                'message' => 'Chỉ tạo phiếu xuất chỉ cho các dòng XNT có Lệnh SX.',
                 'missing_order' => $missingOrder->map(fn ($row) => [
                     'id' => $row['id'],
                     'source_row' => $row['source_row'],
@@ -229,7 +229,7 @@ class InternalXntController extends Controller
         $missing = $rows->where('is_matched', false)->values();
         if ($missing->isNotEmpty()) {
             return response()->json([
-                'message' => 'CÃ³ dÃ²ng XNT chÆ°a khá»›p danh má»¥c ná»™i bá»™. Bá»• sung mÃ£/tÃªn trong DANH Má»¤C trÆ°á»›c khi xuáº¥t.',
+                'message' => 'Có dòng XNT chưa khớp danh mục nội bộ. Bổ sung mã/tên trong DANH MỤC trước khi xuất.',
                 'missing' => $missing->map(fn ($row) => [
                     'id' => $row['id'],
                     'item_name' => $row['item_name'],
@@ -253,10 +253,10 @@ class InternalXntController extends Controller
             'issue_date' => $issueDate,
             'warehouse_code' => '',
             'receiver_name' => mb_substr($receiverName, 0, 150),
-            'department' => trim((string) ($data['department'] ?? '')) ?: 'Sáº£n xuáº¥t',
+            'department' => trim((string) ($data['department'] ?? '')) ?: 'Sản xuất',
             'production_order' => mb_substr($productionOrders->implode(', '), 0, 100),
-            'purpose' => 'Xuáº¥t chá»‰ cho lá»‡nh SX',
-            'note' => trim((string) ($data['note'] ?? '')) ?: 'Táº¡o tá»« Google Sheet XNT.',
+            'purpose' => 'Xuất chỉ cho lệnh SX',
+            'note' => trim((string) ($data['note'] ?? '')) ?: 'Tạo từ Google Sheet XNT.',
             'lines' => $rows->map(function ($row) {
                 return [
                     'production_order' => mb_substr($this->compactText($row['production_order']), 0, 100),
@@ -271,7 +271,7 @@ class InternalXntController extends Controller
                     'size' => $row['catalog_size'],
                     'color' => $row['catalog_color'],
                     'side' => $row['catalog_side'],
-                    'note' => mb_substr('XNT ' . $row['voucher_code'] . ' - dÃ²ng sheet ' . $row['source_row'], 0, 500),
+                    'note' => mb_substr('XNT ' . $row['voucher_code'] . ' - dòng sheet ' . $row['source_row'], 0, 500),
                 ];
             })->values()->all(),
         ];
