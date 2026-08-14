@@ -600,7 +600,7 @@ class InternalMaterialIssueController extends Controller
             ]);
         }
 
-        $issueDate = $data['issue_date'] ?? now()->format('Y-m-d');
+        $issueDate = $data['issue_date'] ?? now('Asia/Ho_Chi_Minh')->format('Y-m-d');
         $warehouseCode = strtoupper(trim((string) $receipt->warehouse_code));
         $productionOrders = $receipt->lines
             ->pluck('production_order')

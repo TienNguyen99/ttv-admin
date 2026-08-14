@@ -429,7 +429,7 @@
             <div class="panel-header">
                 <div>
                     <h2 class="panel-title">Mặt kệ kho</h2>
-                    <div class="layout-help mt-1">Nhìn thẳng vào kệ: line 1 A-E, line 2 F-J; kéo ngang trong khung để xem các kệ phía sau.</div>
+                    <div class="layout-help mt-1">Mỗi line gồm 5 tầng: line 1 A-E, line 2 F-J, tiếp tục qua Z đến AA... Kéo ngang để xem các kệ phía sau.</div>
                 </div>
                 <div class="d-flex gap-2 align-items-center">
                     <button type="button" class="btn btn-outline-primary btn-icon" onclick="renderWarehouse3D()"><i data-lucide="refresh-cw"></i>Tải lại</button>
@@ -660,13 +660,13 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <div><h5 class="modal-title">Tạo nhanh vị trí kệ</h5><div class="text-muted small">Ví dụ: A đến D, số 1 đến 100 sẽ tạo A1...D100.</div></div>
+                    <div><h5 class="modal-title">Tạo nhanh vị trí kệ</h5><div class="text-muted small">Hỗ trợ A...Z, AA...ZZ. Ví dụ A đến AI cho 7 line, mỗi line 5 tầng.</div></div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="óng"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row g-2 mb-3">
-                        <div class="col-6"><label class="form-label">Kệ từ</label><input id="bulkShelfFrom" class="form-control text-uppercase" maxlength="1" value="A"></div>
-                        <div class="col-6"><label class="form-label">Kệ đến</label><input id="bulkShelfTo" class="form-control text-uppercase" maxlength="1" value="D"></div>
+                        <div class="col-6"><label class="form-label">Ký hiệu từ</label><input id="bulkShelfFrom" class="form-control text-uppercase" maxlength="2" value="A"></div>
+                        <div class="col-6"><label class="form-label">Ký hiệu đến</label><input id="bulkShelfTo" class="form-control text-uppercase" maxlength="2" value="AI"></div>
                         <div class="col-6"><label class="form-label">Số từ</label><input id="bulkNumberFrom" type="number" min="1" max="999" class="form-control" value="1"></div>
                         <div class="col-6"><label class="form-label">Số đến</label><input id="bulkNumberTo" type="number" min="1" max="999" class="form-control" value="100"></div>
                         <div class="col-12"><label class="form-label">Tầng mặc định</label><select id="bulkTier" class="form-select"><option value="1">Tầng 1</option><option value="2">Tầng 2</option><option value="3">Tầng 3</option><option value="4">Tầng 4</option><option value="5">Tầng 5</option></select></div>
@@ -686,13 +686,13 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <div><h5 class="modal-title">In QR vị trí hàng loạt</h5><div class="text-muted small">Chn dãy vị trí đã tạo, ví dụ A đến D và 1 đến 100.</div></div>
+                    <div><h5 class="modal-title">In QR vị trí hàng loạt</h5><div class="text-muted small">Chọn dãy đã tạo, hỗ trợ ký hiệu một hoặc hai chữ cái.</div></div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="óng"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row g-2 mb-3">
-                        <div class="col-6"><label class="form-label">Kệ từ</label><input id="printShelfFrom" class="form-control text-uppercase" maxlength="1" value="A"></div>
-                        <div class="col-6"><label class="form-label">Kệ đến</label><input id="printShelfTo" class="form-control text-uppercase" maxlength="1" value="D"></div>
+                        <div class="col-6"><label class="form-label">Ký hiệu từ</label><input id="printShelfFrom" class="form-control text-uppercase" maxlength="2" value="A"></div>
+                        <div class="col-6"><label class="form-label">Ký hiệu đến</label><input id="printShelfTo" class="form-control text-uppercase" maxlength="2" value="AI"></div>
                         <div class="col-6"><label class="form-label">Số từ</label><input id="printNumberFrom" type="number" min="1" max="999" class="form-control" value="1"></div>
                         <div class="col-6"><label class="form-label">Số đến</label><input id="printNumberTo" type="number" min="1" max="999" class="form-control" value="100"></div>
                     </div>
@@ -794,6 +794,39 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">óng</button>
                     <button id="confirmReceiptLocationBtn" type="button" class="btn btn-primary btn-icon"><i data-lucide="map-pin-check"></i>Lưu vị trí</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="receiptIssueModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title">Tạo phiếu xuất thành phẩm</h5>
+                        <div id="receiptIssueTitle" class="text-muted small"></div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-sm-7">
+                            <label for="receiptIssueReceiver" class="form-label">Khách hàng / người nhận</label>
+                            <input id="receiptIssueReceiver" class="form-control" maxlength="150" autocomplete="off" value="Khách hàng">
+                        </div>
+                        <div class="col-sm-5">
+                            <label for="receiptIssueDate" class="form-label">Ngày xuất</label>
+                            <input id="receiptIssueDate" class="form-control date-vn" inputmode="numeric" maxlength="10" placeholder="dd/mm/yyyy" value="{{ now('Asia/Ho_Chi_Minh')->format('d/m/Y') }}">
+                        </div>
+                    </div>
+                    <div class="section-hint mt-3">Phiếu xuất sẽ trừ tồn nội bộ theo ngày đã chọn.</div>
+                    <div id="receiptIssueFeedback" class="small text-danger mt-2 d-none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button id="confirmReceiptIssueBtn" type="button" class="btn btn-primary btn-icon">
+                        <i data-lucide="send"></i>Tạo phiếu xuất
+                    </button>
                 </div>
             </div>
         </div>
@@ -927,7 +960,9 @@
         const bulkPrintLocationModal = new bootstrap.Modal(document.getElementById('bulkPrintLocationModal'));
         const rackInventoryModal = new bootstrap.Modal(document.getElementById('rackInventoryModal'));
         const receiptLocationModal = new bootstrap.Modal(document.getElementById('receiptLocationModal'));
+        const receiptIssueModal = new bootstrap.Modal(document.getElementById('receiptIssueModal'));
         let editingReceiptId = null;
+        let pendingReceiptIssue = null;
         let editingReceiptFormId = null;
         let locations = [];
         let mapPackages = [];
@@ -1687,7 +1722,7 @@
         }
 
         function isTierStackLocation(location) {
-            return /^([A-Z])0*\d{1,4}$/.test(String(location?.location_code || '').toUpperCase().trim());
+            return /^([A-Z]{1,2})0*\d{1,4}$/.test(String(location?.location_code || '').toUpperCase().trim());
         }
 
         function physicalRackNumberForLocation(location) {
@@ -2204,7 +2239,7 @@
 
         function normalizeRackLocationCode(code) {
             const value = String(code || '').trim().toUpperCase();
-            const simple = value.match(/^([A-Z])0*(\d+)$/);
+            const simple = value.match(/^([A-Z]{1,2})0*(\d+)$/);
             return simple ? `${simple[1]}${Number(simple[2])}` : value;
         }
 
@@ -2507,7 +2542,7 @@
 
         function shelfCodeForLocation(locationCode) {
             const code = String(locationCode || '').toUpperCase().trim();
-            const tierRack = code.match(/^([A-Z])0*(\d{1,4})$/);
+            const tierRack = code.match(/^([A-Z]{1,2})0*(\d{1,4})$/);
             if (tierRack) return String(Number(tierRack[2]));
             const match = code.match(/[A-Z]/);
             return match ? match[0] : 'KHAC';
@@ -2524,9 +2559,9 @@
 
         function tierForLocation(locationCode) {
             const code = String(locationCode || '').toUpperCase();
-            const tierRack = code.match(/^([A-Z])0*\d{1,4}$/);
+            const tierRack = code.match(/^([A-Z]{1,2})0*\d{1,4}$/);
             if (tierRack) {
-                const letterIndex = tierRack[1].charCodeAt(0) - 65;
+                const letterIndex = rackLabelToIndex(tierRack[1]);
                 return String(5 - (letterIndex % 5));
             }
             return /(^|[-_\s])T?2($|[-_\s])|TANG\s*2|TẦNG\s*2/.test(code) ? '2' : '1';
@@ -2534,14 +2569,32 @@
 
         function lineForLocation(location) {
             const code = String(location?.location_code || '').toUpperCase().trim();
-            const match = code.match(/^([A-Z])0*\d{1,4}$/);
+            const match = code.match(/^([A-Z]{1,2})0*\d{1,4}$/);
             if (!match) return '1';
-            return String(Math.floor((match[1].charCodeAt(0) - 65) / 5) + 1);
+            return String(Math.floor(rackLabelToIndex(match[1]) / 5) + 1);
         }
 
         function tierLetterForLine(line, tier) {
             const index = (Number(line || 1) - 1) * 5 + (5 - Number(tier || 1));
-            return index >= 0 && index < 26 ? String.fromCharCode(65 + index) : '';
+            return rackIndexToLabel(index);
+        }
+
+        function rackLabelToIndex(label) {
+            const normalized = String(label || '').trim().toUpperCase();
+            if (!/^[A-Z]{1,2}$/.test(normalized)) return -1;
+            return [...normalized].reduce((value, character) => value * 26 + character.charCodeAt(0) - 64, 0) - 1;
+        }
+
+        function rackIndexToLabel(index) {
+            let value = Number(index) + 1;
+            if (!Number.isInteger(value) || value < 1 || value > 702) return '';
+            let label = '';
+            while (value > 0) {
+                value--;
+                label = String.fromCharCode(65 + (value % 26)) + label;
+                value = Math.floor(value / 26);
+            }
+            return label;
         }
 
         function bayCodeForLocation(location) {
@@ -2627,9 +2680,9 @@
 
         function updateBulkLocationPreview() {
             const data = bulkLocationPayload();
-            const fromShelf = data.shelf_from.charCodeAt(0);
-            const toShelf = data.shelf_to.charCodeAt(0);
-            const shelfCount = fromShelf >= 65 && toShelf >= fromShelf ? (toShelf - fromShelf + 1) : 0;
+            const fromShelf = rackLabelToIndex(data.shelf_from);
+            const toShelf = rackLabelToIndex(data.shelf_to);
+            const shelfCount = fromShelf >= 0 && toShelf >= fromShelf ? (toShelf - fromShelf + 1) : 0;
             const numberCount = data.number_to >= data.number_from ? (data.number_to - data.number_from + 1) : 0;
             const total = shelfCount * numberCount;
             const first = data.shelf_from && data.number_from ? `${data.shelf_from}${data.number_from}` : '';
@@ -2656,9 +2709,9 @@
 
         function updateBulkPrintLocationPreview() {
             const data = bulkPrintLocationPayload();
-            const fromShelf = data.shelf_from.charCodeAt(0);
-            const toShelf = data.shelf_to.charCodeAt(0);
-            const shelfCount = fromShelf >= 65 && toShelf >= fromShelf ? (toShelf - fromShelf + 1) : 0;
+            const fromShelf = rackLabelToIndex(data.shelf_from);
+            const toShelf = rackLabelToIndex(data.shelf_to);
+            const shelfCount = fromShelf >= 0 && toShelf >= fromShelf ? (toShelf - fromShelf + 1) : 0;
             const numberCount = data.number_to >= data.number_from ? (data.number_to - data.number_from + 1) : 0;
             const total = shelfCount * numberCount;
             const first = data.shelf_from && data.number_from ? `${data.shelf_from}${data.number_from}` : '';
@@ -3396,37 +3449,16 @@
                     return;
                 }
 
-                const receiver = prompt(`Khách hàng/ngưi nhận cho phiếu xuất TP từ ${issueButton.dataset.code}:`, 'Khách hàng');
-                if (receiver === null) return;
-                if (!confirm(`Tạo phiếu xuất thành phẩm cho khách từ toàn bộ dòng của ${issueButton.dataset.code}? Phiếu này sẽ trừ tồn nội bộ.`)) return;
-
-                issueButton.disabled = true;
-                fetch(`/api/xuat-vat-tu-noi-bo/tu-phieu-nhap/${issueButton.dataset.id}`, {
-                    method: 'POST',
-                    headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
-                    body: JSON.stringify({
-                        issue_date: value('checkedAt') || localIsoDate(),
-                        receiver_name: receiver.trim() || 'Khách hàng',
-                        department: 'Kinh doanh',
-                        purpose: 'Xuất thành phẩm cho khách hàng'
-                    })
-                }).then(r => jsonOrError(r, 'Không tạo được phiếu xuất từ phiếu nhập'))
-                  .then(result => {
-                      if (result.print_url) window.open(result.print_url, '_blank');
-                      loadReceipts();
-                      loadPackages();
-                      loadLocations();
-                      loadWarehouseStats();
-                      loadWarehouseMap();
-                      loadLocationContents();
-                  })
-                  .catch(e => {
-                      alert(e.message);
-                      if (e.message.includes('đã được tạo phiếu xuất') || e.message.includes('đã được tạo')) {
-                          loadReceipts();
-                      }
-                  })
-                  .finally(() => { issueButton.disabled = false; });
+                pendingReceiptIssue = {
+                    id: issueButton.dataset.id,
+                    code: issueButton.dataset.code,
+                    button: issueButton,
+                };
+                document.getElementById('receiptIssueTitle').textContent = `Từ phiếu nhập ${issueButton.dataset.code}`;
+                document.getElementById('receiptIssueReceiver').value = 'Khách hàng';
+                setDateValue('receiptIssueDate', localIsoDate());
+                document.getElementById('receiptIssueFeedback').classList.add('d-none');
+                receiptIssueModal.show();
                 return;
             }
 
@@ -3551,6 +3583,64 @@
                   loadLocationContents();
               })
               .catch(e => alert(e.message));
+        });
+
+        document.getElementById('confirmReceiptIssueBtn').addEventListener('click', () => {
+            if (!pendingReceiptIssue) return;
+
+            const request = pendingReceiptIssue;
+            const submitButton = document.getElementById('confirmReceiptIssueBtn');
+            const feedback = document.getElementById('receiptIssueFeedback');
+            const receiver = value('receiptIssueReceiver') || 'Khách hàng';
+            const issueDate = value('receiptIssueDate');
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
+                feedback.textContent = 'Nhập ngày xuất đúng định dạng dd/mm/yyyy.';
+                feedback.classList.remove('d-none');
+                document.getElementById('receiptIssueDate').focus();
+                return;
+            }
+
+            feedback.classList.add('d-none');
+            submitButton.disabled = true;
+            request.button.disabled = true;
+            fetch(`/api/xuat-vat-tu-noi-bo/tu-phieu-nhap/${request.id}`, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({
+                    issue_date: issueDate,
+                    receiver_name: receiver,
+                    department: 'Kinh doanh',
+                    purpose: 'Xuất thành phẩm cho khách hàng'
+                })
+            }).then(r => jsonOrError(r, 'Không tạo được phiếu xuất từ phiếu nhập'))
+              .then(result => {
+                  receiptIssueModal.hide();
+                  pendingReceiptIssue = null;
+                  showWarehouseToast('Đã tạo phiếu xuất', `${request.code} · Ngày xuất ${isoToDateVn(issueDate)}`);
+                  if (result.print_url) window.open(result.print_url, '_blank');
+                  loadReceipts();
+                  loadPackages();
+                  loadLocations();
+                  loadWarehouseStats();
+                  loadWarehouseMap();
+                  loadLocationContents();
+              })
+              .catch(error => {
+                  feedback.textContent = error.message;
+                  feedback.classList.remove('d-none');
+                  if (error.message.includes('đã được tạo phiếu xuất') || error.message.includes('đã được tạo')) {
+                      loadReceipts();
+                  }
+              })
+              .finally(() => {
+                  submitButton.disabled = false;
+                  request.button.disabled = false;
+              });
+        });
+
+        document.getElementById('receiptIssueModal').addEventListener('shown.bs.modal', () => {
+            document.getElementById('receiptIssueReceiver').focus();
+            refreshIcons();
         });
 
         document.getElementById('printLocationBtn').addEventListener('click', () => {

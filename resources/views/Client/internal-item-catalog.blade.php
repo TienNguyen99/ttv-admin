@@ -29,6 +29,12 @@
         .split-dialog__body { padding:16px; overflow:auto; max-height:62vh; }
         .split-code-input { min-width:190px; height:34px; font-weight:700; color:#155eef; }
         .catalog-customer-list { max-width:220px; line-height:1.35; }
+        .item-type-table { min-width:760px; }
+        .item-type-code { color:#155eef; font-weight:800; letter-spacing:0; }
+        .item-type-source { color:#64748b; font-size:12px; }
+        .item-type-row { transition:background-color .18s ease, box-shadow .18s ease; }
+        .item-type-row:hover { background:#f6faff; }
+        .item-type-row.is-active { background:#eef6ff; box-shadow:inset 3px 0 0 #2563eb; }
         .catalog-edit-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
         .catalog-edit-grid .wide { grid-column:span 2; }
         @media (max-width:760px) { .catalog-edit-grid { grid-template-columns:1fr; } .catalog-edit-grid .wide { grid-column:auto; } }
@@ -75,6 +81,19 @@
             <div><label for="catalogCustomer">Khách hàng</label><select id="catalogCustomer" class="form-select"><option value="">Tất cả khách hàng</option></select></div>
             <div><label for="catalogGroup">Nhóm hàng</label><select id="catalogGroup" class="form-select"><option value="">Tất cả nhóm hàng</option></select></div>
             <div><button id="clearCatalogFilter" class="wms-btn"><i data-lucide="filter-x"></i> Xóa lọc</button></div>
+        </section>
+
+        <section class="wms-panel mb-3">
+            <div class="wms-panel__header">
+                <h2>Danh sách loại hàng hóa</h2>
+                <span id="itemTypeResultLabel" class="text-secondary small">Đang tải...</span>
+            </div>
+            <div class="wms-table-wrap">
+                <table class="wms-table item-type-table">
+                    <thead><tr><th>Mã loại</th><th>Nhóm cha</th><th>Tên loại hàng hóa</th><th>LOẠI nguồn</th><th class="text-end">Số mã hàng</th><th></th></tr></thead>
+                    <tbody id="itemTypeRows"><tr><td colspan="6" class="wms-loading">Đang tổng hợp loại hàng...</td></tr></tbody>
+                </table>
+            </div>
         </section>
 
         <section class="wms-panel mb-3">
@@ -200,6 +219,7 @@
         const invalidCodeKeywordEl = document.getElementById('invalidCodeKeyword');
         const catalogCustomerEl = document.getElementById('catalogCustomer');
         const catalogGroupEl = document.getElementById('catalogGroup');
+        const itemTypeRowsEl = document.getElementById('itemTypeRows');
         let searchTimer = null;
         let invalidCodeSearchTimer = null;
         let catalogPage = 1;
@@ -223,6 +243,22 @@
                 .map(value => `<option value="${esc(value)}">${esc(value)}</option>`)
                 .join('');
             if (Array.from(select.options).some(option => option.value === selected)) select.value = selected;
+        }
+
+        function renderItemTypes(types) {
+            const rows = Array.isArray(types) ? types : [];
+            document.getElementById('itemTypeResultLabel').textContent = `${num(rows.length)} loại`;
+            itemTypeRowsEl.innerHTML = rows.map(type => `
+                <tr class="item-type-row${catalogGroupEl.value === type.filter_value ? ' is-active' : ''}">
+                    <td class="item-type-code">${esc(type.code)}</td>
+                    <td>${esc(type.family || 'Khác')}</td>
+                    <td><strong>${esc(type.name)}</strong></td>
+                    <td class="item-type-source">${esc((type.source_types || []).join(', ') || '-')}</td>
+                    <td class="wms-number">${num(type.item_count)}</td>
+                    <td><button type="button" class="wms-btn" data-item-type-filter="${esc(type.filter_value)}"><i data-lucide="list-filter"></i> Xem mã</button></td>
+                </tr>
+            `).join('') || '<tr><td colspan="6" class="wms-empty">Chưa có loại hàng hóa.</td></tr>';
+            if (window.lucide) window.lucide.createIcons();
         }
 
         function jsonOrError(response, fallback) {
@@ -307,6 +343,7 @@
                         : 'Chưa đồng bộ';
                     updateFacetOptions(catalogCustomerEl, result.facets?.customers, 'Tất cả khách hàng');
                     updateFacetOptions(catalogGroupEl, result.facets?.groups, 'Tất cả nhóm hàng');
+                    renderItemTypes(result.facets?.item_types);
                     const pagination = result.pagination || {};
                     catalogPage = Number(pagination.page || catalogPage || 1);
                     catalogTotalPages = Math.max(1, Number(pagination.total_pages || 1));
@@ -599,6 +636,14 @@
         topKeywordEl.addEventListener('input', () => queueSearch(topKeywordEl));
         catalogCustomerEl.addEventListener('change', () => { catalogPage = 1; loadCatalog(); });
         catalogGroupEl.addEventListener('change', () => { catalogPage = 1; loadCatalog(); });
+        itemTypeRowsEl.addEventListener('click', event => {
+            const button = event.target.closest('[data-item-type-filter]');
+            if (!button) return;
+            catalogGroupEl.value = button.dataset.itemTypeFilter || '';
+            catalogPage = 1;
+            loadCatalog();
+            document.querySelector('.catalog-table')?.scrollIntoView({behavior:'smooth', block:'start'});
+        });
         document.getElementById('clearCatalogFilter').addEventListener('click', () => {
             keywordEl.value = '';
             topKeywordEl.value = '';

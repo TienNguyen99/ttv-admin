@@ -45,7 +45,17 @@ class WeavingExcelTemplateFactoryTest extends TestCase
                 'item_code' => 'C006416-SDWF41S',
                 'planned_quantity' => 250,
                 'unit' => 'PCS',
-                'metadata' => [],
+                'metadata' => [
+                    'calculation_waste_percent' => 7.5,
+                    'color_weight_factor' => 0.2,
+                    'color_weight_multiplier' => 2,
+                    'warp_weight_factor' => 0.6,
+                    'warp_extra_waste_percent' => 2,
+                    'roll_count_small' => 24,
+                    'roll_count_large' => 36,
+                    'muller_capacity' => 200000,
+                    'hitex_capacity' => 150000,
+                ],
             ],
             'source_items' => [[
                 'item_code' => 'C006416-SDWF41S',
@@ -72,7 +82,47 @@ class WeavingExcelTemplateFactoryTest extends TestCase
         $this->assertEmpty($formulas->keys()->filter(fn (string $coordinate) => preg_match('/^[JK](?:6|7|8|9|10|11|12)$/', $coordinate))->all());
         $this->assertSame(0.112, $sheet->getCell('J6')->getValue());
         $this->assertSame(28.0, $sheet->getCell('K6')->getValue());
-        $this->assertTrue($formulas->contains('=SUM(B33:C42)*1.1'));
+        $this->assertSame(24.0, $sheet->getCell('E15')->getValue());
+        $this->assertSame(36.0, $sheet->getCell('E16')->getValue());
+        $this->assertTrue($formulas->contains('=SUM(B33:C42)*(1+7.5/100)'));
+        $this->assertSame('=0.6*G15*(1+2/100)', $sheet->getCell('K13')->getValue());
+        $this->assertSame('=IFERROR(I15*A15/200000,0)', $sheet->getCell('K15')->getValue());
+        $this->assertSame('=IFERROR(I16*A15/150000,0)', $sheet->getCell('K16')->getValue());
+
+        $book->disconnectWorksheets();
+        unlink($result['path']);
+    }
+
+    public function test_excel_export_uses_color_factors_when_bom_consumption_is_blank(): void
+    {
+        $result = app(WeavingExcelBatchExporter::class)->single('T-FACTOR/26', [
+            'order' => [
+                'production_order' => 'T-FACTOR/26',
+                'item_code' => 'ITEM-FACTOR',
+                'planned_quantity' => 100,
+                'metadata' => [
+                    'calculation_waste_percent' => 5,
+                    'color_weight_factor' => 0.2,
+                    'color_weight_multiplier' => 2,
+                ],
+            ],
+            'source_items' => [[
+                'item_code' => 'ITEM-FACTOR',
+                'order_quantity' => 100,
+                'materials' => [[
+                    'material_code' => 'YARN-01',
+                    'consumption_per_unit' => 0,
+                    'total_grams' => 0,
+                ]],
+            ]],
+            'data' => [],
+        ]);
+
+        $book = IOFactory::load($result['path']);
+        $sheet = $book->getSheetByName('LENH_DET');
+
+        $this->assertEqualsWithDelta(0.42, (float) $sheet->getCell('J6')->getValue(), 0.000001);
+        $this->assertEqualsWithDelta(42.0, (float) $sheet->getCell('K6')->getValue(), 0.000001);
 
         $book->disconnectWorksheets();
         unlink($result['path']);

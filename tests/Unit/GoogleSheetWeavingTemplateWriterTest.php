@@ -40,6 +40,7 @@ class GoogleSheetWeavingTemplateWriterTest extends TestCase
                 'materials' => [[
                     'type' => '75D',
                     'material_code' => '15A',
+                    'pick_count' => '2000',
                     'catalog_shelf_code' => 'A1',
                     'material_name' => '15A KEM',
                     'consumption_per_unit' => 0.38,
@@ -62,7 +63,8 @@ class GoogleSheetWeavingTemplateWriterTest extends TestCase
         $this->assertStringContainsString('quickchart.io/qr', $ranges['J2']['values'][0][0]);
         $this->assertSame('JOB-3816', $ranges['B4']['values'][0][0]);
         $this->assertSame('28/07/2026', $ranges['D4']['values'][0][0]);
-        $this->assertSame(['75D', '15A', 'A1', '15A KEM'], $ranges['F6:I12']['values'][0]);
+        $this->assertSame('SỐ PICKS', $ranges['H5']['values'][0][0]);
+        $this->assertSame(['75D', '15A', '2000', '15A KEM'], $ranges['F6:I12']['values'][0]);
         $this->assertCount(7, $ranges['F6:I12']['values']);
         $this->assertSame(['1376', '26', 'TRẮNG'], $ranges['A15:C15']['values'][0]);
         $this->assertSame('Muller', $ranges['D15']['values'][0][0]);

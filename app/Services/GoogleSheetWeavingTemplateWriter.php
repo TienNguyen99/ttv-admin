@@ -115,13 +115,7 @@ class GoogleSheetWeavingTemplateWriter
             $bomValues[$index] = [
                 $line['type'] ?? '',
                 $line['material_code'] ?? '',
-                $this->firstText(
-                    $line['first_location'] ?? '',
-                    $summaryLine['first_location'] ?? '',
-                    $line['catalog_shelf_code'] ?? '',
-                    $summaryLine['catalog_shelf_code'] ?? '',
-                    $line['shelf_hint'] ?? ''
-                ),
+                $line['pick_count'] ?? '',
                 $this->firstText(
                     $line['catalog_name'] ?? '',
                     $summaryLine['catalog_name'] ?? '',
@@ -165,6 +159,7 @@ class GoogleSheetWeavingTemplateWriter
                 [$this->firstText($metadata['quantity_per_box'] ?? '', $this->operation($operations, 'SO LUONG/HOP'))],
             ]],
             // J6:K13 contain formulas maintained by the LENH_DET template.
+            ['range' => 'H5', 'values' => [['SỐ PICKS']]],
             ['range' => 'F6:I12', 'values' => $bomValues],
             ['range' => 'A15:C15', 'values' => [[
                 $metadata['pick'] ?? '',

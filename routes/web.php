@@ -22,6 +22,7 @@ use App\Http\Controllers\InternalBtpProductionOrderController;
 use App\Http\Controllers\InternalFinishedGoodsReceiptController;
 use App\Http\Controllers\InternalMaterialIssueController;
 use App\Http\Controllers\InternalItemCatalogController;
+use App\Http\Controllers\InternalStocktakeController;
 use App\Http\Controllers\InternalColorMappingController;
 use App\Http\Controllers\InternalUnitConversionController;
 use App\Http\Controllers\InternalXntController;
@@ -186,6 +187,7 @@ Route::prefix('client/quan-ly-det')->name('weaving.')->controller(WeavingManagem
     Route::get('/dinh-muc', 'bom')->name('bom');
     Route::get('/xuat-excel', 'exports')->name('exports.index');
 });
+Route::get('/client/quan-ly-det/lenh/{order}/in', [InternalWeavingController::class, 'printOrder'])->name('weaving.orders.print');
 Route::get('/client/designer-lenh-det', fn () => redirect()->route('weaving.dashboard', [], 301));
 Route::get('/client/designer-tao-lenh-det', function (\Illuminate\Http\Request $request) {
     $target = route('weaving.orders.create');
@@ -196,6 +198,7 @@ Route::get('/client/lenh-det', fn () => redirect()->route('weaving.bom', [], 301
 Route::prefix('api/lenh-det')->controller(InternalWeavingController::class)->group(function () {
     Route::get('/designer-dashboard', 'designerDashboard');
     Route::get('/material-suggestions', 'materialSuggestions');
+    Route::post('/check-stock', 'checkStock');
     Route::post('/designer-save', 'saveDesignerOrder');
     Route::post('/orders/{order}/gui-san-xuat', 'sendToProduction');
     Route::get('/items', 'items');
@@ -274,6 +277,17 @@ Route::get('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'ind
 Route::post('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'store']);
 Route::delete('/api/quy-doi-don-vi/{unitConversion}', [InternalUnitConversionController::class, 'destroy']);
 Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
+Route::get('/client/dot-kiem-ke', [InternalStocktakeController::class, 'page']);
+Route::get('/api/dot-kiem-ke', [InternalStocktakeController::class, 'index']);
+Route::post('/api/dot-kiem-ke', [InternalStocktakeController::class, 'store']);
+Route::get('/api/dot-kiem-ke/{stocktake}', [InternalStocktakeController::class, 'show']);
+Route::delete('/api/dot-kiem-ke/{stocktake}', [InternalStocktakeController::class, 'destroy']);
+Route::get('/api/dot-kiem-ke/{stocktake}/vi-tri/{stocktakeLocation}', [InternalStocktakeController::class, 'location']);
+Route::put('/api/dot-kiem-ke/{stocktake}/vi-tri/{stocktakeLocation}', [InternalStocktakeController::class, 'saveLocation']);
+Route::post('/api/dot-kiem-ke/{stocktake}/vi-tri/{stocktakeLocation}/hoan-tat', [InternalStocktakeController::class, 'completeLocation']);
+Route::post('/api/dot-kiem-ke/{stocktake}/vi-tri/{stocktakeLocation}/mo-lai', [InternalStocktakeController::class, 'reopenLocation']);
+Route::post('/api/dot-kiem-ke/{stocktake}/hoan-tat', [InternalStocktakeController::class, 'complete']);
+Route::post('/api/dot-kiem-ke/{stocktake}/ap-dung', [InternalStocktakeController::class, 'post']);
 Route::get('/client/mat-ke-kho', [WarehouseCountController::class, 'shelfMapIndex']);
 Route::view('/client/nhap-thanh-pham-nhanh', 'client.quick-finished-goods-receipt');
 Route::view('/client/xuat-thanh-pham-nhanh', 'client.quick-finished-goods-issue');

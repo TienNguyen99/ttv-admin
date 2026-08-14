@@ -126,7 +126,7 @@ class InternalStockLedger
                 DB::raw("COALESCE(l.color, '') as color"),
                 DB::raw("COALESCE(l.side, '') as side")
             )
-            ->where('r.source', 'Phieu nhap thanh pham');
+            ->whereIn('r.source', ['Phieu nhap thanh pham', 'Dieu chinh kiem ke']);
     }
 
     private function issueQuery(): Builder

@@ -327,17 +327,49 @@ class InternalItemCatalogController extends Controller
             ->orderBy('item_code')
             ->get();
 
-        $allRows->each(function ($row) use ($customerMap) {
+        $groupResolver = app(InternalItemGroupResolver::class);
+        $allRows->each(function ($row) use ($customerMap, $groupResolver) {
             $codeKey = mb_strtoupper(trim((string) $row->item_code));
             $raw = is_array($row->raw_data) ? $row->raw_data : [];
             $row->setAttribute('source_type', trim((string) ($raw['loai'] ?? '')));
-            $row->setAttribute('item_group', $this->catalogItemGroup($row));
+            $row->setAttribute('item_group', $groupResolver->resolve($row));
+            $row->setAttribute('item_group_code', $groupResolver->code($row));
+            $row->setAttribute('item_group_name', $groupResolver->displayName($row));
+            $row->setAttribute('item_group_family', $groupResolver->family($row));
             $row->setAttribute('customers', $customerMap[$codeKey] ?? []);
         });
+
+        $itemTypes = $allRows
+            ->groupBy('item_group_code')
+            ->map(function ($rows, $code) {
+                return [
+                    'code' => $code,
+                    'name' => (string) $rows->first()->item_group_name,
+                    'family' => (string) $rows->first()->item_group_family,
+                    'filter_value' => (string) $rows->first()->item_group,
+                    'item_count' => $rows
+                        ->pluck('item_code')
+                        ->map(fn ($itemCode) => mb_strtoupper(trim((string) $itemCode)))
+                        ->filter()
+                        ->unique()
+                        ->count(),
+                    'source_types' => $rows
+                        ->pluck('source_type')
+                        ->map(fn ($sourceType) => trim((string) $sourceType))
+                        ->filter()
+                        ->unique()
+                        ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+                        ->values(),
+                ];
+            })
+            ->filter(fn ($type) => $type['item_count'] > 0)
+            ->sortBy('code', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
 
         $facets = [
             'customers' => $allRows->pluck('customers')->flatten()->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values(),
             'groups' => $allRows->pluck('item_group')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->values(),
+            'item_types' => $itemTypes,
         ];
 
         $filteredRows = $allRows

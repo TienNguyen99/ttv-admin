@@ -20,6 +20,7 @@ use App\Services\InternalStockLedger;
 use App\Services\InternalUnitConverter;
 use App\Services\InternalProductionOrderLineResolver;
 use App\Services\PantoneColorMatcher;
+use App\Services\WarehouseRackCode;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -233,8 +234,8 @@ class WarehouseCountController extends Controller
 
     public function locations()
     {
+        $rackCode = app(WarehouseRackCode::class);
         $locations = WarehouseLocation::query()
-            ->orderBy('location_code')
             ->get()
             ->map(function ($location) {
                 $tier = $this->inferTierFromLocationCode($location->location_code);
@@ -245,7 +246,17 @@ class WarehouseCountController extends Controller
                 }
 
                 return $location;
-            });
+            })
+            ->sortBy(function ($location) use ($rackCode) {
+                $parsed = $rackCode->parseLocation((string) $location->location_code);
+                if (!$parsed) {
+                    return '9999|' . mb_strtoupper((string) $location->location_code);
+                }
+
+                return str_pad((string) $parsed['letter_index'], 4, '0', STR_PAD_LEFT)
+                    . '|' . str_pad((string) $parsed['bay'], 6, '0', STR_PAD_LEFT);
+            })
+            ->values();
 
         return response()->json([
             'data' => $locations,
@@ -296,8 +307,8 @@ class WarehouseCountController extends Controller
     public function bulkStoreLocations(Request $request)
     {
         $data = $request->validate([
-            'shelf_from' => 'required|string|max:1',
-            'shelf_to' => 'required|string|max:1',
+            'shelf_from' => ['required', 'string', 'max:2', 'regex:/^[A-Za-z]{1,2}$/'],
+            'shelf_to' => ['required', 'string', 'max:2', 'regex:/^[A-Za-z]{1,2}$/'],
             'number_from' => 'required|integer|min:1|max:999',
             'number_to' => 'required|integer|min:1|max:999',
             'warehouse_code' => 'nullable|string|max:50',
@@ -305,16 +316,21 @@ class WarehouseCountController extends Controller
             'name_prefix' => 'nullable|string|max:100',
         ]);
 
-        $fromShelf = ord(strtoupper(trim($data['shelf_from'])));
-        $toShelf = ord(strtoupper(trim($data['shelf_to'])));
-        if ($fromShelf < 65 || $fromShelf > 90 || $toShelf < 65 || $toShelf > 90 || $fromShelf > $toShelf) {
-            return response()->json(['message' => 'Dãy kệ không hợp lệ. Ví dụ: A đến D.'], 422);
+        $rackCode = app(WarehouseRackCode::class);
+        $fromShelf = $rackCode->labelToIndex($data['shelf_from']);
+        $toShelf = $rackCode->labelToIndex($data['shelf_to']);
+        if ($fromShelf < 0 || $toShelf < 0 || $fromShelf > $toShelf) {
+            return response()->json(['message' => 'Dãy kệ không hợp lệ. Ví dụ: A đến AI.'], 422);
         }
 
         $fromNumber = (int) $data['number_from'];
         $toNumber = (int) $data['number_to'];
         if ($fromNumber > $toNumber) {
             return response()->json(['message' => 'Số bắt đầu phải nhỏ hơn hoặc bằng số kết thúc.'], 422);
+        }
+        $totalLocations = ($toShelf - $fromShelf + 1) * ($toNumber - $fromNumber + 1);
+        if ($totalLocations > 10000) {
+            return response()->json(['message' => 'Mỗi lần chỉ tạo tối đa 10.000 vị trí. Hãy chia thành nhiều dãy nhỏ hơn.'], 422);
         }
 
         $warehouseCode = strtoupper(trim((string) ($data['warehouse_code'] ?? '')));
@@ -324,12 +340,27 @@ class WarehouseCountController extends Controller
         $updated = 0;
         $skipped = 0;
 
-        DB::connection('internal')->transaction(function () use ($fromShelf, $toShelf, $fromNumber, $toNumber, $warehouseCode, $tier, $namePrefix, &$created, &$updated, &$skipped) {
-            for ($shelfAscii = $fromShelf; $shelfAscii <= $toShelf; $shelfAscii++) {
-                $shelf = chr($shelfAscii);
+        DB::connection('internal')->transaction(function () use ($rackCode, $fromShelf, $toShelf, $fromNumber, $toNumber, $warehouseCode, $tier, $namePrefix, &$created, &$updated, &$skipped) {
+            $codes = [];
+            for ($shelfIndex = $fromShelf; $shelfIndex <= $toShelf; $shelfIndex++) {
+                $shelf = $rackCode->indexToLabel($shelfIndex);
+                for ($number = $fromNumber; $number <= $toNumber; $number++) {
+                    $codes[] = $shelf . $number;
+                }
+            }
+
+            $existingByCode = WarehouseLocation::query()
+                ->whereIn('location_code', $codes)
+                ->get()
+                ->keyBy('location_code');
+            $inserts = [];
+            $now = now();
+
+            for ($shelfIndex = $fromShelf; $shelfIndex <= $toShelf; $shelfIndex++) {
+                $shelf = $rackCode->indexToLabel($shelfIndex);
                 for ($number = $fromNumber; $number <= $toNumber; $number++) {
                     $locationCode = $shelf . $number;
-                    $existing = WarehouseLocation::query()->where('location_code', $locationCode)->first();
+                    $existing = $existingByCode->get($locationCode);
 
                     if ($existing) {
                         $inferredShelf = $this->inferShelfCode($locationCode);
@@ -363,21 +394,26 @@ class WarehouseCountController extends Controller
 
                     $index = $number - $fromNumber;
                     $inferredTier = $this->inferTierFromLocationCode($locationCode) ?: $tier;
-                    WarehouseLocation::query()->create([
+                    $inserts[] = [
                         'location_code' => $locationCode,
                         'warehouse_code' => $warehouseCode,
                         'shelf_code' => $this->inferShelfCode($locationCode),
                         'tier' => $inferredTier,
                         'bay_code' => $this->inferBayCode($locationCode) ?: (string) $number,
                         'grid_x' => (($index % 6) * 4) + 1,
-                        'grid_y' => (($shelfAscii - $fromShelf) * 18) + (int) floor($index / 6) * 3 + 1,
+                        'grid_y' => (($shelfIndex - $fromShelf) * 18) + (int) floor($index / 6) * 3 + 1,
                         'grid_w' => 4,
                         'grid_h' => 2,
                         'location_name' => trim($namePrefix . ' ' . $locationCode),
                         'status' => 'pending',
-                    ]);
-                    $created++;
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
                 }
+            }
+
+            foreach (array_chunk($inserts, 500) as $chunk) {
+                $created += DB::connection('internal')->table('warehouse_locations')->insertOrIgnore($chunk);
             }
         });
 
@@ -1811,7 +1847,10 @@ class WarehouseCountController extends Controller
             ->where('is_active', true)
             ->whereIn('item_code', $data->pluck('internal_item_code')->filter()->unique()->values())
             ->get()
-            ->keyBy(fn ($item) => mb_strtoupper(trim((string) $item->item_code)));
+            ->groupBy(fn ($item) => mb_strtoupper(trim((string) $item->item_code)))
+            ->map(function ($rows) {
+                return $rows->sortByDesc(fn ($item) => trim((string) $item->image_url) !== '' ? 1 : 0)->first();
+            });
         $matcher = app(PantoneColorMatcher::class);
         $data = $data->map(function ($row) use ($catalogsByItemCode, $matcher) {
             $catalog = $catalogsByItemCode->get(mb_strtoupper(trim((string) $row->internal_item_code)));
@@ -1830,6 +1869,8 @@ class WarehouseCountController extends Controller
             $row->catalog_item_name = $catalog->item_name ?? '';
             $row->catalog_unit = $catalog->unit ?? '';
             $row->catalog_shelf_code = $catalog->shelf_code ?? '';
+            $row->image_url = trim((string) ($catalog->image_url ?? ''));
+            $row->norms = $this->catalogDisplayNorms($catalog);
             return $row;
         })
             ->groupBy(fn ($row) => mb_strtoupper(trim((string) ($row->internal_item_code ?: $row->ma_sp))))
@@ -1871,6 +1912,8 @@ class WarehouseCountController extends Controller
                     'catalog_item_name' => (string) $first->catalog_item_name,
                     'catalog_unit' => (string) $first->catalog_unit,
                     'catalog_shelf_code' => (string) $first->catalog_shelf_code,
+                    'image_url' => (string) $first->image_url,
+                    'norms' => $first->norms ?: [],
                     'variants' => $variants,
                 ];
             })
@@ -1911,7 +1954,14 @@ class WarehouseCountController extends Controller
                     'catalog_item_name' => trim((string) $item->item_name),
                     'catalog_unit' => trim((string) $item->unit),
                     'catalog_shelf_code' => trim((string) $item->shelf_code),
+                    'image_url' => trim((string) $item->image_url),
+                    'norms' => $this->catalogDisplayNorms($item),
+                    'variants' => [],
                 ];
+            })
+            ->groupBy(fn ($row) => mb_strtoupper(trim((string) $row->internal_item_code)))
+            ->map(function ($rows) {
+                return $rows->sortByDesc(fn ($row) => trim((string) $row->image_url) !== '' ? 1 : 0)->first();
             })
             ->filter(function ($row) use ($existingKeys) {
                 return trim((string) $row->internal_item_code) !== ''
@@ -2676,6 +2726,71 @@ class WarehouseCountController extends Controller
             'message' => 'Da cap nhat kien trong ke.',
             'data' => $inventoryPackage->fresh()->load('location:id,location_code'),
         ]);
+    }
+
+    private function catalogDisplayNorms(?InternalItemCatalog $catalog): array
+    {
+        if (!$catalog) {
+            return [];
+        }
+
+        $raw = collect((array) $catalog->raw_data)->mapWithKeys(function ($value, $key) {
+            $normalized = strtolower(Str::ascii((string) $key));
+            $normalized = trim(preg_replace('/[^a-z0-9]+/', ' ', $normalized));
+            $normalized = preg_replace('/\s+/', ' ', $normalized);
+
+            return [$normalized => $value];
+        });
+
+        $read = function (array $aliases) use ($raw) {
+            foreach ($aliases as $alias) {
+                if ($raw->has($alias) && trim((string) $raw->get($alias)) !== '') {
+                    return trim((string) $raw->get($alias));
+                }
+            }
+
+            return null;
+        };
+
+        $perBox = $read([
+            'dinh muc thung', 'dinh muc 1 thung', 'so luong thung', 'sl thung',
+            'quantity per box', 'pcs per box', 'so luong hop', 'sl hop',
+        ]);
+        $gramsPerMeter = $this->displayNormNumber($read([
+            'gam met', 'g met', 'g m', 'gram met', 'grams per meter',
+            'gram per meter', 'dinh muc gam met', 'dinh muc g m',
+        ]));
+        $gramsPerYard = $this->displayNormNumber($read([
+            'gam yard', 'g yard', 'g yd', 'gram yard', 'grams per yard',
+            'gram per yard', 'dinh muc gam yard', 'dinh muc g yard',
+        ]));
+
+        if ($gramsPerMeter !== null && $gramsPerYard === null) {
+            $gramsPerYard = round($gramsPerMeter * 0.9144, 4);
+        } elseif ($gramsPerYard !== null && $gramsPerMeter === null) {
+            $gramsPerMeter = round($gramsPerYard / 0.9144, 4);
+        }
+
+        return collect([
+            $perBox !== null ? [
+                'label' => 'Định mức 1 thùng',
+                'value' => $perBox,
+                'unit' => trim((string) $catalog->unit),
+            ] : null,
+            $gramsPerMeter !== null ? ['label' => 'Định mức mét', 'value' => $gramsPerMeter, 'unit' => 'g/m'] : null,
+            $gramsPerYard !== null ? ['label' => 'Định mức yard', 'value' => $gramsPerYard, 'unit' => 'g/yard'] : null,
+        ])->filter()->values()->all();
+    }
+
+    private function displayNormNumber($value): ?float
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return null;
+        }
+
+        $normalized = str_replace(',', '.', preg_replace('/[^0-9,\.\-]/', '', (string) $value));
+
+        return is_numeric($normalized) && (float) $normalized > 0 ? (float) $normalized : null;
     }
 
     public function storeReceiptBatch(Request $request)
@@ -3675,17 +3790,14 @@ class WarehouseCountController extends Controller
 
     public function printLocation(WarehouseLocation $warehouseLocation)
     {
-        $colors = $this->locationLabelColors([$warehouseLocation->id])->get($warehouseLocation->id, collect());
-        $warehouseLocation->setAttribute('label_colors', $colors);
-
         return view('client.labels.location', ['location' => $warehouseLocation]);
     }
 
     public function printLocations(Request $request)
     {
         $data = $request->validate([
-            'shelf_from' => 'nullable|string|max:1',
-            'shelf_to' => 'nullable|string|max:1',
+            'shelf_from' => ['nullable', 'string', 'max:2', 'regex:/^[A-Za-z]{1,2}$/'],
+            'shelf_to' => ['nullable', 'string', 'max:2', 'regex:/^[A-Za-z]{1,2}$/'],
             'number_from' => 'nullable|integer|min:1|max:999',
             'number_to' => 'nullable|integer|min:1|max:999',
             'codes' => 'nullable|string|max:5000',
@@ -3699,18 +3811,20 @@ class WarehouseCountController extends Controller
                 ->unique()
                 ->values();
         } else {
-            $fromShelf = ord(strtoupper(trim((string) ($data['shelf_from'] ?? 'A'))));
-            $toShelf = ord(strtoupper(trim((string) ($data['shelf_to'] ?? 'D'))));
+            $rackCode = app(WarehouseRackCode::class);
+            $fromShelf = $rackCode->labelToIndex((string) ($data['shelf_from'] ?? 'A'));
+            $toShelf = $rackCode->labelToIndex((string) ($data['shelf_to'] ?? 'D'));
             $fromNumber = (int) ($data['number_from'] ?? 1);
             $toNumber = (int) ($data['number_to'] ?? 100);
 
-            if ($fromShelf < 65 || $fromShelf > 90 || $toShelf < 65 || $toShelf > 90 || $fromShelf > $toShelf || $fromNumber > $toNumber) {
+            $totalLocations = ($toShelf - $fromShelf + 1) * ($toNumber - $fromNumber + 1);
+            if ($fromShelf < 0 || $toShelf < 0 || $fromShelf > $toShelf || $fromNumber > $toNumber || $totalLocations > 10000) {
                 abort(422, 'Dãy vị trí không hợp lệ.');
             }
 
-            for ($shelfAscii = $fromShelf; $shelfAscii <= $toShelf; $shelfAscii++) {
+            for ($shelfIndex = $fromShelf; $shelfIndex <= $toShelf; $shelfIndex++) {
                 for ($number = $fromNumber; $number <= $toNumber; $number++) {
-                    $codes->push(chr($shelfAscii) . $number);
+                    $codes->push($rackCode->indexToLabel($shelfIndex) . $number);
                 }
             }
         }
@@ -3720,11 +3834,6 @@ class WarehouseCountController extends Controller
             ->get()
             ->sortBy(fn ($location) => $codes->search($location->location_code))
             ->values();
-
-        $colorMap = $this->locationLabelColors($locations->pluck('id'));
-        $locations->each(function ($location) use ($colorMap) {
-            $location->setAttribute('label_colors', $colorMap->get($location->id, collect()));
-        });
 
         return view('client.labels.locations', [
             'locations' => $locations,
@@ -3871,10 +3980,12 @@ class WarehouseCountController extends Controller
 
     private function inferShelfCode($locationCode)
     {
-        $code = strtoupper(trim((string) $locationCode));
-        if (preg_match('/^([A-Z])0*(\d{1,4})$/', $code, $matches)) {
-            return ltrim($matches[2], '0') ?: '0';
+        $parsed = app(WarehouseRackCode::class)->parseLocation((string) $locationCode);
+        if ($parsed) {
+            return (string) $parsed['bay'];
         }
+
+        $code = strtoupper(trim((string) $locationCode));
 
         preg_match('/[A-Z]/', $code, $matches);
 
@@ -3890,14 +4001,9 @@ class WarehouseCountController extends Controller
 
     private function inferTierFromLocationCode($locationCode): int
     {
-        $code = strtoupper(trim((string) $locationCode));
-        if (!preg_match('/^([A-Z])0*\d{1,4}$/', $code, $matches)) {
-            return 0;
-        }
+        $parsed = app(WarehouseRackCode::class)->parseLocation((string) $locationCode);
 
-        $letterIndex = ord($matches[1]) - ord('A');
-
-        return 5 - ($letterIndex % 5);
+        return $parsed ? (int) $parsed['tier'] : 0;
     }
 
     private function resolveReceiptLinePackage($line, bool $lock = false): ?InventoryPackage

@@ -1050,6 +1050,7 @@ class InternalWeavingController extends Controller
                 'pantone_code' => trim((string) ($colorMatch['pantone'] ?? '')),
                 'color_source' => trim((string) ($colorMatch['source'] ?? '')),
                 'type' => $bomMetadata['type'] ?? '',
+                'pick_count' => $bomMetadata['pick_count'] ?? '',
                 'shelf_hint' => $bomMetadata['shelf_hint'] ?? '',
                 'total_grams' => (float) ($bomMetadata['total_grams'] ?? 0),
                 'consumption_per_unit' => (float) $bom->consumption_per_unit,
@@ -1065,6 +1066,7 @@ class InternalWeavingController extends Controller
         })->values();
 
         return response()->json([
+            'machine_defaults' => $this->latestWeavingMachineDefaults($order->id),
             'order' => [
                 'production_order' => $order->order_code,
                 'order_code' => $order->order_code,
@@ -1110,6 +1112,54 @@ class InternalWeavingController extends Controller
                 'missing_bom_items' => $bomRows->isEmpty() ? [$order->item_code] : [],
             ],
         ]);
+    }
+
+    public function checkStock(Request $request)
+    {
+        $request->merge([
+            'lines' => $this->deriveBomConsumptionFromTotals(
+                (array) $request->input('lines', []),
+                $this->toNumber($request->input('order_quantity', 0))
+            ),
+        ]);
+
+        $data = $request->validate([
+            'order_quantity' => 'required|numeric|min:0.001',
+            'lines' => 'required|array|min:1|max:7',
+            'lines.*.material_code' => 'required|string|max:120',
+            'lines.*.material_name' => 'nullable|string|max:500',
+            'lines.*.unit' => 'nullable|string|max:50',
+            'lines.*.consumption_per_unit' => 'required|numeric|min:0.000001',
+            'lines.*.waste_percent' => 'nullable|numeric|min:0|max:999',
+        ]);
+
+        $lines = $this->stockStatusForLines($data['lines'], (float) $data['order_quantity']);
+
+        return response()->json([
+            'data' => $lines->values(),
+            'summary' => [
+                'material_count' => $lines->count(),
+                'short_count' => $lines->where('status', 'short')->count(),
+                'required_quantity' => round((float) $lines->sum('required_quantity'), 3),
+                'shortage_quantity' => round((float) $lines->sum('shortage_quantity'), 3),
+            ],
+        ]);
+    }
+
+    public function printOrder(InternalWeavingOrder $order)
+    {
+        $planResponse = $this->plan(
+            Request::create('/api/lenh-det/orders/' . $order->id . '/plan', 'GET'),
+            $order
+        );
+        $plan = $planResponse->getData(true);
+        abort_if(
+            $planResponse->getStatusCode() >= 400,
+            $planResponse->getStatusCode(),
+            $plan['message'] ?? 'Không tải được lệnh dệt.'
+        );
+
+        return view('client.weaving-order-print', compact('plan'));
     }
 
     public function productionPlan(Request $request)
@@ -1203,6 +1253,7 @@ class InternalWeavingController extends Controller
                     'waste_percent' => (float) $bom->waste_percent,
                     'required_quantity' => $required,
                     'type' => $bomMetadata['type'] ?? '',
+                    'pick_count' => $bomMetadata['pick_count'] ?? '',
                     'shelf_hint' => $bomMetadata['shelf_hint'] ?? '',
                     'total_grams' => (float) ($bomMetadata['total_grams'] ?? 0),
                     'note' => trim((string) $bom->note),
@@ -1335,6 +1386,7 @@ class InternalWeavingController extends Controller
         })->sortBy('material_code')->values();
 
         return response()->json([
+            'machine_defaults' => $this->latestWeavingMachineDefaults($matchedWeavingOrder ? $matchedWeavingOrder->id : null),
             'order' => [
                 'production_order' => $productionOrder,
                 'weaving_order_id' => $matchedWeavingOrder ? (int) $matchedWeavingOrder->id : null,
@@ -1689,6 +1741,13 @@ class InternalWeavingController extends Controller
             'metadata.usb_small' => 'nullable|string|max:200',
             'metadata.usb_large' => 'nullable|string|max:200',
             'metadata.row_count' => 'nullable|numeric|min:0',
+            'metadata.calculation_waste_percent' => 'nullable|numeric|min:0|max:999',
+            'metadata.color_weight_factor' => 'nullable|numeric|min:0|max:999999',
+            'metadata.color_weight_multiplier' => 'nullable|numeric|min:0|max:999999',
+            'metadata.warp_weight_factor' => 'nullable|numeric|min:0|max:999999',
+            'metadata.warp_extra_waste_percent' => 'nullable|numeric|min:0|max:999',
+            'metadata.muller_capacity' => 'nullable|numeric|min:0.000001|max:999999999999',
+            'metadata.hitex_capacity' => 'nullable|numeric|min:0.000001|max:999999999999',
             'metadata.operations' => 'nullable|array',
             'metadata.operations.*' => 'nullable|string|max:1000',
         ]);
@@ -1805,6 +1864,13 @@ class InternalWeavingController extends Controller
             'metadata.usb_small' => 'nullable|string|max:200',
             'metadata.usb_large' => 'nullable|string|max:200',
             'metadata.row_count' => 'nullable|numeric|min:0',
+            'metadata.calculation_waste_percent' => 'nullable|numeric|min:0|max:999',
+            'metadata.color_weight_factor' => 'nullable|numeric|min:0|max:999999',
+            'metadata.color_weight_multiplier' => 'nullable|numeric|min:0|max:999999',
+            'metadata.warp_weight_factor' => 'nullable|numeric|min:0|max:999999',
+            'metadata.warp_extra_waste_percent' => 'nullable|numeric|min:0|max:999',
+            'metadata.muller_capacity' => 'nullable|numeric|min:0.000001|max:999999999999',
+            'metadata.hitex_capacity' => 'nullable|numeric|min:0.000001|max:999999999999',
             'metadata.operations' => 'nullable|array',
             'metadata.operations.*' => 'nullable|string|max:1000',
             'lines' => 'required|array|min:1|max:7',
@@ -1816,6 +1882,7 @@ class InternalWeavingController extends Controller
             'lines.*.consumption_per_unit' => 'required|numeric|min:0.000001',
             'lines.*.waste_percent' => 'nullable|numeric|min:0|max:999',
             'lines.*.shelf_hint' => 'nullable|string|max:100',
+            'lines.*.pick_count' => 'nullable|string|max:100',
             'lines.*.total_grams' => 'nullable|numeric|min:0',
             'lines.*.note' => 'nullable|string|max:1000',
         ]);
@@ -1877,6 +1944,7 @@ class InternalWeavingController extends Controller
                 $lineRole = $this->cleanCode($line['line_role'] ?? '') ?: ('DONG-' . ($index + 1));
                 $lineMetadata = [
                     'type' => trim((string) ($line['type'] ?? '')),
+                    'pick_count' => trim((string) ($line['pick_count'] ?? '')),
                     'shelf_hint' => trim((string) ($line['shelf_hint'] ?? '')),
                     'total_grams' => (float) ($line['total_grams'] ?? 0),
                 ];
@@ -1975,6 +2043,50 @@ class InternalWeavingController extends Controller
 
             return $line;
         })->all();
+    }
+
+    private function latestWeavingMachineDefaults(?int $excludeOrderId = null): array
+    {
+        $keys = [
+            'pick',
+            'density',
+            'machine',
+            'row_count',
+            'roll_count_small',
+            'row_count_plus_10',
+            'shift',
+            'roll_count_large',
+            'row_count_plus_10_large',
+            'shift_large',
+        ];
+
+        $query = InternalWeavingOrder::query()
+            ->whereNotNull('metadata_json')
+            ->where('metadata_json', '<>', '')
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id');
+        if ($excludeOrderId) {
+            $query->where('id', '<>', $excludeOrderId);
+        }
+
+        foreach ($query->limit(20)->get(['order_code', 'metadata_json']) as $previousOrder) {
+            $metadata = json_decode((string) $previousOrder->metadata_json, true) ?: [];
+            $defaults = [];
+            foreach ($keys as $key) {
+                $value = $metadata[$key] ?? null;
+                if ($value !== null && $value !== '') {
+                    $defaults[$key] = $value;
+                }
+            }
+            if (!empty($defaults)) {
+                return [
+                    'source_order' => $previousOrder->order_code,
+                    'values' => $defaults,
+                ];
+            }
+        }
+
+        return ['source_order' => null, 'values' => []];
     }
 
     public function createIssue(Request $request, InternalWeavingOrder $order)
@@ -2133,6 +2245,76 @@ class InternalWeavingController extends Controller
                 ];
             })
             ->all();
+    }
+
+    private function stockStatusForLines(array $lines, float $orderQuantity)
+    {
+        $codes = collect($lines)
+            ->pluck('material_code')
+            ->map(fn ($code) => $this->cleanCode($code))
+            ->filter()
+            ->unique()
+            ->values();
+        $stock = $this->stockByMaterial($codes->all());
+        $catalog = $this->catalogByCodes($codes->all());
+        $converter = app(InternalUnitConverter::class);
+
+        return collect($lines)
+            ->map(function ($line) use ($orderQuantity, $catalog, $converter) {
+                $line = (array) $line;
+                $code = $this->cleanCode($line['material_code'] ?? '');
+                $catalogRow = $catalog[$code] ?? null;
+                $requiredRaw = round(
+                    $orderQuantity
+                    * $this->toNumber($line['consumption_per_unit'] ?? 0)
+                    * (1 + $this->toNumber($line['waste_percent'] ?? 0) / 100),
+                    3
+                );
+                $base = $converter->toBase(
+                    $code,
+                    $requiredRaw,
+                    $line['unit'] ?? '',
+                    $catalogRow->unit ?? ($line['unit'] ?? '')
+                );
+
+                return [
+                    'material_code' => $code,
+                    'material_name' => trim((string) ($catalogRow->item_name ?? $line['material_name'] ?? '')),
+                    'unit' => $base['unit'] ?: trim((string) ($catalogRow->unit ?? $line['unit'] ?? '')),
+                    'required_quantity' => round((float) $base['quantity'], 3),
+                ];
+            })
+            ->groupBy(fn ($line) => $line['material_code'] . '|' . $line['unit'])
+            ->map(function ($group) use ($stock, $catalog) {
+                $first = $group->first();
+                $code = $first['material_code'];
+                $catalogRow = $catalog[$code] ?? null;
+                $stockRow = $stock[$code] ?? ['quantity' => 0, 'locations' => collect()];
+                $locations = collect($stockRow['locations'])->values();
+                $stockQuantity = (float) $stockRow['quantity'];
+                if ($locations->isEmpty() && $catalogRow && trim((string) $catalogRow->shelf_code) !== '') {
+                    $stockQuantity = max($stockQuantity, (float) $catalogRow->opening_quantity);
+                    $locations = collect([[
+                        'location_code' => $catalogRow->shelf_code,
+                        'quantity' => (float) $catalogRow->opening_quantity,
+                    ]]);
+                }
+                $required = round((float) $group->sum('required_quantity'), 3);
+                $shortage = max(0, round($required - $stockQuantity, 3));
+
+                return [
+                    'material_code' => $code,
+                    'material_name' => $first['material_name'],
+                    'unit' => $first['unit'],
+                    'required_quantity' => $required,
+                    'stock_quantity' => round($stockQuantity, 3),
+                    'shortage_quantity' => $shortage,
+                    'locations' => $locations,
+                    'first_location' => $locations->first()['location_code'] ?? '',
+                    'status' => $shortage > 0 ? 'short' : 'enough',
+                ];
+            })
+            ->values();
     }
 
     private function catalogByCodes(array $codes)

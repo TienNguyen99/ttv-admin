@@ -201,6 +201,7 @@ class WeavingExcelBatchExporter
             $startCell = explode(':', $rangeData['range'], 2)[0];
             $sheet->fromArray($rangeData['values'], null, $startCell, true);
         }
+        $this->writeExcelCalculationFormulas($sheet, $plan);
         $this->writeExcelBomValues($sheet, $plan);
         $this->embedExcelImages($sheet, $plan);
         $sheet->setSelectedCell('A1');
@@ -216,6 +217,10 @@ class WeavingExcelBatchExporter
     {
         $order = (array) ($plan['order'] ?? []);
         $sourceItem = (array) ($plan['source_items'][0] ?? []);
+        $metadata = array_merge(
+            (array) ($sourceItem['metadata'] ?? []),
+            (array) ($order['metadata'] ?? [])
+        );
         $lines = array_values((array) ($sourceItem['materials'] ?? []));
         if (empty($lines)) {
             $lines = array_values((array) ($plan['data'] ?? []));
@@ -227,14 +232,61 @@ class WeavingExcelBatchExporter
             $line = (array) ($lines[$index] ?? []);
             $consumption = (float) ($line['consumption_per_unit'] ?? 0);
             $total = (float) ($line['total_grams'] ?? $line['required_quantity_raw'] ?? 0);
+            $usesFallbackFactors = false;
+            if ($consumption <= 0 && trim((string) ($line['material_code'] ?? '')) !== '') {
+                $consumption = $this->metadataNumber($metadata, 'color_weight_factor', 0.23)
+                    * $this->metadataNumber($metadata, 'color_weight_multiplier', 1.5)
+                    * (1 + $this->metadataNumber($metadata, 'calculation_waste_percent', 10) / 100);
+                $usesFallbackFactors = true;
+            }
             if ($total <= 0 && $consumption > 0 && $quantity > 0) {
                 $waste = (float) ($line['waste_percent'] ?? 0);
-                $total = $quantity * $consumption * (1 + $waste / 100);
+                $total = $quantity * $consumption * ($usesFallbackFactors ? 1 : (1 + $waste / 100));
             }
 
             $sheet->setCellValue('J' . $row, $consumption > 0 ? round($consumption, 6) : null);
             $sheet->setCellValue('K' . $row, $total > 0 ? round($total, 6) : null);
         }
+    }
+
+    private function writeExcelCalculationFormulas(Worksheet $sheet, array $plan): void
+    {
+        $order = (array) ($plan['order'] ?? []);
+        $sourceItem = (array) ($plan['source_items'][0] ?? []);
+        $metadata = array_merge(
+            (array) ($sourceItem['metadata'] ?? []),
+            (array) ($order['metadata'] ?? [])
+        );
+
+        $waste = $this->formulaNumber($this->metadataNumber($metadata, 'calculation_waste_percent', 10));
+        $warpFactor = $this->formulaNumber($this->metadataNumber($metadata, 'warp_weight_factor', 0.532));
+        $warpWaste = $this->formulaNumber($this->metadataNumber($metadata, 'warp_extra_waste_percent', 0));
+        $mullerCapacity = $this->formulaNumber($this->metadataNumber($metadata, 'muller_capacity', 210000, true));
+        $hitexCapacity = $this->formulaNumber($this->metadataNumber($metadata, 'hitex_capacity', 144000, true));
+        $mullerRolls = $this->metadataNumber($metadata, 'roll_count_small', 20, true);
+        $hitexRolls = $this->metadataNumber($metadata, 'roll_count_large', 32, true);
+
+        $sheet->setCellValue('E15', $mullerRolls);
+        $sheet->setCellValue('E16', $hitexRolls);
+        $sheet->setCellValue('G15', '=SUM(B33:C42)*(1+' . $waste . '/100)');
+        $sheet->setCellValue('I15', '=IFERROR(G15/E15,0)');
+        $sheet->setCellValue('I16', '=IFERROR(G15/E16,0)');
+        $sheet->setCellValue('K13', '=' . $warpFactor . '*G15*(1+' . $warpWaste . '/100)');
+        $sheet->setCellValue('K15', '=IFERROR(I15*A15/' . $mullerCapacity . ',0)');
+        $sheet->setCellValue('K16', '=IFERROR(I16*A15/' . $hitexCapacity . ',0)');
+    }
+
+    private function metadataNumber(array $metadata, string $key, float $default, bool $mustBePositive = false): float
+    {
+        $raw = trim((string) ($metadata[$key] ?? ''));
+        $value = $raw === '' ? $default : (float) str_replace(',', '.', $raw);
+
+        return $mustBePositive && $value <= 0 ? $default : max($value, 0);
+    }
+
+    private function formulaNumber(float $value): string
+    {
+        return rtrim(rtrim(number_format($value, 6, '.', ''), '0'), '.');
     }
 
     private function embedExcelImages(Worksheet $sheet, array $plan): void
