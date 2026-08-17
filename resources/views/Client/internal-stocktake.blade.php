@@ -32,7 +32,9 @@
         .session-empty { display:grid; min-height:420px; place-items:center; padding:30px; text-align:center; }
         .stocktake-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; }
         .stocktake-toolbar__actions { display:flex; flex-wrap:wrap; gap:8px; }
-        .new-line-grid { display:grid; grid-template-columns:1.2fr 1.5fr .65fr .8fr .65fr .65fr .7fr auto; gap:8px; align-items:end; }
+        .new-line-grid { display:grid; grid-template-columns:1.2fr 1.5fr .65fr .8fr .65fr .65fr .7fr .7fr auto; gap:8px; align-items:end; }
+        .weight-input { min-width:120px; font-weight:800; text-align:right; }
+        .weight-norm { margin-top:3px; color:#64748b; font-size:10px; white-space:nowrap; }
         .stocktake-loader { position:fixed; inset:0; z-index:3000; display:none; place-items:center; background:rgba(238,246,255,.74); backdrop-filter:blur(3px); }
         .stocktake-loader.is-visible { display:grid; }
         button, select { cursor:pointer; }
@@ -110,8 +112,8 @@
                 </div>
                 <div class="wms-table-wrap">
                     <table class="wms-table count-table">
-                        <thead><tr><th>Mã nội bộ</th><th>Tên hàng</th><th>Size</th><th>Màu</th><th>Mặt</th><th>ĐVT</th><th class="text-end">Tồn sổ</th><th class="text-end">Thực tế *</th><th class="text-end">Chênh</th><th>Ghi chú</th></tr></thead>
-                        <tbody id="countRows"><tr><td colspan="10" class="wms-empty">Chọn một vị trí để bắt đầu.</td></tr></tbody>
+                        <thead><tr><th>Mã nội bộ</th><th>Tên hàng</th><th>Size</th><th>Màu</th><th>Mặt</th><th>ĐVT</th><th class="text-end">Tồn sổ</th><th class="text-end">Thực tế *</th><th class="text-end">Số KG</th><th class="text-end">Chênh</th><th>Ghi chú</th></tr></thead>
+                        <tbody id="countRows"><tr><td colspan="11" class="wms-empty">Chọn một vị trí để bắt đầu.</td></tr></tbody>
                     </table>
                 </div>
                 <div class="p-3 border-top">
@@ -123,6 +125,7 @@
                         <div><label class="small">Màu</label><input id="newItemColor" class="form-control"></div>
                         <div><label class="small">Mặt</label><input id="newItemSide" class="form-control"></div>
                         <div><label class="small">ĐVT</label><input id="newItemUnit" class="form-control"></div>
+                        <div><label class="small">ĐM g/ĐVT</label><input id="newItemWeight" class="form-control text-end" type="number" min="0" step="0.000001"></div>
                         <div><label class="small">Số lượng</label><input id="newItemQuantity" class="form-control text-end" type="number" min="0" step="0.001"></div>
                         <button id="addCountLineBtn" class="wms-btn wms-btn--primary"><i data-lucide="plus"></i>Thêm</button>
                     </div>
@@ -158,6 +161,7 @@
     const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
     const createModal = new bootstrap.Modal(document.getElementById('createSessionModal'));
     const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits:3});
+    const inputNumber = value => Number(Number(value || 0).toFixed(6));
     const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
     let sessions = [], activeSession = null, locations = [], activeLocation = null, activeLines = [], catalogItems = [], isDirty = false;
 
@@ -261,7 +265,7 @@
         document.getElementById('saveLocationBtn').disabled = locked;
         document.getElementById('completeLocationBtn').disabled = locked;
         document.getElementById('addCountLineBtn').disabled = locked;
-        ['newItemCode','newItemName','newItemSize','newItemColor','newItemSide','newItemUnit','newItemQuantity'].forEach(id => {
+        ['newItemCode','newItemName','newItemSize','newItemColor','newItemSide','newItemUnit','newItemWeight','newItemQuantity'].forEach(id => {
             document.getElementById(id).disabled = locked;
         });
         document.getElementById('reopenLocationBtn').disabled = !activeLocation || activeSession.status === 'posted' || activeLocation.status !== 'completed';
@@ -269,25 +273,35 @@
         document.getElementById('countRows').innerHTML = activeLines.map((line,index) => {
             const counted = line.counted_quantity === null || line.counted_quantity === undefined ? '' : line.counted_quantity;
             const variance = counted === '' ? null : Number(counted) - Number(line.expected_quantity || 0);
+            const unit = String(line.unit || '').trim().toUpperCase();
+            const norm = Number(line.weight_per_unit_grams || 0);
+            const canUseKg = unit === 'KG' || norm > 0;
+            const savedKilograms = line.counted_weight_kg === null || line.counted_weight_kg === undefined ? '' : line.counted_weight_kg;
+            const kilograms = savedKilograms !== ''
+                ? savedKilograms
+                : (counted === '' || !canUseKg ? '' : inputNumber(unit === 'KG' ? counted : Number(counted) * norm / 1000));
             return `<tr data-line-index="${index}">
                 <td><span class="wms-code">${esc(line.internal_item_code)}</span>${line.catalog_exists === false ? '<div class="catalog-warning">Chưa có trong danh mục</div>' : ''}</td>
                 <td class="item-name">${esc(line.item_name || '-')}</td><td>${esc(line.size || '-')}</td><td>${esc(line.color || '-')}</td><td>${esc(line.side || '-')}</td><td>${esc(line.unit || '-')}</td>
                 <td class="wms-number ${showExpected ? '' : 'expected-hidden'}">${showExpected ? num(line.expected_quantity) : '••••'}</td>
                 <td><input class="form-control count-input" type="number" min="0" step="0.001" value="${esc(counted)}" ${locked ? 'disabled' : ''}></td>
+                <td><input class="form-control weight-input" type="number" min="0" step="0.001" value="${esc(kilograms)}" placeholder="${canUseKg ? '0' : 'Thiếu ĐM'}" ${locked || !canUseKg ? 'disabled' : ''}>${norm > 0 ? `<div class="weight-norm">${num(norm)} g/${esc(unit || 'ĐVT')}</div>` : ''}</td>
                 <td class="wms-number ${variance > 0 ? 'variance-positive' : variance < 0 ? 'variance-negative' : ''}">${showExpected && variance !== null ? `${variance > 0 ? '+' : ''}${num(variance)}` : '-'}</td>
                 <td><input class="form-control line-note" value="${esc(line.note || '')}" ${locked ? 'disabled' : ''}></td>
             </tr>`;
-        }).join('') || '<tr><td colspan="10" class="wms-empty">Kệ chưa có mã dự kiến. Có thể thêm mã tìm thấy ở form bên dưới.</td></tr>';
+        }).join('') || '<tr><td colspan="11" class="wms-empty">Kệ chưa có mã dự kiến. Có thể thêm mã tìm thấy ở form bên dưới.</td></tr>';
     }
 
     function collectLines() {
         document.querySelectorAll('#countRows tr[data-line-index]').forEach(row => {
             const line = activeLines[Number(row.dataset.lineIndex)];
             const raw = row.querySelector('.count-input').value;
+            const rawWeight = row.querySelector('.weight-input').value;
             line.counted_quantity = raw === '' ? null : Number(raw);
+            line.counted_weight_kg = rawWeight === '' ? null : Number(rawWeight);
             line.note = row.querySelector('.line-note').value.trim();
         });
-        return activeLines.map(line => ({id:line.id || null, ma_hh:line.ma_hh || '', internal_item_code:line.internal_item_code, item_name:line.item_name || '', unit:line.unit || '', size:line.size || '', color:line.color || '', side:line.side || '', counted_quantity:line.counted_quantity, note:line.note || ''}));
+        return activeLines.map(line => ({id:line.id || null, ma_hh:line.ma_hh || '', internal_item_code:line.internal_item_code, item_name:line.item_name || '', unit:line.unit || '', weight_per_unit_grams:Number(line.weight_per_unit_grams || 0) || null, size:line.size || '', color:line.color || '', side:line.side || '', counted_quantity:line.counted_quantity, counted_weight_kg:line.counted_weight_kg, note:line.note || ''}));
     }
 
     async function saveLocation(showToast=true) {
@@ -340,9 +354,56 @@
     document.getElementById('postSessionBtn').addEventListener('click', async () => { const answer=await Swal.fire({icon:'warning', title:'Chốt và áp dụng chênh lệch?', text:'Thao tác sẽ tạo phiếu điều chỉnh nhập/xuất nội bộ và không thể sửa lại đợt kiểm kê.', showCancelButton:true, confirmButtonText:'Chốt & áp dụng', cancelButtonText:'Xem lại'}); if(!answer.isConfirmed)return; setLoading(true,'Đang tạo phiếu điều chỉnh...'); try { const result=await api(`/api/dot-kiem-ke/${activeSession.id}/ap-dung`, {method:'POST'}); await loadSessions(activeSession.id); Swal.fire({icon:'success', title:'Đã áp dụng', text:result.message}); } catch(error){Swal.fire({icon:'error',title:'Không áp dụng được',text:error.message});} finally{setLoading(false);} });
     document.getElementById('deleteSessionBtn').addEventListener('click', async () => { const answer=await Swal.fire({icon:'warning',title:'Xóa đợt kiểm kê?',text:'Toàn bộ số đếm nháp sẽ bị xóa.',showCancelButton:true,confirmButtonText:'Xóa đợt',cancelButtonText:'Hủy'}); if(!answer.isConfirmed)return; await api(`/api/dot-kiem-ke/${activeSession.id}`,{method:'DELETE'}); activeSession=null;activeLocation=null;await loadSessions(); });
     document.getElementById('newItemCode').addEventListener('input', event => { clearTimeout(event.target._timer); event.target._timer=setTimeout(()=>searchCatalog(event.target.value.trim()),220); });
-    document.getElementById('newItemCode').addEventListener('change', event => { const code=event.target.value.trim().toUpperCase(); const item=catalogItems.find(x=>String(x.code||x.value||'').toUpperCase()===code); if(item){document.getElementById('newItemName').value=item.name||'';document.getElementById('newItemUnit').value=item.unit||'';document.getElementById('newItemSize').value=item.size||'';document.getElementById('newItemColor').value=item.color||'';document.getElementById('newItemSide').value=item.side||'';} });
-    document.getElementById('addCountLineBtn').addEventListener('click', () => { if(!activeLocation)return; const code=document.getElementById('newItemCode').value.trim().toUpperCase(); const quantity=document.getElementById('newItemQuantity').value; if(!code||quantity==='')return Swal.fire({icon:'warning',title:'Thiếu dữ liệu',text:'Cần mã nội bộ và số lượng thực tế.'}); activeLines.push({id:null,internal_item_code:code,item_name:document.getElementById('newItemName').value.trim(),unit:document.getElementById('newItemUnit').value.trim(),size:document.getElementById('newItemSize').value.trim(),color:document.getElementById('newItemColor').value.trim(),side:document.getElementById('newItemSide').value.trim(),ma_hh:'',expected_quantity:0,counted_quantity:Number(quantity),catalog_exists:catalogItems.some(x=>String(x.code||x.value||'').toUpperCase()===code)}); isDirty=true; ['newItemCode','newItemName','newItemSize','newItemColor','newItemSide','newItemUnit','newItemQuantity'].forEach(id=>document.getElementById(id).value=''); renderCountLines(); });
-    document.getElementById('countRows').addEventListener('input', event => { if(event.target.matches('.count-input,.line-note'))isDirty=true; });
+    document.getElementById('newItemCode').addEventListener('change', event => { const code=event.target.value.trim().toUpperCase(); const item=catalogItems.find(x=>String(x.code||x.value||'').toUpperCase()===code); if(item){document.getElementById('newItemName').value=item.name||'';document.getElementById('newItemUnit').value=item.unit||'';document.getElementById('newItemWeight').value=item.weight_per_unit_grams||'';document.getElementById('newItemSize').value=item.size||'';document.getElementById('newItemColor').value=item.color||'';document.getElementById('newItemSide').value=item.side||'';} });
+    document.getElementById('addCountLineBtn').addEventListener('click', () => {
+        if (!activeLocation) return;
+        const field = id => document.getElementById(id);
+        const code = field('newItemCode').value.trim().toUpperCase();
+        const quantity = field('newItemQuantity').value;
+        if (!code || quantity === '') return Swal.fire({icon:'warning', title:'Thiếu dữ liệu', text:'Cần mã nội bộ và số lượng thực tế.'});
+
+        const candidate = {
+            id:null, internal_item_code:code, item_name:field('newItemName').value.trim(), unit:field('newItemUnit').value.trim(), weight_per_unit_grams:Number(field('newItemWeight').value || 0) || null,
+            size:field('newItemSize').value.trim(), color:field('newItemColor').value.trim(), side:field('newItemSide').value.trim(),
+            ma_hh:'', expected_quantity:0, counted_quantity:Number(quantity), counted_weight_kg:null,
+            catalog_exists:catalogItems.some(x => String(x.code || x.value || '').toUpperCase() === code)
+        };
+        const normalize = value => String(value || '').trim().toUpperCase();
+        const existing = activeLines.find(line => normalize(line.internal_item_code) === normalize(candidate.internal_item_code)
+            && normalize(line.size) === normalize(candidate.size)
+            && normalize(line.color) === normalize(candidate.color)
+            && normalize(line.side) === normalize(candidate.side));
+
+        if (existing) {
+            existing.counted_quantity = Number(existing.counted_quantity || 0) + candidate.counted_quantity;
+            if (candidate.counted_weight_kg !== null) existing.counted_weight_kg = Number(existing.counted_weight_kg || 0) + candidate.counted_weight_kg;
+            existing.item_name = existing.item_name || candidate.item_name;
+            existing.unit = existing.unit || candidate.unit;
+            existing.weight_per_unit_grams = existing.weight_per_unit_grams || candidate.weight_per_unit_grams;
+            Swal.fire({toast:true, position:'top-end', icon:'success', title:`Đã cộng ${num(candidate.counted_quantity)}. Tổng: ${num(existing.counted_quantity)}`, timer:1800, showConfirmButton:false});
+        } else {
+            activeLines.push(candidate);
+        }
+        isDirty = true;
+        ['newItemCode','newItemName','newItemSize','newItemColor','newItemSide','newItemUnit','newItemWeight','newItemQuantity'].forEach(id => field(id).value = '');
+        renderCountLines();
+    });
+    document.getElementById('countRows').addEventListener('input', event => {
+        const row = event.target.closest('tr[data-line-index]');
+        if (!row) return;
+        const line = activeLines[Number(row.dataset.lineIndex)];
+        const unit = String(line.unit || '').trim().toUpperCase();
+        const norm = Number(line.weight_per_unit_grams || 0);
+        if (event.target.classList.contains('weight-input')) {
+            const kilograms = event.target.value;
+            row.querySelector('.count-input').value = kilograms === '' ? '' : inputNumber(unit === 'KG' ? kilograms : Number(kilograms) * 1000 / norm);
+        } else if (event.target.classList.contains('count-input')) {
+            const quantity = event.target.value;
+            const weightInput = row.querySelector('.weight-input');
+            if (weightInput && !weightInput.disabled) weightInput.value = quantity === '' ? '' : inputNumber(unit === 'KG' ? quantity : Number(quantity) * norm / 1000);
+        }
+        if (event.target.matches('.count-input,.weight-input,.line-note')) isDirty = true;
+    });
     document.getElementById('countRows').addEventListener('keydown', event => { if(event.key!=='Enter'||!event.target.classList.contains('count-input'))return; event.preventDefault(); const inputs=[...document.querySelectorAll('.count-input:not(:disabled)')]; const index=inputs.indexOf(event.target); if(inputs[index+1]){inputs[index+1].focus();inputs[index+1].select();}else document.getElementById('saveLocationBtn').focus(); });
 
     window.addEventListener('beforeunload', event => { if(!isDirty)return; event.preventDefault(); event.returnValue=''; });

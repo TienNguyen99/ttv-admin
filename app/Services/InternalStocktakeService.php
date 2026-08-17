@@ -13,6 +13,67 @@ use Illuminate\Support\Facades\DB;
 
 class InternalStocktakeService
 {
+    public function mergeCountLines(array $lines, string $locationCode): array
+    {
+        $merged = [];
+
+        foreach ($lines as $input) {
+            $key = $this->lineKey(
+                $locationCode,
+                $input['ma_hh'] ?? '',
+                $input['internal_item_code'] ?? '',
+                $input['size'] ?? '',
+                $input['color'] ?? '',
+                $input['side'] ?? ''
+            );
+            $hasCount = array_key_exists('counted_quantity', $input)
+                && $input['counted_quantity'] !== null
+                && $input['counted_quantity'] !== '';
+            $hasWeight = array_key_exists('counted_weight_kg', $input)
+                && $input['counted_weight_kg'] !== null
+                && $input['counted_weight_kg'] !== '';
+
+            if (!isset($merged[$key])) {
+                $input['counted_quantity'] = $hasCount ? (float) $input['counted_quantity'] : null;
+                $input['counted_weight_kg'] = $hasWeight ? (float) $input['counted_weight_kg'] : null;
+                $merged[$key] = $input;
+                continue;
+            }
+
+            $current = &$merged[$key];
+            $samePersistedLine = !empty($current['id'])
+                && !empty($input['id'])
+                && (int) $current['id'] === (int) $input['id'];
+
+            if ($hasCount) {
+                $current['counted_quantity'] = $samePersistedLine
+                    ? (float) $input['counted_quantity']
+                    : (float) ($current['counted_quantity'] ?? 0) + (float) $input['counted_quantity'];
+            }
+            if ($hasWeight) {
+                $current['counted_weight_kg'] = $samePersistedLine
+                    ? (float) $input['counted_weight_kg']
+                    : (float) ($current['counted_weight_kg'] ?? 0) + (float) $input['counted_weight_kg'];
+            }
+            if (empty($current['id']) && !empty($input['id'])) {
+                $current['id'] = $input['id'];
+            }
+            foreach (['ma_hh', 'item_name', 'unit', 'weight_per_unit_grams', 'size', 'color', 'side'] as $field) {
+                if (trim((string) ($current[$field] ?? '')) === '' && trim((string) ($input[$field] ?? '')) !== '') {
+                    $current[$field] = $input[$field];
+                }
+            }
+            $incomingNote = trim((string) ($input['note'] ?? ''));
+            $currentNote = trim((string) ($current['note'] ?? ''));
+            if ($incomingNote !== '' && $incomingNote !== $currentNote) {
+                $current['note'] = $currentNote === '' ? $incomingNote : $currentNote . ' | ' . $incomingNote;
+            }
+            unset($current);
+        }
+
+        return array_values($merged);
+    }
+
     public function create(string $name, string $countDate, ?string $note = null): InternalStocktakeSession
     {
         $active = InternalStocktakeSession::query()
@@ -111,11 +172,13 @@ class InternalStocktakeService
                     'internal_item_code' => $itemCode,
                     'item_name' => $catalog->item_name ?? '',
                     'unit' => $catalog->unit ?? '',
+                    'weight_per_unit_grams' => $catalog->weight_per_unit_grams ?? null,
                     'size' => trim((string) $row->size),
                     'color' => trim((string) $row->color),
                     'side' => trim((string) $row->side),
                     'expected_quantity' => (float) $row->expected_quantity,
                     'counted_quantity' => null,
+                    'counted_weight_kg' => null,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
@@ -140,11 +203,13 @@ class InternalStocktakeService
                     'internal_item_code' => $itemCode,
                     'item_name' => $catalog->item_name ?? '',
                     'unit' => $catalog->unit ?? '',
+                    'weight_per_unit_grams' => $catalog->weight_per_unit_grams ?? null,
                     'size' => trim((string) $catalog->size),
                     'color' => trim((string) $catalog->color),
                     'side' => trim((string) $catalog->side),
                     'expected_quantity' => 0,
                     'counted_quantity' => null,
+                    'counted_weight_kg' => null,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];

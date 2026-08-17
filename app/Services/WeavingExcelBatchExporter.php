@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Writer\Html;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 use ZipArchive;
@@ -188,6 +189,46 @@ class WeavingExcelBatchExporter
 
     private function writeWorkbook(array $plan, string $path): void
     {
+        $spreadsheet = $this->buildSpreadsheet($plan);
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->setPreCalculateFormulas(false);
+        $writer->save($path);
+        $spreadsheet->disconnectWorksheets();
+    }
+
+    public function printableHtml(array $plan): string
+    {
+        $spreadsheet = $this->buildSpreadsheet($plan);
+        $sheet = $spreadsheet->getSheetByName(GoogleSheetWeavingTemplateWriter::SHEET_NAME);
+
+        // The template carries formatting down to Z1000. The print form only uses
+        // A1:K42, so trim the unused formatted range before generating HTML.
+        $highestRow = $sheet->getHighestRow();
+        if ($highestRow > 42) {
+            $sheet->removeRow(43, $highestRow - 42);
+        }
+        $highestColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+        if ($highestColumn > 11) {
+            $sheet->removeColumnByIndex(12, $highestColumn - 11);
+        }
+
+        $writer = new Html($spreadsheet);
+        $writer->setSheetIndex($spreadsheet->getIndex($sheet));
+        $writer->setGenerateSheetNavigationBlock(false);
+        $writer->setEmbedImages(true);
+        $writer->setUseInlineCss(false);
+
+        $html = $writer->generateHTMLHeader(true)
+            . $writer->generateSheetData()
+            . $writer->generateHTMLFooter();
+        $spreadsheet->disconnectWorksheets();
+
+        return $html;
+    }
+
+    private function buildSpreadsheet(array $plan): Spreadsheet
+    {
         $spreadsheet = $this->templateFactory->create();
         $sheet = $spreadsheet->getSheetByName(GoogleSheetWeavingTemplateWriter::SHEET_NAME);
         if (!$sheet) {
@@ -207,10 +248,7 @@ class WeavingExcelBatchExporter
         $sheet->setSelectedCell('A1');
         $spreadsheet->setActiveSheetIndex($spreadsheet->getIndex($sheet));
 
-        $writer = new Xlsx($spreadsheet);
-        $writer->setPreCalculateFormulas(false);
-        $writer->save($path);
-        $spreadsheet->disconnectWorksheets();
+        return $spreadsheet;
     }
 
     private function writeExcelBomValues(Worksheet $sheet, array $plan): void

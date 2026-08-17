@@ -4,6 +4,8 @@ namespace App\Services;
 
 class WarehouseRackCode
 {
+    private const PHYSICAL_RACK_TIER_COUNTS = [5, 5, 5, 2, 2, 2, 2];
+
     public function labelToIndex(string $label): int
     {
         $label = strtoupper(trim($label));
@@ -36,6 +38,57 @@ class WarehouseRackCode
         return $label;
     }
 
+    public function rackTierCounts(): array
+    {
+        return self::PHYSICAL_RACK_TIER_COUNTS;
+    }
+
+    public function rackPositionForLabel(string $label): ?array
+    {
+        $index = $this->labelToIndex($label);
+        if ($index < 0) {
+            return null;
+        }
+
+        $offset = 0;
+        foreach (self::PHYSICAL_RACK_TIER_COUNTS as $rackIndex => $tierCount) {
+            if ($index < $offset + $tierCount) {
+                return [
+                    'rack' => $rackIndex + 1,
+                    'tier' => $tierCount - ($index - $offset),
+                    'tier_count' => $tierCount,
+                ];
+            }
+            $offset += $tierCount;
+        }
+
+        $relativeIndex = $index - $offset;
+        return [
+            'rack' => count(self::PHYSICAL_RACK_TIER_COUNTS) + intdiv($relativeIndex, 5) + 1,
+            'tier' => 5 - ($relativeIndex % 5),
+            'tier_count' => 5,
+        ];
+    }
+
+    public function labelForRackTier(int $rack, int $tier): string
+    {
+        if ($rack < 1 || $tier < 1) {
+            return '';
+        }
+
+        $counts = self::PHYSICAL_RACK_TIER_COUNTS;
+        $offset = 0;
+        for ($rackNumber = 1; $rackNumber < $rack; $rackNumber++) {
+            $offset += $counts[$rackNumber - 1] ?? 5;
+        }
+        $tierCount = $counts[$rack - 1] ?? 5;
+        if ($tier > $tierCount) {
+            return '';
+        }
+
+        return $this->indexToLabel($offset + ($tierCount - $tier));
+    }
+
     public function parseLocation(string $locationCode): ?array
     {
         $code = strtoupper(trim($locationCode));
@@ -44,7 +97,8 @@ class WarehouseRackCode
         }
 
         $letterIndex = $this->labelToIndex($matches[1]);
-        if ($letterIndex < 0) {
+        $position = $this->rackPositionForLabel($matches[1]);
+        if ($letterIndex < 0 || !$position) {
             return null;
         }
 
@@ -52,8 +106,8 @@ class WarehouseRackCode
             'label' => $matches[1],
             'letter_index' => $letterIndex,
             'bay' => (int) $matches[2],
-            'line' => intdiv($letterIndex, 5) + 1,
-            'tier' => 5 - ($letterIndex % 5),
+            'line' => $position['rack'],
+            'tier' => $position['tier'],
         ];
     }
 }

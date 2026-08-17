@@ -14,6 +14,7 @@ class InternalItemCatalog extends Model
 
     protected $casts = [
         'opening_quantity' => 'float',
+        'weight_per_unit_grams' => 'float',
         'raw_data' => 'array',
         'is_active' => 'boolean',
     ];

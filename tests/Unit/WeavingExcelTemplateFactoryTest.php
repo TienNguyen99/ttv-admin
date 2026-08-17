@@ -127,4 +127,34 @@ class WeavingExcelTemplateFactoryTest extends TestCase
         $book->disconnectWorksheets();
         unlink($result['path']);
     }
+
+    public function test_printable_html_uses_only_the_excel_print_area(): void
+    {
+        $html = app(WeavingExcelBatchExporter::class)->printableHtml([
+            'order' => [
+                'production_order' => 'T-PRINT/26',
+                'customer' => 'UNIPAX',
+                'item_code' => 'ITEM-PRINT',
+                'planned_quantity' => 30,
+                'unit' => 'PCS',
+            ],
+            'source_items' => [[
+                'item_code' => 'ITEM-PRINT',
+                'order_quantity' => 30,
+                'materials' => [[
+                    'material_code' => 'YARN-01',
+                    'consumption_per_unit' => 0.3,
+                    'total_grams' => 9,
+                ]],
+            ]],
+            'data' => [],
+        ]);
+
+        $this->assertStringContainsString('<table', $html);
+        $this->assertStringContainsString('T-PRINT/26', $html);
+        $this->assertStringContainsString('class="row41"', $html);
+        $this->assertStringNotContainsString('class="row42"', $html);
+        $this->assertLessThan(200000, strlen($html));
+        $this->assertLessThan(400, substr_count($html, '<td'));
+    }
 }

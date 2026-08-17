@@ -328,7 +328,21 @@ class WarehouseCountController extends Controller
         if ($fromNumber > $toNumber) {
             return response()->json(['message' => 'Số bắt đầu phải nhỏ hơn hoặc bằng số kết thúc.'], 422);
         }
-        $totalLocations = ($toShelf - $fromShelf + 1) * ($toNumber - $fromNumber + 1);
+
+        $locationSpecs = [];
+        for ($shelfIndex = $fromShelf; $shelfIndex <= $toShelf; $shelfIndex++) {
+            $shelf = $rackCode->indexToLabel($shelfIndex);
+            for ($number = $fromNumber; $number <= $toNumber; $number++) {
+                $locationSpecs[] = [
+                    'shelf_index' => $shelfIndex,
+                    'shelf' => $shelf,
+                    'number' => $number,
+                    'location_code' => $shelf . $number,
+                ];
+            }
+        }
+
+        $totalLocations = count($locationSpecs);
         if ($totalLocations > 10000) {
             return response()->json(['message' => 'Mỗi lần chỉ tạo tối đa 10.000 vị trí. Hãy chia thành nhiều dãy nhỏ hơn.'], 422);
         }
@@ -340,14 +354,8 @@ class WarehouseCountController extends Controller
         $updated = 0;
         $skipped = 0;
 
-        DB::connection('internal')->transaction(function () use ($rackCode, $fromShelf, $toShelf, $fromNumber, $toNumber, $warehouseCode, $tier, $namePrefix, &$created, &$updated, &$skipped) {
-            $codes = [];
-            for ($shelfIndex = $fromShelf; $shelfIndex <= $toShelf; $shelfIndex++) {
-                $shelf = $rackCode->indexToLabel($shelfIndex);
-                for ($number = $fromNumber; $number <= $toNumber; $number++) {
-                    $codes[] = $shelf . $number;
-                }
-            }
+        DB::connection('internal')->transaction(function () use ($rackCode, $locationSpecs, $fromShelf, $fromNumber, $warehouseCode, $tier, $namePrefix, &$created, &$updated, &$skipped) {
+            $codes = collect($locationSpecs)->pluck('location_code')->all();
 
             $existingByCode = WarehouseLocation::query()
                 ->whereIn('location_code', $codes)
@@ -356,10 +364,10 @@ class WarehouseCountController extends Controller
             $inserts = [];
             $now = now();
 
-            for ($shelfIndex = $fromShelf; $shelfIndex <= $toShelf; $shelfIndex++) {
-                $shelf = $rackCode->indexToLabel($shelfIndex);
-                for ($number = $fromNumber; $number <= $toNumber; $number++) {
-                    $locationCode = $shelf . $number;
+            foreach ($locationSpecs as $spec) {
+                    $shelfIndex = $spec['shelf_index'];
+                    $number = $spec['number'];
+                    $locationCode = $spec['location_code'];
                     $existing = $existingByCode->get($locationCode);
 
                     if ($existing) {
@@ -409,7 +417,6 @@ class WarehouseCountController extends Controller
                         'created_at' => $now,
                         'updated_at' => $now,
                     ];
-                }
             }
 
             foreach (array_chunk($inserts, 500) as $chunk) {

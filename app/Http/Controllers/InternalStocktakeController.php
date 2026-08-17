@@ -89,23 +89,28 @@ class InternalStocktakeController extends Controller
     public function location(InternalStocktakeSession $stocktake, InternalStocktakeLocation $stocktakeLocation)
     {
         $this->assertLocationBelongsToSession($stocktake, $stocktakeLocation);
-        $catalogCodes = InternalItemCatalog::query()
+        $catalogs = InternalItemCatalog::query()
             ->where('is_active', true)
             ->whereIn('item_code', $stocktakeLocation->lines()->pluck('internal_item_code')->filter()->unique()->values())
-            ->pluck('item_code')
-            ->map(fn ($code) => mb_strtoupper(trim((string) $code)))
-            ->flip();
+            ->orderByDesc('source_row')
+            ->get()
+            ->unique(fn ($row) => mb_strtoupper(trim((string) $row->item_code)))
+            ->keyBy(fn ($row) => mb_strtoupper(trim((string) $row->item_code)));
 
         $lines = $stocktakeLocation->lines()
             ->orderBy('internal_item_code')
             ->orderBy('size')
             ->orderBy('color')
             ->get()
-            ->map(function ($line) use ($catalogCodes) {
+            ->map(function ($line) use ($catalogs) {
+                $catalog = $catalogs->get(mb_strtoupper(trim((string) $line->internal_item_code)));
                 $line->setAttribute('variance_quantity', $line->counted_quantity === null
                     ? null
                     : round((float) $line->counted_quantity - (float) $line->expected_quantity, 3));
-                $line->setAttribute('catalog_exists', $catalogCodes->has(mb_strtoupper(trim((string) $line->internal_item_code))));
+                $line->setAttribute('catalog_exists', (bool) $catalog);
+                if (!(float) $line->weight_per_unit_grams && $catalog) {
+                    $line->setAttribute('weight_per_unit_grams', (float) $catalog->weight_per_unit_grams);
+                }
                 return $line;
             });
 
@@ -137,15 +142,18 @@ class InternalStocktakeController extends Controller
             'lines.*.internal_item_code' => 'required|string|max:100',
             'lines.*.item_name' => 'nullable|string|max:500',
             'lines.*.unit' => 'nullable|string|max:50',
+            'lines.*.weight_per_unit_grams' => 'nullable|numeric|min:0|max:999999999',
             'lines.*.size' => 'nullable|string|max:100',
             'lines.*.color' => 'nullable|string|max:100',
             'lines.*.side' => 'nullable|string|max:100',
             'lines.*.counted_quantity' => 'nullable|numeric|min:0|max:999999999999999',
+            'lines.*.counted_weight_kg' => 'nullable|numeric|min:0|max:999999999999999',
             'lines.*.note' => 'nullable|string|max:2000',
         ]);
 
         DB::connection('internal')->transaction(function () use ($data, $stocktake, $stocktakeLocation, $service) {
-            foreach ($data['lines'] as $input) {
+            $lines = $service->mergeCountLines($data['lines'], $stocktakeLocation->location_code);
+            foreach ($lines as $input) {
                 $itemCode = mb_strtoupper(trim((string) $input['internal_item_code']));
                 $attributes = [
                     'location_code' => $stocktakeLocation->location_code,
@@ -180,7 +188,13 @@ class InternalStocktakeController extends Controller
                     'line_key' => $lineKey,
                     'item_name' => trim((string) ($input['item_name'] ?? '')) ?: ($catalog->item_name ?? ''),
                     'unit' => trim((string) ($input['unit'] ?? '')) ?: ($catalog->unit ?? ''),
+                    'weight_per_unit_grams' => !empty($input['weight_per_unit_grams'])
+                        ? (float) $input['weight_per_unit_grams']
+                        : ($catalog->weight_per_unit_grams ?? null),
                     'counted_quantity' => $counted,
+                    'counted_weight_kg' => array_key_exists('counted_weight_kg', $input) && $input['counted_weight_kg'] !== null
+                        ? (float) $input['counted_weight_kg']
+                        : null,
                     'counted_at' => $counted === null ? null : now(),
                     'note' => $input['note'] ?? null,
                 ]);

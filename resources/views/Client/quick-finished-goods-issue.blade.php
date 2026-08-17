@@ -580,6 +580,14 @@
         const orderInput = row.querySelector('.production-order');
         const codeInput = row.querySelector('.internal-code');
         orderInput.addEventListener('input', () => {
+            if (row.dataset.appliedOrder
+                && row.dataset.appliedOrder !== orderInput.value.trim().toUpperCase()) {
+                delete row.dataset.appliedOrder;
+                delete row.dataset.productionOrderId;
+                delete row.dataset.purchaseOrder;
+                delete row.dataset.orderCustomer;
+                syncIssueRowPurchaseOrderNote(row, '');
+            }
             delete row.dataset.catalogLookup;
             row.querySelector('.catalog-suggestions').classList.add('d-none');
             debounceSuggestions(orderInput, () => loadOrderSuggestions(row));
@@ -844,12 +852,41 @@
         }
     }
 
+    function purchaseOrderFromOrder(order) {
+        const raw = order?.raw_data || {};
+        return String(
+            order?.purchase_order
+            || raw['purchase order po']
+            || raw['purchase order']
+            || raw['po']
+            || raw['ps / sub']
+            || ''
+        ).trim();
+    }
+
+    function syncIssueRowPurchaseOrderNote(row, purchaseOrder) {
+        const noteInput = row.querySelector('.line-note');
+        const previousAutoNote = String(noteInput.dataset.purchaseOrderNote || '').trim();
+        let manualNote = noteInput.value.trim();
+        if (previousAutoNote && manualNote === previousAutoNote) {
+            manualNote = '';
+        } else if (previousAutoNote && manualNote.endsWith(` | ${previousAutoNote}`)) {
+            manualNote = manualNote.slice(0, -(` | ${previousAutoNote}`).length).trim();
+        }
+
+        const poNote = purchaseOrder ? `PO: ${purchaseOrder}` : '';
+        noteInput.dataset.purchaseOrderNote = poNote;
+        noteInput.value = [manualNote, poNote].filter(Boolean).join(' | ');
+    }
+
     function applyOrderSuggestion(row, item) {
         row.querySelector('.production-order').value = item.production_order || '';
+        row.dataset.appliedOrder = String(item.production_order || '').trim().toUpperCase();
         row.querySelector('.internal-code').value = item.item_code || '';
         row.dataset.orderItemCode = String(item.item_code || '').trim().toUpperCase();
         row.dataset.productionOrderId = item.id || '';
-        row.dataset.purchaseOrder = item.purchase_order || '';
+        row.dataset.purchaseOrder = purchaseOrderFromOrder(item);
+        syncIssueRowPurchaseOrderNote(row, row.dataset.purchaseOrder);
         row.dataset.orderCustomer = item.customer || '';
         row.querySelector('.item-name').value = item.description || item.specification || '';
         row.querySelector('.size').value = item.size || '';

@@ -13,6 +13,8 @@ class InternalStocktakeLine extends Model
     protected $casts = [
         'expected_quantity' => 'float',
         'counted_quantity' => 'float',
+        'counted_weight_kg' => 'float',
+        'weight_per_unit_grams' => 'float',
         'counted_at' => 'datetime',
     ];
 

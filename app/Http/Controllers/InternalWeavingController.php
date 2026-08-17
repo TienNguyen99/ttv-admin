@@ -1146,7 +1146,7 @@ class InternalWeavingController extends Controller
         ]);
     }
 
-    public function printOrder(InternalWeavingOrder $order)
+    public function printOrder(InternalWeavingOrder $order, WeavingExcelBatchExporter $exporter)
     {
         $planResponse = $this->plan(
             Request::create('/api/lenh-det/orders/' . $order->id . '/plan', 'GET'),
@@ -1159,7 +1159,33 @@ class InternalWeavingController extends Controller
             $plan['message'] ?? 'Không tải được lệnh dệt.'
         );
 
-        return view('client.weaving-order-print', compact('plan'));
+        $html = $exporter->printableHtml($plan);
+        $orderCode = e((string) ($plan['order']['production_order'] ?? $order->order_code));
+        $printCss = <<<'CSS'
+<style id="ttv-print-css">
+@page { size: A4 landscape; margin: 4mm; }
+html, body { margin: 0; min-height: 100%; background: #e8eef5; }
+body { padding: 58px 12px 16px; }
+body > table { width: min(1120px, calc(100vw - 24px)) !important; margin: 0 auto; background: #fff; box-shadow: 0 8px 30px rgba(15, 42, 75, .14); }
+.ttv-print-toolbar { position: fixed; z-index: 1000; inset: 0 0 auto; height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; border-bottom: 1px solid #cbd8e8; background: rgba(255,255,255,.96); font: 600 13px Arial,sans-serif; color: #17365d; }
+.ttv-print-toolbar button { min-height: 32px; padding: 0 14px; border: 1px solid #2368c4; border-radius: 6px; background: #2368c4; color: #fff; font-weight: 700; cursor: pointer; }
+@media print {
+    html, body { width: 100%; min-height: 0; background: #fff; }
+    body { padding: 0; }
+    body > table { width: 100% !important; max-width: none; margin: 0 auto; box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
+    .ttv-print-toolbar { display: none !important; }
+}
+</style>
+CSS;
+        $toolbar = '<div class="ttv-print-toolbar"><span>Lệnh dệt ' . $orderCode . '</span><button type="button" onclick="window.print()">In / lưu PDF</button></div>';
+        $autoPrintScript = request()->boolean('preview')
+            ? ''
+            : '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},350);});</script>';
+        $html = str_replace('</head>', $printCss . '</head>', $html);
+        $html = str_replace('<body>', '<body>' . $toolbar, $html);
+        $html = str_replace('</body>', $autoPrintScript . '</body>', $html);
+
+        return response($html)->header('Content-Type', 'text/html; charset=UTF-8');
     }
 
     public function productionPlan(Request $request)

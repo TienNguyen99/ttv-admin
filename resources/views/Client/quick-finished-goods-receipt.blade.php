@@ -1031,7 +1031,12 @@
         function searchProductionOrders(input, immediate = false) {
             const keyword = input.value.trim();
             const select = input.closest('tr')?.querySelector('.order-suggestions');
-            if (input.dataset.appliedOrder !== keyword.toUpperCase()) {
+            if (input.dataset.appliedOrder && input.dataset.appliedOrder !== keyword.toUpperCase()) {
+                delete input.dataset.productionOrderId;
+                delete input.dataset.purchaseOrder;
+                delete input.dataset.customer;
+                delete input.dataset.sourceItemCode;
+                syncReceiptRowPurchaseOrderNote(input.closest('tr'), '');
                 delete input.dataset.appliedOrder;
             }
 
@@ -1197,13 +1202,40 @@
             return !Array.from(row.querySelectorAll('input')).some(input => input.value.trim() !== '');
         }
 
+        function purchaseOrderFromOrder(order) {
+            const raw = order?.raw_data || {};
+            return String(
+                order?.purchase_order
+                || raw['purchase order po']
+                || raw['purchase order']
+                || raw['po']
+                || raw['ps / sub']
+                || ''
+            ).trim();
+        }
+
+        function syncReceiptRowPurchaseOrderNote(row, purchaseOrder) {
+            const noteInput = row.querySelector('.line-note');
+            const previousAutoNote = String(noteInput.dataset.purchaseOrderNote || '').trim();
+            let manualNote = noteInput.value.trim();
+            if (previousAutoNote && manualNote === previousAutoNote) {
+                manualNote = '';
+            } else if (previousAutoNote && manualNote.endsWith(` | ${previousAutoNote}`)) {
+                manualNote = manualNote.slice(0, -(` | ${previousAutoNote}`).length).trim();
+            }
+
+            const poNote = purchaseOrder ? `PO: ${purchaseOrder}` : '';
+            noteInput.dataset.purchaseOrderNote = poNote;
+            noteInput.value = [manualNote, poNote].filter(Boolean).join(' | ');
+        }
+
         function fillQuickRow(row, order) {
             delete row.dataset.variantKey;
             const orderInput = row.querySelector('.production-order');
             orderInput.value = order.production_order || '';
             orderInput.dataset.appliedOrder = String(order.production_order || '').trim().toUpperCase();
             orderInput.dataset.productionOrderId = order.id || '';
-            orderInput.dataset.purchaseOrder = order.purchase_order || '';
+            orderInput.dataset.purchaseOrder = purchaseOrderFromOrder(order);
             orderInput.dataset.customer = order.customer || '';
             orderInput.dataset.sourceItemCode = order.item_code || '';
             if (!document.getElementById('customerName').value.trim() && order.customer) {
@@ -1215,6 +1247,7 @@
             row.querySelector('.item-color').value = order.color || '';
             row.querySelector('.item-unit').value = order.unit || row.querySelector('.item-unit').value || 'Cái';
             row.querySelector('.quantity').value = '';
+            syncReceiptRowPurchaseOrderNote(row, orderInput.dataset.purchaseOrder);
             row.querySelector('.row-state').textContent = 'Từ lệnh sản xuất';
         }
 

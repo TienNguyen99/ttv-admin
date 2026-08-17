@@ -317,6 +317,7 @@ class InternalItemCatalogController extends Controller
                 'side',
                 'shelf_code',
                 'opening_quantity',
+                'weight_per_unit_grams',
                 'image_url',
                 'image_public_id',
                 'image_source',
@@ -601,6 +602,7 @@ class InternalItemCatalogController extends Controller
                         'has_code' => $code !== '',
                         'name' => $row->item_name,
                         'unit' => $row->unit,
+                        'weight_per_unit_grams' => (float) ($row->weight_per_unit_grams ?? 0),
                         'shelf' => $row->shelf_code,
                         'size' => $row->size,
                         'color' => $row->color,
@@ -667,11 +669,37 @@ class InternalItemCatalogController extends Controller
         $unchanged = 0;
         $skipped = 0;
         $activeSourceRows = [];
+        $catalogIdentity = static function ($code, $name) {
+            $normalizedCode = mb_strtoupper(trim((string) $code));
+            $normalizedName = mb_strtoupper(trim((string) preg_replace('/\s+/u', ' ', (string) $name)));
+
+            return $normalizedCode . "\x1F" . $normalizedName;
+        };
+        $catalogsWithImages = InternalItemCatalog::query()
+            ->whereNotNull('image_url')
+            ->where('image_url', '<>', '')
+            ->orderByDesc('image_uploaded_at')
+            ->orderByDesc('updated_at')
+            ->get();
+        $catalogImagesByIdentity = $catalogsWithImages
+            ->groupBy(fn ($catalog) => $catalogIdentity($catalog->item_code, $catalog->item_name))
+            ->map(fn ($catalogs) => $catalogs->first());
+        $catalogImagesByUniqueCode = $catalogsWithImages
+            ->groupBy(fn ($catalog) => mb_strtoupper(trim((string) $catalog->item_code)))
+            ->map(function ($catalogs) {
+                $imageUrls = $catalogs->pluck('image_url')->map(fn ($url) => trim((string) $url))->filter()->unique();
+
+                return $imageUrls->count() === 1 ? $catalogs->first() : null;
+            })
+            ->filter();
 
         DB::connection('internal')->transaction(function () use (
             $rows,
             $headers,
             $batch,
+            $catalogIdentity,
+            $catalogImagesByIdentity,
+            $catalogImagesByUniqueCode,
             &$created,
             &$updated,
             &$unchanged,
@@ -696,8 +724,18 @@ class InternalItemCatalogController extends Controller
                 $existingCatalog = InternalItemCatalog::query()->where('source_row', $sourceRow)->first();
                 $existing = (bool) $existingCatalog;
                 $sheetImage = $this->pick($row, ['anh']);
+                $identityImage = $catalogImagesByIdentity->get($catalogIdentity($code, $name))
+                    ?: $catalogImagesByUniqueCode->get(mb_strtoupper(trim((string) $code)));
+                $imageUrl = $sheetImage !== ''
+                    ? $sheetImage
+                    : trim((string) ($identityImage->image_url ?? ''));
+                $sameStoredImage = $identityImage
+                    && trim((string) $identityImage->image_url) === $imageUrl;
                 $sourceHash = hash('sha256', json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-                if ($existingCatalog && hash_equals((string) ($existingCatalog->source_hash ?? ''), $sourceHash)) {
+                $weightPerUnitGrams = $this->weightPerUnitGrams($this->pick($row, ['dinh muc', 'dinh_muc', 'trong luong']));
+                if ($existingCatalog
+                    && hash_equals((string) ($existingCatalog->source_hash ?? ''), $sourceHash)
+                    && (float) ($existingCatalog->weight_per_unit_grams ?? 0) === (float) ($weightPerUnitGrams ?? 0)) {
                     if (!$existingCatalog->is_active) {
                         $existingCatalog->update(['is_active' => true]);
                     }
@@ -717,7 +755,13 @@ class InternalItemCatalogController extends Controller
                         'side' => $this->pick($row, ['mat', 'vi tri', 'side', 'position']),
                         'shelf_code' => $this->pick($row, ['ke']),
                         'opening_quantity' => $this->number($this->pick($row, ['ton dau'])),
-                        'image_url' => $sheetImage !== '' ? $sheetImage : ($existingCatalog->image_url ?? null),
+                        'weight_per_unit_grams' => $weightPerUnitGrams,
+                        'image_url' => $imageUrl !== '' ? $imageUrl : null,
+                        'image_public_id' => $sameStoredImage ? $identityImage->image_public_id : null,
+                        'image_source' => $sameStoredImage
+                            ? $identityImage->image_source
+                            : ($sheetImage !== '' ? 'google_sheet' : null),
+                        'image_uploaded_at' => $sameStoredImage ? $identityImage->image_uploaded_at : null,
                         'raw_data' => $row,
                         'source_hash' => $sourceHash,
                         'sync_batch' => $batch,
@@ -2160,6 +2204,33 @@ class InternalItemCatalogController extends Controller
         return is_numeric($value) ? (float) $value : 0;
     }
 
+    private function weightPerUnitGrams($value): ?float
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return null;
+        }
+
+        $numeric = preg_replace('/[^0-9,\.\-]/', '', $raw);
+        if (str_contains($numeric, ',') && str_contains($numeric, '.')) {
+            $decimalSeparator = strrpos($numeric, ',') > strrpos($numeric, '.') ? ',' : '.';
+            $numeric = str_replace($decimalSeparator === ',' ? '.' : ',', '', $numeric);
+            $numeric = str_replace($decimalSeparator, '.', $numeric);
+        } else {
+            $numeric = str_replace(',', '.', $numeric);
+        }
+        if (!is_numeric($numeric) || (float) $numeric <= 0) {
+            return null;
+        }
+
+        $grams = (float) $numeric;
+        if (preg_match('/\bKG\b/i', $raw)) {
+            $grams *= 1000;
+        }
+
+        return round($grams, 6);
+    }
+
     private function normalizeShelfLocationCode($value): string
     {
         $raw = strtoupper(trim(Str::ascii((string) $value)));
@@ -2191,12 +2262,8 @@ class InternalItemCatalogController extends Controller
 
     private function inferTierFromLocationCode(string $locationCode): int
     {
-        if (!preg_match('/^([A-Z])0*\d{1,4}$/', $locationCode, $match)) {
-            return 0;
-        }
+        $parsed = app(\App\Services\WarehouseRackCode::class)->parseLocation($locationCode);
 
-        $letterIndex = ord($match[1]) - ord('A');
-
-        return 5 - ($letterIndex % 5);
+        return $parsed ? (int) $parsed['tier'] : 0;
     }
 }

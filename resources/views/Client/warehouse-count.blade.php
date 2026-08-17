@@ -660,16 +660,15 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <div><h5 class="modal-title">Tạo nhanh vị trí kệ</h5><div class="text-muted small">Hỗ trợ A...Z, AA...ZZ. Ví dụ A đến AI cho 7 line, mỗi line 5 tầng.</div></div>
+                    <div><h5 class="modal-title">Tạo nhanh vị trí kệ</h5><div class="text-muted small">Kệ 1–3 có 5 tầng, kệ 4–7 có 2 tầng. Dãy hiện tại từ A đến W.</div></div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="óng"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row g-2 mb-3">
                         <div class="col-6"><label class="form-label">Ký hiệu từ</label><input id="bulkShelfFrom" class="form-control text-uppercase" maxlength="2" value="A"></div>
-                        <div class="col-6"><label class="form-label">Ký hiệu đến</label><input id="bulkShelfTo" class="form-control text-uppercase" maxlength="2" value="AI"></div>
+                        <div class="col-6"><label class="form-label">Ký hiệu đến</label><input id="bulkShelfTo" class="form-control text-uppercase" maxlength="2" value="W"></div>
                         <div class="col-6"><label class="form-label">Số từ</label><input id="bulkNumberFrom" type="number" min="1" max="999" class="form-control" value="1"></div>
                         <div class="col-6"><label class="form-label">Số đến</label><input id="bulkNumberTo" type="number" min="1" max="999" class="form-control" value="100"></div>
-                        <div class="col-12"><label class="form-label">Tầng mặc định</label><select id="bulkTier" class="form-select"><option value="1">Tầng 1</option><option value="2">Tầng 2</option><option value="3">Tầng 3</option><option value="4">Tầng 4</option><option value="5">Tầng 5</option></select></div>
                         <div class="col-12"><label class="form-label">Tên tin tố</label><input id="bulkNamePrefix" class="form-control" value="Kệ"></div>
                     </div>
                     <div id="bulkLocationPreview" class="section-hint"></div>
@@ -692,7 +691,7 @@
                 <div class="modal-body">
                     <div class="row g-2 mb-3">
                         <div class="col-6"><label class="form-label">Ký hiệu từ</label><input id="printShelfFrom" class="form-control text-uppercase" maxlength="2" value="A"></div>
-                        <div class="col-6"><label class="form-label">Ký hiệu đến</label><input id="printShelfTo" class="form-control text-uppercase" maxlength="2" value="AI"></div>
+                        <div class="col-6"><label class="form-label">Ký hiệu đến</label><input id="printShelfTo" class="form-control text-uppercase" maxlength="2" value="W"></div>
                         <div class="col-6"><label class="form-label">Số từ</label><input id="printNumberFrom" type="number" min="1" max="999" class="form-control" value="1"></div>
                         <div class="col-6"><label class="form-label">Số đến</label><input id="printNumberTo" type="number" min="1" max="999" class="form-control" value="100"></div>
                     </div>
@@ -2098,7 +2097,8 @@
 
             view.innerHTML = Object.keys(lines).sort((a, b) => Number(a) - Number(b)).map(line => {
                 const cards = lines[line].map(group => {
-                const tiers = [5, 4, 3, 2, 1].map(tier => {
+                const tierCount = rackTierCountForLine(group.line);
+                const tiers = Array.from({ length: tierCount }, (_, index) => tierCount - index).map(tier => {
                     const tierLetter = tierLetterForLine(group.line, tier);
                     const slots = [1, 2].map(slot => {
                         const tierData = group.tiers.get(tier)?.get(slot);
@@ -2539,6 +2539,7 @@
             { code: 'B', name: 'Thành phẩm' },
             { code: 'A', name: 'NPL sợi + su' },
         ];
+        const warehouseRackTierCounts = [5, 5, 5, 2, 2, 2, 2];
 
         function shelfCodeForLocation(locationCode) {
             const code = String(locationCode || '').toUpperCase().trim();
@@ -2561,8 +2562,7 @@
             const code = String(locationCode || '').toUpperCase();
             const tierRack = code.match(/^([A-Z]{1,2})0*\d{1,4}$/);
             if (tierRack) {
-                const letterIndex = rackLabelToIndex(tierRack[1]);
-                return String(5 - (letterIndex % 5));
+                return String(rackPositionForLabel(tierRack[1])?.tier || 1);
             }
             return /(^|[-_\s])T?2($|[-_\s])|TANG\s*2|TẦNG\s*2/.test(code) ? '2' : '1';
         }
@@ -2571,12 +2571,40 @@
             const code = String(location?.location_code || '').toUpperCase().trim();
             const match = code.match(/^([A-Z]{1,2})0*\d{1,4}$/);
             if (!match) return '1';
-            return String(Math.floor(rackLabelToIndex(match[1]) / 5) + 1);
+            return String(rackPositionForLabel(match[1])?.rack || 1);
         }
 
         function tierLetterForLine(line, tier) {
-            const index = (Number(line || 1) - 1) * 5 + (5 - Number(tier || 1));
-            return rackIndexToLabel(index);
+            const rack = Number(line || 1);
+            const tierCount = rackTierCountForLine(rack);
+            const targetTier = Number(tier || 1);
+            if (targetTier < 1 || targetTier > tierCount) return '';
+            let offset = 0;
+            for (let rackNumber = 1; rackNumber < rack; rackNumber++) offset += rackTierCountForLine(rackNumber);
+            return rackIndexToLabel(offset + (tierCount - targetTier));
+        }
+
+        function rackTierCountForLine(line) {
+            return warehouseRackTierCounts[Number(line || 1) - 1] || 5;
+        }
+
+        function rackPositionForLabel(label) {
+            const index = rackLabelToIndex(label);
+            if (index < 0) return null;
+            let offset = 0;
+            for (let rackIndex = 0; rackIndex < warehouseRackTierCounts.length; rackIndex++) {
+                const tierCount = warehouseRackTierCounts[rackIndex];
+                if (index < offset + tierCount) {
+                    return { rack: rackIndex + 1, tier: tierCount - (index - offset), tierCount };
+                }
+                offset += tierCount;
+            }
+            const relativeIndex = index - offset;
+            return {
+                rack: warehouseRackTierCounts.length + Math.floor(relativeIndex / 5) + 1,
+                tier: 5 - (relativeIndex % 5),
+                tierCount: 5,
+            };
         }
 
         function rackLabelToIndex(label) {
@@ -2673,7 +2701,6 @@
                 number_from: Number(value('bulkNumberFrom') || 0),
                 number_to: Number(value('bulkNumberTo') || 0),
                 warehouse_code: '',
-                tier: Number(value('bulkTier') || 1),
                 name_prefix: value('bulkNamePrefix') || 'Kệ',
             };
         }
@@ -2688,7 +2715,7 @@
             const first = data.shelf_from && data.number_from ? `${data.shelf_from}${data.number_from}` : '';
             const last = data.shelf_to && data.number_to ? `${data.shelf_to}${data.number_to}` : '';
             document.getElementById('bulkLocationPreview').textContent = total
-                ? `Sẽ tạo ${formatNumber(total)} vị trí: ${first} ... ${last}.`
+                ? `Sẽ tạo ${formatNumber(total)} vị trí trong dãy ${first} ... ${last}.`
                 : 'Nhập dãy kệ và số hợp lệ để xem trước.';
         }
 
@@ -2724,7 +2751,7 @@
         function openBulkPrintLocationModal() {
             const source = bulkLocationPayload();
             document.getElementById('printShelfFrom').value = source.shelf_from || 'A';
-            document.getElementById('printShelfTo').value = source.shelf_to || 'D';
+            document.getElementById('printShelfTo').value = source.shelf_to || 'W';
             document.getElementById('printNumberFrom').value = source.number_from || 1;
             document.getElementById('printNumberTo').value = source.number_to || 100;
             updateBulkPrintLocationPreview();
@@ -3279,7 +3306,7 @@
               }).catch(e => { setLocationStatus(e.message, true); alert(e.message); });
         });
 
-        ['bulkShelfFrom','bulkShelfTo','bulkNumberFrom','bulkNumberTo','bulkTier','bulkNamePrefix'].forEach(id => {
+        ['bulkShelfFrom','bulkShelfTo','bulkNumberFrom','bulkNumberTo','bulkNamePrefix'].forEach(id => {
             document.getElementById(id).addEventListener('input', updateBulkLocationPreview);
             document.getElementById(id).addEventListener('change', updateBulkLocationPreview);
         });
