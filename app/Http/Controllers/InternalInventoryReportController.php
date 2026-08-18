@@ -47,6 +47,7 @@ class InternalInventoryReportController extends Controller
     {
         $data = $request->validate([
             'month' => 'required|date_format:Y-m',
+            'report_type' => 'nullable|in:transactions,current',
             'groups' => 'nullable|array|max:25',
             'groups.*' => 'string|max:100',
             'production_order' => 'nullable|string|max:100',
@@ -75,6 +76,15 @@ class InternalInventoryReportController extends Controller
             $preferred = collect(['Thun bản', 'Nhãn dệt', 'Nhãn size'])
                 ->filter(fn ($group) => $availableGroups->contains($group));
             $selectedGroups = $preferred->isNotEmpty() ? $preferred->values() : $availableGroups;
+        }
+
+        if (($data['report_type'] ?? 'transactions') === 'current') {
+            return $this->exportCurrentStock(
+                $selectedGroups,
+                $catalogMap,
+                $resolver,
+                $itemCode
+            );
         }
 
         $transactionRows = $this->transactions(
@@ -196,6 +206,160 @@ class InternalInventoryReportController extends Controller
             });
 
         return $map;
+    }
+
+    private function exportCurrentStock(
+        Collection $selectedGroups,
+        array $catalogMap,
+        InternalItemGroupResolver $resolver,
+        string $itemCode = ''
+    ) {
+        $asOf = now('Asia/Ho_Chi_Minh')->startOfDay();
+        $monthStart = $asOf->copy()->startOfMonth()->format('Y-m-d');
+        $monthEnd = $asOf->format('Y-m-d');
+        $normalizedItemCode = mb_strtoupper(trim($itemCode));
+
+        $rows = app(InternalStockLedger::class)
+            ->query($monthStart, $monthEnd)
+            ->select(
+                'location_code',
+                'internal_item_code',
+                'ma_hh',
+                DB::raw('SUM(opening_quantity) as opening_quantity'),
+                DB::raw('SUM(receipt_quantity) as receipt_quantity'),
+                DB::raw('SUM(issue_quantity) as issue_quantity'),
+                DB::raw('SUM(opening_quantity + receipt_quantity - issue_quantity) as closing_quantity')
+            )
+            ->groupBy('location_code', 'internal_item_code', 'ma_hh')
+            ->get()
+            ->map(function ($row) use ($catalogMap, $resolver) {
+                $code = trim((string) ($row->internal_item_code ?: $row->ma_hh));
+                $catalog = $catalogMap[mb_strtoupper($code)] ?? null;
+                $name = trim((string) ($catalog['name'] ?? ''));
+                $unit = mb_strtoupper(trim((string) ($catalog['unit'] ?? '')));
+
+                return [
+                    'code' => $code,
+                    'name' => $name,
+                    'group' => $catalog['group'] ?? $resolver->resolveName($name),
+                    'unit' => $unit !== '' ? $unit : 'CHƯA CÓ ĐVT',
+                    'location' => trim((string) $row->location_code) ?: 'CHUA-XEP',
+                    'opening' => (float) $row->opening_quantity,
+                    'receipt' => (float) $row->receipt_quantity,
+                    'issue' => (float) $row->issue_quantity,
+                    'closing' => (float) $row->closing_quantity,
+                ];
+            })
+            ->filter(fn ($row) => $row['code'] !== '' && abs($row['closing']) >= 0.0005)
+            ->filter(fn ($row) => $selectedGroups->contains($row['group']))
+            ->when(
+                $normalizedItemCode !== '',
+                fn ($items) => $items->filter(fn ($row) => mb_strtoupper($row['code']) === $normalizedItemCode)
+            )
+            ->groupBy(fn ($row) => mb_strtoupper($row['code']))
+            ->map(function ($items) {
+                $first = $items->first();
+                return [
+                    'code' => $first['code'],
+                    'name' => $first['name'],
+                    'group' => $first['group'],
+                    'unit' => $first['unit'],
+                    'locations' => $items->filter(fn ($row) => abs($row['closing']) >= 0.0005)
+                        ->map(fn ($row) => $row['location'] . ' (' . number_format($row['closing'], 3, '.', '') . ')')
+                        ->unique()
+                        ->implode(', '),
+                    'opening' => $items->sum('opening'),
+                    'receipt' => $items->sum('receipt'),
+                    'issue' => $items->sum('issue'),
+                    'closing' => $items->sum('closing'),
+                ];
+            })
+            ->filter(fn ($row) => abs($row['closing']) >= 0.0005)
+            ->sortBy(fn ($row) => mb_strtoupper($row['code']), SORT_NATURAL)
+            ->values()
+            ->groupBy('group');
+
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->getProperties()
+            ->setCreator('TTV Quản lý kho')
+            ->setTitle('Tồn kho hiện tại theo loại hàng')
+            ->setDescription('Dữ liệu kho nội bộ, không lấy từ TSoft.');
+        $usedTitles = [];
+        foreach ($selectedGroups as $index => $group) {
+            $sheet = $index === 0 ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
+            $sheet->setTitle($this->sheetTitle($group, $usedTitles));
+            $this->writeCurrentStockSheet($sheet, $group, $asOf, $rows->get($group, collect()));
+        }
+        if ($selectedGroups->isEmpty()) {
+            $this->writeCurrentStockSheet($spreadsheet->getActiveSheet(), 'Không có dữ liệu', $asOf, collect());
+        }
+        $spreadsheet->setActiveSheetIndex(0);
+        $filename = 'ton-kho-hien-tai-' . $asOf->format('Ymd') . '.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            (new Xlsx($spreadsheet))->save('php://output');
+            $spreadsheet->disconnectWorksheets();
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0, no-cache, no-store, must-revalidate',
+        ]);
+    }
+
+    private function writeCurrentStockSheet($sheet, string $group, Carbon $asOf, Collection $rows): void
+    {
+        $sheet->mergeCells('A1:K1');
+        $sheet->setCellValue('A1', 'TỒN KHO HIỆN TẠI - ' . mb_strtoupper($group));
+        $sheet->mergeCells('A2:K2');
+        $sheet->setCellValue('A2', 'Cập nhật đến ' . $asOf->format('d/m/Y') . ' · Database kho nội bộ');
+        $sheet->fromArray(['STT', 'Mã hàng', 'Tên hàng', 'Loại hàng', 'ĐVT', 'Vị trí và số lượng', 'Tồn đầu tháng', 'Nhập trong tháng', 'Xuất trong tháng', 'Tồn hiện tại', 'Trạng thái'], null, 'A4');
+
+        $rowNumber = 5;
+        foreach ($rows as $index => $row) {
+            $sheet->setCellValue('A' . $rowNumber, $index + 1);
+            $sheet->setCellValueExplicit('B' . $rowNumber, $row['code'], DataType::TYPE_STRING);
+            $sheet->setCellValue('C' . $rowNumber, $row['name']);
+            $sheet->setCellValue('D' . $rowNumber, $row['group']);
+            $sheet->setCellValue('E' . $rowNumber, $row['unit']);
+            $sheet->setCellValue('F' . $rowNumber, $row['locations']);
+            $sheet->setCellValue('G' . $rowNumber, $row['opening']);
+            $sheet->setCellValue('H' . $rowNumber, $row['receipt']);
+            $sheet->setCellValue('I' . $rowNumber, $row['issue']);
+            $sheet->setCellValue('J' . $rowNumber, $row['closing']);
+            $sheet->setCellValue('K' . $rowNumber, $row['closing'] < 0 ? 'ÂM TỒN' : 'CÓ TỒN');
+            $rowNumber++;
+        }
+        if ($rows->isEmpty()) {
+            $sheet->mergeCells('A5:K5');
+            $sheet->setCellValue('A5', 'Không có mã đang tồn thuộc loại hàng này.');
+            $rowNumber = 6;
+        }
+
+        $subtotalStart = $rowNumber + 1;
+        $sheet->fromArray(['SUBTOTAL', 'ĐVT', 'Tồn đầu', 'Nhập', 'Xuất', 'Tồn hiện tại'], null, 'F' . $subtotalStart);
+        $subtotalRow = $subtotalStart + 1;
+        foreach ($rows->groupBy('unit') as $unit => $unitRows) {
+            $sheet->setCellValue('F' . $subtotalRow, 'SUBTOTAL');
+            $sheet->setCellValue('G' . $subtotalRow, $unit);
+            $sheet->setCellValue('H' . $subtotalRow, $unitRows->sum('opening'));
+            $sheet->setCellValue('I' . $subtotalRow, $unitRows->sum('receipt'));
+            $sheet->setCellValue('J' . $subtotalRow, $unitRows->sum('issue'));
+            $sheet->setCellValue('K' . $subtotalRow, $unitRows->sum('closing'));
+            $subtotalRow++;
+        }
+
+        $lastRow = max($subtotalRow - 1, $subtotalStart + 1);
+        $sheet->getStyle('A1:K1')->applyFromArray(['font' => ['bold' => true, 'size' => 15, 'color' => ['rgb' => '123653']], 'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'DDEEFF']], 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]]);
+        $sheet->getStyle('A4:K4')->applyFromArray(['font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']], 'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '173F6B']], 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]]);
+        $sheet->getStyle('F' . $subtotalStart . ':K' . $subtotalStart)->applyFromArray(['font' => ['bold' => true], 'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'EAF4FF']]]);
+        $sheet->getStyle('A4:K' . $lastRow)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('CAD8E5');
+        $sheet->getStyle('G5:J' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.###');
+        $sheet->getStyle('C5:F' . $lastRow)->getAlignment()->setWrapText(true);
+        $sheet->freezePane('A5');
+        if ($rows->isNotEmpty()) $sheet->setAutoFilter('A4:K' . ($rowNumber - 1));
+        foreach (['A' => 7, 'B' => 22, 'C' => 45, 'D' => 24, 'E' => 12, 'F' => 38, 'G' => 16, 'H' => 16, 'I' => 16, 'J' => 17, 'K' => 14] as $column => $width) {
+            $sheet->getColumnDimension($column)->setWidth($width);
+        }
+        $sheet->setShowGridlines(false);
     }
 
     private function customerMap(): array

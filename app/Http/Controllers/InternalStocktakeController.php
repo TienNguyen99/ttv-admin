@@ -98,6 +98,7 @@ class InternalStocktakeController extends Controller
             ->keyBy(fn ($row) => mb_strtoupper(trim((string) $row->item_code)));
 
         $lines = $stocktakeLocation->lines()
+            ->with('entries')
             ->orderBy('internal_item_code')
             ->orderBy('size')
             ->orderBy('color')
@@ -149,6 +150,11 @@ class InternalStocktakeController extends Controller
             'lines.*.counted_quantity' => 'nullable|numeric|min:0|max:999999999999999',
             'lines.*.counted_weight_kg' => 'nullable|numeric|min:0|max:999999999999999',
             'lines.*.note' => 'nullable|string|max:2000',
+            'lines.*.entries' => 'nullable|array|max:500',
+            'lines.*.entries.*.id' => 'nullable|integer',
+            'lines.*.entries.*.input_type' => 'required|in:base,kg',
+            'lines.*.entries.*.input_quantity' => 'required|numeric|min:0.000001|max:999999999999999',
+            'lines.*.entries.*.note' => 'nullable|string|max:500',
         ]);
 
         DB::connection('internal')->transaction(function () use ($data, $stocktake, $stocktakeLocation, $service) {
@@ -179,22 +185,38 @@ class InternalStocktakeController extends Controller
                     ->whereRaw('UPPER(TRIM(item_code)) = ?', [$itemCode])
                     ->orderByDesc('source_row')
                     ->first();
-                $counted = array_key_exists('counted_quantity', $input) && $input['counted_quantity'] !== null
-                    ? (float) $input['counted_quantity']
+                $unit = trim((string) ($input['unit'] ?? '')) ?: ($catalog->unit ?? '');
+                $weightPerUnitGrams = !empty($input['weight_per_unit_grams'])
+                    ? (float) $input['weight_per_unit_grams']
+                    : ($catalog->weight_per_unit_grams ?? null);
+                $entryValues = [];
+                foreach ($input['entries'] ?? [] as $entry) {
+                    try {
+                        $convertedEntry = $service->convertCountEntry(
+                            $entry['input_type'],
+                            (float) $entry['input_quantity'],
+                            $unit,
+                            $weightPerUnitGrams
+                        );
+                    } catch (\DomainException $exception) {
+                        abort(422, $exception->getMessage());
+                    }
+                    $entryValues[] = array_merge($entry, $convertedEntry);
+                }
+                $counted = $entryValues ? array_sum(array_column($entryValues, 'converted_quantity')) : null;
+                $hasWeightEntry = collect($entryValues)->contains(fn ($entry) => $entry['weight_kg'] !== null);
+                $countedWeight = $hasWeightEntry
+                    ? array_sum(array_map(fn ($entry) => (float) ($entry['weight_kg'] ?? 0), $entryValues))
                     : null;
                 $values = array_merge($attributes, [
                     'session_id' => $stocktake->id,
                     'session_location_id' => $stocktakeLocation->id,
                     'line_key' => $lineKey,
                     'item_name' => trim((string) ($input['item_name'] ?? '')) ?: ($catalog->item_name ?? ''),
-                    'unit' => trim((string) ($input['unit'] ?? '')) ?: ($catalog->unit ?? ''),
-                    'weight_per_unit_grams' => !empty($input['weight_per_unit_grams'])
-                        ? (float) $input['weight_per_unit_grams']
-                        : ($catalog->weight_per_unit_grams ?? null),
+                    'unit' => $unit,
+                    'weight_per_unit_grams' => $weightPerUnitGrams,
                     'counted_quantity' => $counted,
-                    'counted_weight_kg' => array_key_exists('counted_weight_kg', $input) && $input['counted_weight_kg'] !== null
-                        ? (float) $input['counted_weight_kg']
-                        : null,
+                    'counted_weight_kg' => $countedWeight,
                     'counted_at' => $counted === null ? null : now(),
                     'note' => $input['note'] ?? null,
                 ]);
@@ -203,8 +225,35 @@ class InternalStocktakeController extends Controller
                     $line->update($values);
                 } else {
                     $values['expected_quantity'] = 0;
-                    InternalStocktakeLine::query()->create($values);
+                    $line = InternalStocktakeLine::query()->create($values);
                 }
+
+                $keptEntryIds = [];
+                foreach ($entryValues as $entry) {
+                    $entryModel = !empty($entry['id'])
+                        ? $line->entries()->whereKey($entry['id'])->first()
+                        : null;
+                    $entryData = [
+                        'session_id' => $stocktake->id,
+                        'input_type' => $entry['input_type'],
+                        'input_quantity' => (float) $entry['input_quantity'],
+                        'input_unit' => $entry['input_type'] === 'kg' ? 'KG' : $line->unit,
+                        'converted_quantity' => $entry['converted_quantity'],
+                        'weight_kg' => $entry['weight_kg'],
+                        'note' => trim((string) ($entry['note'] ?? '')) ?: null,
+                    ];
+                    if ($entryModel) {
+                        $entryModel->update($entryData);
+                    } else {
+                        $entryModel = $line->entries()->create($entryData);
+                    }
+                    $keptEntryIds[] = $entryModel->id;
+                }
+                $staleEntries = $line->entries();
+                if ($keptEntryIds) {
+                    $staleEntries->whereNotIn('id', $keptEntryIds);
+                }
+                $staleEntries->delete();
             }
             $stocktakeLocation->update([
                 'status' => 'counting',
@@ -261,13 +310,26 @@ class InternalStocktakeController extends Controller
     public function complete(InternalStocktakeSession $stocktake)
     {
         $this->assertEditable($stocktake);
-        $pending = $stocktake->locations()->where('status', '<>', 'completed')->count();
+        $pending = $stocktake->locations()
+            ->where('status', 'counting')
+            ->whereHas('lines', fn ($query) => $query->whereNotNull('counted_quantity'))
+            ->count();
         if ($pending > 0) {
             return response()->json(['message' => "Còn {$pending} vị trí chưa hoàn tất."], 422);
         }
-        if ($stocktake->lines()->whereNull('counted_quantity')->exists()) {
+        if (!$stocktake->locations()->where('status', 'completed')->exists()) {
+            return response()->json(['message' => 'Đợt kiểm kê chưa có vị trí nào hoàn tất.'], 422);
+        }
+        if ($stocktake->lines()
+            ->whereHas('sessionLocation', fn ($query) => $query->where('status', 'completed'))
+            ->whereNull('counted_quantity')
+            ->exists()) {
             return response()->json(['message' => 'Vẫn còn dòng chưa nhập số đếm.'], 422);
         }
+        $stocktake->locations()
+            ->where('status', 'counting')
+            ->whereDoesntHave('lines', fn ($query) => $query->whereNotNull('counted_quantity'))
+            ->update(['status' => 'pending', 'started_at' => null, 'completed_at' => null]);
         $stocktake->update(['status' => 'completed', 'completed_at' => now()]);
 
         return response()->json(['message' => 'Đã hoàn tất kiểm đếm. Hãy xem chênh lệch trước khi áp dụng.']);

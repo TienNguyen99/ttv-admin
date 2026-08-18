@@ -2,11 +2,13 @@
 
 namespace App\Services;
 
+use App\Models\InternalInventoryCount;
 use App\Models\InternalItemCatalog;
 use App\Models\InternalMaterialIssue;
 use App\Models\InternalMaterialReceipt;
 use App\Models\InternalStocktakeLocation;
 use App\Models\InternalStocktakeSession;
+use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -26,16 +28,18 @@ class InternalStocktakeService
                 $input['color'] ?? '',
                 $input['side'] ?? ''
             );
-            $hasCount = array_key_exists('counted_quantity', $input)
-                && $input['counted_quantity'] !== null
-                && $input['counted_quantity'] !== '';
-            $hasWeight = array_key_exists('counted_weight_kg', $input)
-                && $input['counted_weight_kg'] !== null
-                && $input['counted_weight_kg'] !== '';
+            $entries = array_values($input['entries'] ?? []);
+            if (!$entries && array_key_exists('counted_quantity', $input) && $input['counted_quantity'] !== null && $input['counted_quantity'] !== '') {
+                $entries[] = [
+                    'id' => null,
+                    'input_type' => 'base',
+                    'input_quantity' => (float) $input['counted_quantity'],
+                    'note' => $input['note'] ?? null,
+                ];
+            }
+            $input['entries'] = $entries;
 
             if (!isset($merged[$key])) {
-                $input['counted_quantity'] = $hasCount ? (float) $input['counted_quantity'] : null;
-                $input['counted_weight_kg'] = $hasWeight ? (float) $input['counted_weight_kg'] : null;
                 $merged[$key] = $input;
                 continue;
             }
@@ -45,16 +49,9 @@ class InternalStocktakeService
                 && !empty($input['id'])
                 && (int) $current['id'] === (int) $input['id'];
 
-            if ($hasCount) {
-                $current['counted_quantity'] = $samePersistedLine
-                    ? (float) $input['counted_quantity']
-                    : (float) ($current['counted_quantity'] ?? 0) + (float) $input['counted_quantity'];
-            }
-            if ($hasWeight) {
-                $current['counted_weight_kg'] = $samePersistedLine
-                    ? (float) $input['counted_weight_kg']
-                    : (float) ($current['counted_weight_kg'] ?? 0) + (float) $input['counted_weight_kg'];
-            }
+            $current['entries'] = $samePersistedLine
+                ? $entries
+                : array_merge($current['entries'] ?? [], $entries);
             if (empty($current['id']) && !empty($input['id'])) {
                 $current['id'] = $input['id'];
             }
@@ -72,6 +69,25 @@ class InternalStocktakeService
         }
 
         return array_values($merged);
+    }
+
+    public function convertCountEntry(string $inputType, float $quantity, string $unit, ?float $weightPerUnitGrams): array
+    {
+        $unit = mb_strtoupper(trim($unit));
+        if ($inputType === 'base') {
+            return ['converted_quantity' => $quantity, 'weight_kg' => null];
+        }
+        if ($unit === 'KG') {
+            return ['converted_quantity' => $quantity, 'weight_kg' => $quantity];
+        }
+        if (!$weightPerUnitGrams || $weightPerUnitGrams <= 0) {
+            throw new \DomainException("Thiếu định mức gam/{$unit} để quy đổi số KG.");
+        }
+
+        return [
+            'converted_quantity' => round($quantity * 1000 / $weightPerUnitGrams, 6),
+            'weight_kg' => $quantity,
+        ];
     }
 
     public function create(string $name, string $countDate, ?string $note = null): InternalStocktakeSession
@@ -233,11 +249,14 @@ class InternalStocktakeService
             if ($session->status !== 'completed') {
                 throw new \DomainException('Phải hoàn tất toàn bộ vị trí trước khi áp dụng chênh lệch.');
             }
-            if ($session->lines()->whereNull('counted_quantity')->exists()) {
+            $completedLines = $session->lines()
+                ->whereHas('sessionLocation', fn ($query) => $query->where('status', 'completed'));
+            if ((clone $completedLines)->whereNull('counted_quantity')->exists()) {
                 throw new \DomainException('Vẫn còn dòng chưa nhập số đếm.');
             }
 
-            $lines = $session->lines()->get()->map(function ($line) {
+            $countedLines = $completedLines->with('entries')->get();
+            $lines = $countedLines->map(function ($line) {
                 $line->variance = round((float) $line->counted_quantity - (float) $line->expected_quantity, 3);
                 return $line;
             })->filter(fn ($line) => abs($line->variance) >= 0.0005);
@@ -275,6 +294,8 @@ class InternalStocktakeService
                 $this->insertIssueLines($issue->id, $negativeLines, $session->stocktake_code);
             }
 
+            $this->syncCountedPackages($session, $countedLines);
+
             $session->update([
                 'status' => 'posted',
                 'adjustment_receipt_id' => $receipt->id ?? null,
@@ -284,6 +305,82 @@ class InternalStocktakeService
 
             return $session->fresh();
         });
+    }
+
+    private function syncCountedPackages(InternalStocktakeSession $session, $lines): void
+    {
+        foreach ($lines as $line) {
+            $locationCode = mb_strtoupper(trim((string) $line->location_code));
+            if ($locationCode === '') {
+                continue;
+            }
+            $location = WarehouseLocation::query()->firstOrCreate(
+                ['location_code' => $locationCode],
+                [
+                    'warehouse_code' => '',
+                    'shelf_code' => preg_replace('/\d+$/', '', $locationCode) ?: $locationCode,
+                    'tier' => 1,
+                    'grid_x' => 1,
+                    'grid_y' => 1,
+                    'grid_w' => 1,
+                    'grid_h' => 1,
+                    'location_name' => $locationCode,
+                    'status' => 'active',
+                ]
+            );
+
+            $packageQuery = InventoryPackage::query()
+                ->where('warehouse_location_id', $location->id)
+                ->whereRaw('UPPER(TRIM(internal_item_code)) = ?', [mb_strtoupper(trim((string) $line->internal_item_code))])
+                ->where('size', (string) $line->size)
+                ->where('color', (string) $line->color)
+                ->where('side', (string) $line->side);
+            $packageQuery->update(['quantity' => 0, 'updated_at' => now()]);
+
+            $count = InternalInventoryCount::query()->firstOrCreate(
+                [
+                    'ma_sp' => (string) $line->ma_hh,
+                    'ma_ko' => '',
+                    'internal_item_code' => (string) $line->internal_item_code,
+                    'size' => (string) $line->size,
+                    'color' => (string) $line->color,
+                    'side' => (string) $line->side,
+                    'checked_at' => $session->count_date->format('Y-m-d'),
+                ],
+                ['counted_quantity' => 0, 'note' => $session->stocktake_code]
+            );
+            $count->update([
+                'counted_quantity' => (float) $line->counted_quantity,
+                'note' => $session->stocktake_code,
+            ]);
+
+            $entries = $line->entries->filter(fn ($entry) => (float) $entry->converted_quantity > 0)->values();
+            if ($entries->isEmpty() && (float) $line->counted_quantity > 0) {
+                $entries = collect([(object) [
+                    'id' => 0,
+                    'converted_quantity' => (float) $line->counted_quantity,
+                    'note' => null,
+                ]]);
+            }
+            foreach ($entries as $index => $entry) {
+                InventoryPackage::query()->updateOrCreate(
+                    ['package_code' => "KK-{$session->id}-{$line->id}-" . ($entry->id ?: $index + 1)],
+                    [
+                        'warehouse_location_id' => $location->id,
+                        'inventory_count_id' => $count->id,
+                        'ma_sp' => (string) $line->ma_hh,
+                        'ma_ko' => '',
+                        'internal_item_code' => (string) $line->internal_item_code,
+                        'size' => (string) $line->size,
+                        'color' => (string) $line->color,
+                        'side' => (string) $line->side,
+                        'quantity' => (float) $entry->converted_quantity,
+                        'checked_at' => $session->count_date->format('Y-m-d'),
+                        'note' => trim((string) ($entry->note ?? '')) ?: $session->stocktake_code,
+                    ]
+                );
+            }
+        }
     }
 
     public function lineKey($locationCode, $maHh, $internalCode, $size, $color, $side): string

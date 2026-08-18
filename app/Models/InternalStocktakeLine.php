@@ -22,4 +22,9 @@ class InternalStocktakeLine extends Model
     {
         return $this->belongsTo(InternalStocktakeLocation::class, 'session_location_id');
     }
+
+    public function entries()
+    {
+        return $this->hasMany(InternalStocktakeCountEntry::class, 'stocktake_line_id')->orderBy('id');
+    }
 }

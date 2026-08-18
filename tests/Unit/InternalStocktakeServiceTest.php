@@ -28,7 +28,7 @@ class InternalStocktakeServiceTest extends TestCase
         $this->assertNotSame($black, $pink);
     }
 
-    public function test_duplicate_counts_for_the_same_variant_are_summed(): void
+    public function test_duplicate_counts_keep_each_package_entry(): void
     {
         $service = new InternalStocktakeService();
 
@@ -39,8 +39,9 @@ class InternalStocktakeServiceTest extends TestCase
         ], 'W20');
 
         $this->assertCount(1, $lines);
-        $this->assertSame(2872.0, $lines[0]['counted_quantity']);
-        $this->assertEqualsWithDelta(34.464, $lines[0]['counted_weight_kg'], 0.000001);
+        $this->assertCount(3, $lines[0]['entries']);
+        $this->assertSame([1500.0, 372.0, 1000.0], array_column($lines[0]['entries'], 'input_quantity'));
+        $this->assertSame(2872.0, array_sum(array_column($lines[0]['entries'], 'input_quantity')));
     }
 
     public function test_duplicate_counts_keep_variants_separate(): void
@@ -64,5 +65,15 @@ class InternalStocktakeServiceTest extends TestCase
         $this->assertSame(12.5, $method->invoke($controller, '12,5'));
         $this->assertSame(12.0, $method->invoke($controller, '0,012 kg/yard'));
         $this->assertNull($method->invoke($controller, ''));
+    }
+
+    public function test_weight_entry_is_converted_to_base_unit(): void
+    {
+        $service = new InternalStocktakeService();
+
+        $converted = $service->convertCountEntry('kg', 3.5, 'YARD', 12);
+
+        $this->assertEqualsWithDelta(291.666667, $converted['converted_quantity'], 0.000001);
+        $this->assertSame(3.5, $converted['weight_kg']);
     }
 }

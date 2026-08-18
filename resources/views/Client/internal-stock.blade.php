@@ -160,18 +160,25 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <div>
-                        <h2 class="modal-title fs-5" id="inventoryReportModalTitle">Xuất báo cáo nhập xuất tồn</h2>
+                        <h2 class="modal-title fs-5" id="inventoryReportModalTitle">Xuất tồn kho hiện tại</h2>
                         <div class="text-secondary small">Mỗi loại hàng là một sheet Excel riêng.</div>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row g-2 mb-3">
-                        <div class="col-12">
+                        <div class="col-md-6">
+                            <label class="form-label" for="inventoryReportType">Loại báo cáo</label>
+                            <select id="inventoryReportType" class="form-select">
+                                <option value="current">Tồn kho hiện tại theo danh mục</option>
+                                <option value="transactions">Phiếu nhập / xuất trong tháng</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" id="inventoryReportMonthGroup">
                             <label class="form-label" for="inventoryReportMonth">Tháng báo cáo</label>
                             <input id="inventoryReportMonth" type="month" class="form-control" value="{{ now()->format('Y-m') }}">
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6 transaction-report-filter">
                             <label class="form-label" for="inventoryReportOrder">Lệnh sản xuất</label>
                             <input id="inventoryReportOrder" type="text" class="form-control" list="inventoryReportOrderOptions" autocomplete="off" placeholder="Ví dụ: T-01750/26">
                             <datalist id="inventoryReportOrderOptions"></datalist>
@@ -181,12 +188,12 @@
                             <input id="inventoryReportItem" type="text" class="form-control" list="inventoryReportItemOptions" autocomplete="off" placeholder="Để trống nếu lấy tất cả">
                             <datalist id="inventoryReportItemOptions"></datalist>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6 transaction-report-filter">
                             <label class="form-label" for="inventoryReportCustomer">Khách hàng</label>
                             <input id="inventoryReportCustomer" type="text" class="form-control" list="inventoryReportCustomerOptions" autocomplete="off" placeholder="Để trống nếu lấy tất cả">
                             <datalist id="inventoryReportCustomerOptions"></datalist>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-6 transaction-report-filter">
                             <label class="form-label" for="inventoryReportCustomerGroup">Nhóm khách</label>
                             <select id="inventoryReportCustomerGroup" class="form-select"><option value="">Tất cả nhóm khách</option></select>
                         </div>
@@ -202,7 +209,7 @@
                     <div id="inventoryReportGroups" class="border rounded p-2" style="max-height: 260px; overflow-y: auto;">
                         <div class="text-secondary small p-2">Đang tải loại hàng...</div>
                     </div>
-                    <div class="text-secondary small mt-2">Subtotal được tách theo đơn vị tính để không cộng lẫn KG, MÉT, YARD và PCS.</div>
+                    <div id="inventoryReportHint" class="text-secondary small mt-2">Mỗi mã hàng là một dòng; subtotal được tách theo đơn vị tính.</div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
@@ -720,7 +727,7 @@
             return fetch('/api/bao-cao-nhap-xuat-ton/loai-hang')
                 .then(response => jsonOrError(response, 'Không tải được danh sách loại hàng'))
                 .then(result => {
-                    const preferredGroups = ['Thun bản', 'Nhãn dệt', 'Nhãn size'];
+                    const preferredGroups = ['Thun bản', 'Thành phẩm thun su', 'Thun su', 'Nhãn dệt', 'Nhãn size'];
                     const groups = result.data || [];
                     document.getElementById('inventoryReportGroups').innerHTML = groups.length
                         ? groups.map((group, index) => {
@@ -736,6 +743,21 @@
                         : '<div class="text-secondary small p-2">Danh mục chưa có loại hàng.</div>';
                     reportGroupsLoaded = true;
                 });
+        }
+
+        function syncInventoryReportType() {
+            const reportType = document.getElementById('inventoryReportType').value;
+            const isCurrent = reportType === 'current';
+            document.querySelectorAll('.transaction-report-filter').forEach(element => {
+                element.classList.toggle('d-none', isCurrent);
+            });
+            document.getElementById('inventoryReportMonthGroup').classList.toggle('d-none', isCurrent);
+            document.getElementById('inventoryReportModalTitle').textContent = isCurrent
+                ? 'Xuất tồn kho hiện tại'
+                : 'Xuất phiếu nhập / xuất';
+            document.getElementById('inventoryReportHint').textContent = isCurrent
+                ? 'Mỗi mã hàng là một dòng; subtotal được tách theo đơn vị tính.'
+                : 'Chi tiết từng phiếu nhập / xuất; subtotal được tách theo đơn vị tính.';
         }
 
         function loadReportCustomers(keyword = '') {
@@ -762,6 +784,7 @@
 
         document.getElementById('openInventoryReportBtn').addEventListener('click', () => {
             document.getElementById('inventoryReportMonth').value = stockMonthEl.value || '{{ now()->format('Y-m') }}';
+            syncInventoryReportType();
             Promise.all([loadReportGroups(), loadReportCustomers()])
                 .then(() => inventoryReportModal.show())
                 .catch(error => alert(error.message));
@@ -777,6 +800,7 @@
 
         document.getElementById('downloadInventoryReportBtn').addEventListener('click', () => {
             const month = document.getElementById('inventoryReportMonth').value;
+            const reportType = document.getElementById('inventoryReportType').value;
             const groups = reportGroupCheckboxes().filter(checkbox => checkbox.checked).map(checkbox => checkbox.value);
             const productionOrder = document.getElementById('inventoryReportOrder').value.trim();
             const itemCode = document.getElementById('inventoryReportItem').value.trim();
@@ -785,14 +809,16 @@
             if (!month) return alert('Chọn tháng cần xuất báo cáo.');
             if (!groups.length) return alert('Chọn ít nhất một loại hàng.');
 
-            const params = new URLSearchParams({month});
+            const params = new URLSearchParams({month, report_type: reportType});
             groups.forEach(group => params.append('groups[]', group));
-            if (productionOrder) params.set('production_order', productionOrder);
+            if (reportType === 'transactions' && productionOrder) params.set('production_order', productionOrder);
             if (itemCode) params.set('item_code', itemCode);
-            if (customer) params.set('customer', customer);
-            if (customerGroup) params.set('customer_group', customerGroup);
+            if (reportType === 'transactions' && customer) params.set('customer', customer);
+            if (reportType === 'transactions' && customerGroup) params.set('customer_group', customerGroup);
             window.location.href = `/api/bao-cao-nhap-xuat-ton/xuat?${params.toString()}`;
         });
+
+        document.getElementById('inventoryReportType').addEventListener('change', syncInventoryReportType);
 
         document.getElementById('inventoryReportOrder').addEventListener('input', event => {
             loadReportOrderOptions(event.target.value);
