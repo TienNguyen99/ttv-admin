@@ -444,6 +444,8 @@ class InternalMaterialIssueController extends Controller
             'lines.*.dvt' => 'nullable|string|max:50',
             'lines.*.quantity' => 'required|numeric|min:0.001',
             'lines.*.location_code' => 'nullable|string|max:100',
+            'lines.*.location_codes' => 'nullable|array|max:50',
+            'lines.*.location_codes.*' => 'string|max:100|distinct',
             'lines.*.internal_item_code' => 'nullable|string|max:100',
             'lines.*.size' => 'nullable|string|max:255',
             'lines.*.color' => 'nullable|string|max:1000',
@@ -522,7 +524,7 @@ class InternalMaterialIssueController extends Controller
                     'base_quantity' => $base['quantity'],
                     'base_dvt' => $base['unit'],
                     'unit_factor' => $base['factor'],
-                    'location_code' => strtoupper(trim($line['location_code'] ?? '')),
+                    'location_code' => mb_substr(implode(', ', $this->selectedLocationCodes($line)), 0, 100),
                     'internal_item_code' => trim($line['internal_item_code'] ?? ''),
                     'size' => mb_substr(trim($line['size'] ?? ''), 0, 100),
                     'color' => mb_substr(trim($line['color'] ?? ''), 0, 100),
@@ -1092,6 +1094,65 @@ class InternalMaterialIssueController extends Controller
                     ->update(['status' => 'completed', 'completed_at' => now()]);
             }
         }
+    }
+
+    public function stockLocations(Request $request)
+    {
+        $data = $request->validate([
+            'internal_item_code' => 'nullable|string|max:100|required_without:ma_hh',
+            'ma_hh' => 'nullable|string|max:100|required_without:internal_item_code',
+            'size' => 'nullable|string|max:255',
+            'color' => 'nullable|string|max:1000',
+            'side' => 'nullable|string|max:255',
+        ]);
+
+        $internalCode = mb_strtoupper(trim((string) ($data['internal_item_code'] ?? '')));
+        $maHh = mb_strtoupper(trim((string) ($data['ma_hh'] ?? '')));
+        $query = InventoryPackage::query()
+            ->join('warehouse_locations as wl', 'wl.id', '=', 'inventory_packages.warehouse_location_id')
+            ->where('inventory_packages.quantity', '>', 0);
+
+        if ($internalCode !== '') {
+            $query->whereRaw('UPPER(TRIM(inventory_packages.internal_item_code)) = ?', [$internalCode]);
+        } elseif ($maHh !== '') {
+            $query->whereRaw('UPPER(TRIM(inventory_packages.ma_sp)) = ?', [$maHh]);
+        }
+        foreach (['size', 'color', 'side'] as $field) {
+            $value = mb_strtoupper(trim((string) ($data[$field] ?? '')));
+            if ($value !== '') {
+                $query->whereRaw("UPPER(TRIM(inventory_packages.{$field})) = ?", [$value]);
+            }
+        }
+
+        $locations = $query
+            ->select(
+                'wl.id',
+                'wl.location_code',
+                DB::raw('SUM(inventory_packages.quantity) as available_quantity'),
+                DB::raw('COUNT(inventory_packages.id) as package_count'),
+                DB::raw('MIN(inventory_packages.checked_at) as fifo_date')
+            )
+            ->groupBy('wl.id', 'wl.location_code')
+            ->orderBy('fifo_date')
+            ->orderBy('wl.location_code')
+            ->get()
+            ->map(fn ($location) => [
+                'id' => (int) $location->id,
+                'location_code' => strtoupper(trim((string) $location->location_code)),
+                'available_quantity' => (float) $location->available_quantity,
+                'package_count' => (int) $location->package_count,
+                'fifo_date' => $location->fifo_date,
+            ])
+            ->filter(fn ($location) => $location['location_code'] !== '')
+            ->values();
+
+        return response()->json([
+            'data' => $locations,
+            'summary' => [
+                'location_count' => $locations->count(),
+                'available_quantity' => (float) $locations->sum('available_quantity'),
+            ],
+        ]);
     }
 
     public function productionOrderLines(Request $request)
@@ -2045,6 +2106,7 @@ class InternalMaterialIssueController extends Controller
     {
         $maHh = mb_strtoupper(trim($line['ma_hh'] ?? ''));
         $locationCode = strtoupper(trim($line['location_code'] ?? ''));
+        $locationCodes = $this->selectedLocationCodes($line);
         $internalCode = trim($line['internal_item_code'] ?? '');
         $size = trim($line['size'] ?? '');
         $color = trim($line['color'] ?? '');
@@ -2067,10 +2129,12 @@ class InternalMaterialIssueController extends Controller
             $query->where('ma_ko', $warehouseCode);
         }
 
-        if ($locationCode !== '') {
-            $query->whereHas('location', function ($q) use ($locationCode) {
-                $q->where('location_code', $locationCode);
+        if (!empty($locationCodes)) {
+            $query->whereHas('location', function ($q) use ($locationCodes) {
+                $q->whereIn(DB::raw('UPPER(TRIM(location_code))'), $locationCodes);
             });
+        } elseif ($locationCode !== '') {
+            $query->whereHas('location', fn ($q) => $q->where('location_code', $locationCode));
         }
 
         if ($internalCode !== '') {
@@ -2092,9 +2156,29 @@ class InternalMaterialIssueController extends Controller
         return $query;
     }
 
+    private function selectedLocationCodes(array $line): array
+    {
+        $values = $line['location_codes'] ?? [];
+        if (!is_array($values)) {
+            $values = [];
+        }
+        if (empty($values)) {
+            $single = trim((string) ($line['location_code'] ?? ''));
+            $values = $single === '' ? [] : preg_split('/\s*[,;|]\s*/', $single);
+        }
+
+        return collect($values)
+            ->map(fn ($value) => mb_strtoupper(trim((string) $value)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     private function createNegativeStockAllocation(array $line, string $warehouseCode, int $issueLineId, float $quantity, float $available, float $requestedQuantity): void
     {
-        $locationCode = strtoupper(trim($line['location_code'] ?? '')) ?: 'CHUA-XEP';
+        $selectedLocations = $this->selectedLocationCodes($line);
+        $locationCode = $selectedLocations[0] ?? 'CHUA-XEP';
         $location = WarehouseLocation::query()->firstOrCreate(
             ['location_code' => $locationCode],
             [

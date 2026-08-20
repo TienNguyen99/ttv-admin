@@ -174,7 +174,7 @@
         .col-variant { width: 125px; }
         .col-qty { width: 110px; }
         .col-unit { width: 90px; }
-        .col-location { width: 100px; }
+        .col-location { width: 170px; }
         .col-note { width: 160px; }
         .col-remove { width: 42px; }
         .suggest-wrap { position: relative; }
@@ -270,6 +270,79 @@
         .confirm-body h2 { margin: 0 0 8px; color: var(--blue-dark); font-size: 18px; font-weight: 800; }
         .confirm-body p { margin: 0; color: #475569; white-space: pre-line; }
         .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid #e2e8f0; }
+        .location-trigger {
+            width: 100%;
+            min-height: 38px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 7px 9px;
+            border: 1px solid #b8c7dc;
+            border-radius: 8px;
+            background: #fff;
+            color: #1e3a5f;
+            font-size: 12px;
+            font-weight: 800;
+            text-align: left;
+        }
+        .location-trigger:hover { border-color: #60a5fa; background: #eff6ff; }
+        .location-trigger:focus-visible { outline: 3px solid rgba(37, 99, 235, .18); border-color: var(--blue); }
+        .location-trigger svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--blue); }
+        .location-trigger span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .location-trigger.is-empty { color: #64748b; font-weight: 700; }
+        .location-trigger.is-warning { border-color: #fdba74; background: #fff7ed; color: #9a3412; }
+        .location-dialog { width: min(620px, calc(100% - 24px)); }
+        .location-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+        .location-dialog-head p { margin-top: 4px; font-size: 13px; }
+        .location-close {
+            width: 34px;
+            height: 34px;
+            display: grid;
+            place-items: center;
+            flex: 0 0 auto;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #fff;
+            color: #475569;
+        }
+        .location-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 16px;
+            padding: 10px 12px;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            background: #eff6ff;
+            color: #1e3a5f;
+            font-size: 13px;
+            font-weight: 800;
+        }
+        .location-list { display: grid; gap: 8px; max-height: min(420px, 52vh); margin-top: 10px; overflow: auto; }
+        .location-option {
+            display: grid;
+            grid-template-columns: auto minmax(80px, .7fr) minmax(130px, 1fr) auto;
+            align-items: center;
+            gap: 10px;
+            min-height: 50px;
+            padding: 9px 11px;
+            border: 1px solid #dbe3ef;
+            border-radius: 8px;
+            background: #fff;
+            cursor: pointer;
+        }
+        .location-option:hover { border-color: #93c5fd; background: #f8fbff; }
+        .location-option:has(input:checked) { border-color: #60a5fa; background: #eff6ff; }
+        .location-option input { width: 18px; height: 18px; accent-color: var(--blue); }
+        .location-option strong { color: #0f2f63; font-size: 15px; }
+        .location-option span { color: #334155; font-size: 13px; font-weight: 800; }
+        .location-option small { color: #64748b; font-size: 11px; text-align: right; }
+        .location-empty { padding: 24px 12px; color: #64748b; text-align: center; }
+        @media (max-width: 640px) {
+            .location-option { grid-template-columns: auto 1fr auto; }
+            .location-option small { grid-column: 2 / 4; text-align: left; }
+        }
         .spin { animation: spin .8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .operation-loader {
@@ -408,6 +481,27 @@
     </div>
 </dialog>
 
+<dialog id="locationDialog" class="confirm-dialog location-dialog">
+    <div class="confirm-body">
+        <div class="location-dialog-head">
+            <div>
+                <h2>Chọn kệ xuất</h2>
+                <p id="locationDialogSubtitle">Chọn một hoặc nhiều kệ đang có tồn.</p>
+            </div>
+            <button id="closeLocationDialogBtn" class="location-close" type="button" aria-label="Đóng"><i data-lucide="x"></i></button>
+        </div>
+        <div class="location-summary">
+            <label><input id="selectAllLocations" type="checkbox"> Chọn tất cả</label>
+            <span id="locationDialogTotal">0 kệ · 0</span>
+        </div>
+        <div id="locationOptions" class="location-list"></div>
+    </div>
+    <div class="confirm-actions">
+        <button id="cancelLocationBtn" class="btn-quick" type="button">Hủy</button>
+        <button id="applyLocationBtn" class="btn-quick btn-primary-quick" type="button"><i data-lucide="check"></i>Áp dụng</button>
+    </div>
+</dialog>
+
 <div id="operationLoader" class="operation-loader" role="status" aria-live="polite" aria-hidden="true">
     <div class="operation-loader__card">
         <span class="operation-loader__spinner" aria-hidden="true"></span>
@@ -432,7 +526,11 @@
     let rowSequence = 0;
     let orderHistoryToastTimer = null;
     let customerSuggestionTimer = null;
+    let activeLocationRow = null;
+    let locationDraft = new Set();
     const suggestionTimers = new WeakMap();
+    const locationTimers = new WeakMap();
+    const stockLocationRequests = new Map();
 
     function setOperationLoading(loading, title = 'Đang xử lý phiếu xuất', detail = 'Vui lòng chờ, không đóng trang.') {
         const loader = document.getElementById('operationLoader');
@@ -560,7 +658,12 @@
                 <td><input class="form-control color" autocomplete="off"></td>
                 <td><input class="form-control quantity" type="number" min="0" step="0.001" inputmode="decimal" value="0"></td>
                 <td><input class="form-control unit" autocomplete="off" value="Cái"></td>
-                <td><input class="form-control location" autocomplete="off" placeholder="Kệ"></td>
+                <td>
+                    <button class="location-trigger is-empty" type="button" title="Chọn kệ xuất">
+                        <i data-lucide="map-pin"></i><span>Chọn kệ</span>
+                    </button>
+                    <input class="location" type="hidden">
+                </td>
                 <td><input class="form-control line-note" autocomplete="off"></td>
                 <td><button class="remove-row" type="button" title="Xóa dòng" aria-label="Xóa dòng"><i data-lucide="x"></i></button></td>
             </tr>`;
@@ -599,6 +702,7 @@
         });
         orderInput.addEventListener('keydown', event => chooseFirstSuggestion(event, row.querySelector('.order-suggestions')));
         codeInput.addEventListener('input', () => {
+            resetRowLocations(row);
             delete row.dataset.orderLookup;
             row.querySelector('.order-suggestions').classList.add('d-none');
             const selectedOrderCode = String(row.dataset.orderItemCode || '').trim().toUpperCase();
@@ -620,6 +724,10 @@
         });
         codeInput.addEventListener('change', () => applyExactCatalog(row));
         codeInput.addEventListener('keydown', event => chooseFirstSuggestion(event, row.querySelector('.catalog-suggestions')));
+        row.querySelectorAll('.size, .color').forEach(input => {
+            input.addEventListener('change', () => scheduleStockLocationLoad(row));
+        });
+        row.querySelector('.location-trigger').addEventListener('click', () => openLocationDialog(row));
         row.querySelector('.quantity').addEventListener('input', updateSummary);
         row.querySelector('.quantity').addEventListener('keydown', event => {
             if (event.key !== 'Enter') return;
@@ -663,7 +771,140 @@
         row.querySelector('.row-state').className = 'row-state';
         row.querySelector('.row-state').textContent = '';
         row.querySelectorAll('.suggestions').forEach(panel => panel.classList.add('d-none'));
+        resetRowLocations(row);
         updateSummary();
+    }
+
+    function selectedLocationCodes(row) {
+        return [...(row._selectedLocations || new Set())];
+    }
+
+    function resetRowLocations(row) {
+        row._stockLocations = [];
+        row._selectedLocations = new Set();
+        delete row.dataset.locationLookup;
+        const input = row.querySelector('.location');
+        if (input) input.value = '';
+        updateLocationTrigger(row);
+    }
+
+    function updateLocationTrigger(row) {
+        const trigger = row.querySelector('.location-trigger');
+        if (!trigger) return;
+        const selected = selectedLocationCodes(row);
+        const locations = row._stockLocations || [];
+        const selectedRows = locations.filter(item => selected.includes(item.location_code));
+        const total = selectedRows.reduce((sum, item) => sum + Number(item.available_quantity || 0), 0);
+        const loading = row.dataset.locationLoading === '1';
+        const label = loading
+            ? 'Đang tải kệ...'
+            : selected.length === 1
+                ? `${selected[0]} · ${numberFormat(total)}`
+                : selected.length > 1
+                    ? `${selected.length} kệ · ${numberFormat(total)}`
+                    : locations.length
+                        ? 'Chưa chọn kệ'
+                        : 'Không có tồn';
+        trigger.querySelector('span').textContent = label;
+        trigger.classList.toggle('is-empty', !selected.length && !locations.length);
+        trigger.classList.toggle('is-warning', !loading && !selected.length);
+        row.querySelector('.location').value = selected.join(', ');
+    }
+
+    function scheduleStockLocationLoad(row) {
+        clearTimeout(locationTimers.get(row));
+        locationTimers.set(row, setTimeout(() => loadStockLocations(row), 120));
+    }
+
+    async function loadStockLocations(row) {
+        const code = row.querySelector('.internal-code').value.trim();
+        if (!code) {
+            resetRowLocations(row);
+            return;
+        }
+        const params = new URLSearchParams({
+            internal_item_code: code,
+            size: row.querySelector('.size').value.trim(),
+            color: row.querySelector('.color').value.trim(),
+        });
+        const requestKey = params.toString().toUpperCase();
+        row.dataset.locationLookup = requestKey;
+        row.dataset.locationLoading = '1';
+        updateLocationTrigger(row);
+        try {
+            if (!stockLocationRequests.has(requestKey)) {
+                const request = fetch(`/api/xuat-vat-tu-noi-bo/vi-tri-ton?${params.toString()}`)
+                    .then(jsonOrError)
+                    .catch(error => {
+                        stockLocationRequests.delete(requestKey);
+                        throw error;
+                    });
+                stockLocationRequests.set(requestKey, request);
+            }
+            const result = await stockLocationRequests.get(requestKey);
+            if (row.dataset.locationLookup !== requestKey) return;
+            row._stockLocations = result.data || [];
+            row._selectedLocations = new Set(row._stockLocations.map(item => item.location_code));
+        } catch (error) {
+            if (row.dataset.locationLookup !== requestKey) return;
+            row._stockLocations = [];
+            row._selectedLocations = new Set();
+            setStatus(error.message, 'error');
+        } finally {
+            if (row.dataset.locationLookup === requestKey) {
+                delete row.dataset.locationLoading;
+                updateLocationTrigger(row);
+            }
+        }
+    }
+
+    function renderLocationDialog() {
+        const options = activeLocationRow?._stockLocations || [];
+        const list = document.getElementById('locationOptions');
+        list.innerHTML = options.length ? options.map((item, index) => `
+            <label class="location-option">
+                <input type="checkbox" data-index="${index}" ${locationDraft.has(item.location_code) ? 'checked' : ''}>
+                <strong>${escapeHtml(item.location_code)}</strong>
+                <span>${numberFormat(item.available_quantity)}</span>
+                <small>${numberFormat(item.package_count)} kiện${item.fifo_date ? ` · FIFO ${escapeHtml(isoToDisplayDate(String(item.fifo_date).slice(0, 10)))}` : ''}</small>
+            </label>
+        `).join('') : '<div class="location-empty">Không có tồn phù hợp với đúng mã, size và màu của dòng này.</div>';
+        list.querySelectorAll('input[type="checkbox"]').forEach(input => {
+            input.addEventListener('change', () => {
+                const item = options[Number(input.dataset.index)];
+                if (input.checked) locationDraft.add(item.location_code);
+                else locationDraft.delete(item.location_code);
+                updateLocationDialogSummary();
+            });
+        });
+        updateLocationDialogSummary();
+    }
+
+    function updateLocationDialogSummary() {
+        const options = activeLocationRow?._stockLocations || [];
+        const selectedRows = options.filter(item => locationDraft.has(item.location_code));
+        const total = selectedRows.reduce((sum, item) => sum + Number(item.available_quantity || 0), 0);
+        document.getElementById('locationDialogTotal').textContent = `${selectedRows.length} kệ · ${numberFormat(total)}`;
+        const selectAll = document.getElementById('selectAllLocations');
+        selectAll.checked = options.length > 0 && selectedRows.length === options.length;
+        selectAll.indeterminate = selectedRows.length > 0 && selectedRows.length < options.length;
+    }
+
+    async function openLocationDialog(row) {
+        if (row.dataset.locationLoading === '1') return;
+        if (!(row._stockLocations || []).length && row.querySelector('.internal-code').value.trim()) {
+            await loadStockLocations(row);
+        }
+        activeLocationRow = row;
+        locationDraft = new Set(selectedLocationCodes(row));
+        document.getElementById('locationDialogSubtitle').textContent = [
+            row.querySelector('.internal-code').value.trim(),
+            row.querySelector('.size').value.trim(),
+            row.querySelector('.color').value.trim(),
+        ].filter(Boolean).join(' · ') || 'Chưa chọn mã hàng';
+        renderLocationDialog();
+        document.getElementById('locationDialog').showModal();
+        window.lucide?.createIcons();
     }
 
     function renumberRows() {
@@ -909,11 +1150,11 @@
         row.querySelector('.size').value = item.size || row.querySelector('.size').value || '';
         row.querySelector('.color').value = item.color || row.querySelector('.color').value || '';
         row.querySelector('.unit').value = item.unit || row.querySelector('.unit').value || 'Cái';
-        row.querySelector('.location').value = item.shelf || row.querySelector('.location').value || '';
         row.querySelector('.row-state').textContent = hasSelectedOrder ? 'Từ lệnh sản xuất · Đúng danh mục' : 'Đúng danh mục';
         row.querySelectorAll('.suggestions').forEach(panel => panel.classList.add('d-none'));
         row.querySelector('.quantity').focus();
         if (!hasSelectedOrder) loadOrdersForInternalCode(row, item.code || item.value || '');
+        loadStockLocations(row);
         updateSummary();
     }
 
@@ -931,6 +1172,7 @@
             row.querySelector('.unit').value = item.unit || row.querySelector('.unit').value || 'Cái';
             row.querySelector('.row-state').textContent = 'Đúng danh mục';
             row.querySelectorAll('.suggestions').forEach(panel => panel.classList.add('d-none'));
+            loadStockLocations(row);
         });
     }
 
@@ -1007,6 +1249,7 @@
         return [...rowsBody.children].map(row => {
             const code = row.querySelector('.internal-code').value.trim();
             const order = row.querySelector('.production-order').value.trim();
+            const locationCodes = selectedLocationCodes(row);
             return {
                 ma_hh: code,
                 internal_item_code: code,
@@ -1019,7 +1262,8 @@
                 color: row.querySelector('.color').value.trim(),
                 quantity: Number(row.querySelector('.quantity').value || 0),
                 dvt: row.querySelector('.unit').value.trim(),
-                location_code: row.querySelector('.location').value.trim(),
+                location_codes: locationCodes,
+                location_code: locationCodes.join(', '),
                 note: row.querySelector('.line-note').value.trim(),
                 customer: row.dataset.orderCustomer || document.getElementById('customerName').value.trim(),
             };
@@ -1161,6 +1405,7 @@
                 + (negativeCount ? ` Có ${negativeCount} dòng đã xác nhận xuất âm.` : ''),
                 'success'
             );
+            stockLocationRequests.clear();
             resetForm(false);
         } catch (error) {
             printWindow?.close();
@@ -1212,6 +1457,26 @@
     document.addEventListener('click', event => {
         if (event.target.closest('.suggest-wrap')) return;
         document.querySelectorAll('.suggestions').forEach(panel => panel.classList.add('d-none'));
+    });
+    document.getElementById('selectAllLocations').addEventListener('change', event => {
+        const options = activeLocationRow?._stockLocations || [];
+        locationDraft = event.currentTarget.checked
+            ? new Set(options.map(item => item.location_code))
+            : new Set();
+        renderLocationDialog();
+    });
+    document.getElementById('applyLocationBtn').addEventListener('click', () => {
+        if (!activeLocationRow) return;
+        if ((activeLocationRow._stockLocations || []).length && locationDraft.size === 0) {
+            setStatus('Chọn ít nhất một kệ đang có tồn cho dòng này.', 'error');
+            return;
+        }
+        activeLocationRow._selectedLocations = new Set(locationDraft);
+        updateLocationTrigger(activeLocationRow);
+        document.getElementById('locationDialog').close();
+    });
+    ['closeLocationDialogBtn', 'cancelLocationBtn'].forEach(id => {
+        document.getElementById(id).addEventListener('click', () => document.getElementById('locationDialog').close());
     });
     document.getElementById('addRowBtn').addEventListener('click', () => addRow(true));
     document.getElementById('resetBtn').addEventListener('click', () => resetForm(true));

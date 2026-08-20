@@ -219,6 +219,138 @@ class InternalInventoryReportController extends Controller
         $monthEnd = $asOf->format('Y-m-d');
         $normalizedItemCode = mb_strtoupper(trim($itemCode));
 
+        $movementByCode = app(InternalStockLedger::class)
+            ->query($monthStart, $monthEnd)
+            ->select(
+                'internal_item_code',
+                'ma_hh',
+                DB::raw('SUM(opening_quantity) as opening_quantity'),
+                DB::raw('SUM(receipt_quantity) as receipt_quantity'),
+                DB::raw('SUM(issue_quantity) as issue_quantity')
+            )
+            ->groupBy('internal_item_code', 'ma_hh')
+            ->get()
+            ->map(function ($row) use ($catalogMap, $resolver) {
+                $code = trim((string) ($row->internal_item_code ?: $row->ma_hh));
+                if ($code === '') {
+                    return null;
+                }
+
+                $catalog = $catalogMap[mb_strtoupper($code)] ?? null;
+                $name = trim((string) ($catalog['name'] ?? ''));
+
+                return [
+                    'code' => mb_strtoupper($code),
+                    'group' => $catalog['group'] ?? $resolver->resolveName($name),
+                    'unit' => mb_strtoupper(trim((string) ($catalog['unit'] ?? ''))) ?: 'CHUA CO DVT',
+                    'opening' => (float) $row->opening_quantity,
+                    'receipt' => (float) $row->receipt_quantity,
+                    'issue' => (float) $row->issue_quantity,
+                ];
+            })
+            ->filter()
+            ->groupBy('code')
+            ->map(function ($rows) {
+                $first = $rows->first();
+
+                return [
+                    'group' => $first['group'],
+                    'unit' => $first['unit'],
+                    'opening' => $rows->sum('opening'),
+                    'receipt' => $rows->sum('receipt'),
+                    'issue' => $rows->sum('issue'),
+                ];
+            });
+
+        $packageRows = DB::connection('internal')
+            ->table('inventory_packages as p')
+            ->leftJoin('warehouse_locations as wl', 'wl.id', '=', 'p.warehouse_location_id')
+            ->select(
+                DB::raw("COALESCE(NULLIF(wl.location_code, ''), 'CHUA-XEP') as location_code"),
+                DB::raw("COALESCE(NULLIF(p.internal_item_code, ''), NULLIF(p.ma_sp, ''), '') as code"),
+                DB::raw('SUM(p.quantity) as closing_quantity')
+            )
+            ->where('p.quantity', '>', 0)
+            ->groupBy(
+                'wl.location_code',
+                'p.internal_item_code',
+                'p.ma_sp'
+            )
+            ->get()
+            ->map(function ($row) use ($catalogMap, $resolver, $movementByCode) {
+                $code = trim((string) $row->code);
+                $catalog = $catalogMap[mb_strtoupper($code)] ?? null;
+                $name = trim((string) ($catalog['name'] ?? ''));
+                $movement = $movementByCode->get(mb_strtoupper($code), []);
+
+                return [
+                    'code' => $code,
+                    'name' => $name,
+                    'group' => $catalog['group'] ?? $resolver->resolveName($name),
+                    'unit' => mb_strtoupper(trim((string) ($catalog['unit'] ?? ($movement['unit'] ?? '')))) ?: 'CHUA CO DVT',
+                    'location' => trim((string) $row->location_code) ?: 'CHUA-XEP',
+                    'opening' => (float) ($movement['opening'] ?? 0),
+                    'receipt' => (float) ($movement['receipt'] ?? 0),
+                    'issue' => (float) ($movement['issue'] ?? 0),
+                    'closing' => (float) $row->closing_quantity,
+                ];
+            })
+            ->filter(fn ($row) => $row['code'] !== '' && abs($row['closing']) >= 0.0005)
+            ->filter(fn ($row) => $selectedGroups->contains($row['group']))
+            ->when(
+                $normalizedItemCode !== '',
+                fn ($items) => $items->filter(fn ($row) => mb_strtoupper($row['code']) === $normalizedItemCode)
+            )
+            ->groupBy(fn ($row) => mb_strtoupper($row['code']))
+            ->map(function ($items) use ($movementByCode) {
+                $first = $items->first();
+                $movement = $movementByCode->get(mb_strtoupper($first['code']), []);
+
+                return [
+                    'code' => $first['code'],
+                    'name' => $first['name'],
+                    'group' => $first['group'],
+                    'unit' => $first['unit'],
+                    'locations' => $items
+                        ->map(fn ($row) => $row['location'] . ' (' . number_format($row['closing'], 3, '.', '') . ')')
+                        ->unique()
+                        ->implode(', '),
+                    'opening' => (float) ($movement['opening'] ?? 0),
+                    'receipt' => (float) ($movement['receipt'] ?? 0),
+                    'issue' => (float) ($movement['issue'] ?? 0),
+                    'closing' => $items->sum('closing'),
+                ];
+            })
+            ->filter(fn ($row) => abs($row['closing']) >= 0.0005)
+            ->sortBy(fn ($row) => mb_strtoupper($row['code']), SORT_NATURAL)
+            ->values()
+            ->groupBy('group');
+
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->getProperties()
+            ->setCreator('TTV Quan ly kho')
+            ->setTitle('Ton kho hien tai theo loai hang')
+            ->setDescription('Du lieu kho noi bo, khong lay tu TSoft.');
+        $usedTitles = [];
+        foreach ($selectedGroups as $index => $group) {
+            $sheet = $index === 0 ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
+            $sheet->setTitle($this->sheetTitle($group, $usedTitles));
+            $this->writeCurrentStockSheet($sheet, $group, $asOf, $packageRows->get($group, collect()));
+        }
+        if ($selectedGroups->isEmpty()) {
+            $this->writeCurrentStockSheet($spreadsheet->getActiveSheet(), 'Khong co du lieu', $asOf, collect());
+        }
+        $spreadsheet->setActiveSheetIndex(0);
+        $filename = 'ton-kho-hien-tai-' . $asOf->format('Ymd') . '.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            (new Xlsx($spreadsheet))->save('php://output');
+            $spreadsheet->disconnectWorksheets();
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0, no-cache, no-store, must-revalidate',
+        ]);
+
         $rows = app(InternalStockLedger::class)
             ->query($monthStart, $monthEnd)
             ->select(
@@ -388,6 +520,18 @@ class InternalInventoryReportController extends Controller
         string $customer = '',
         string $customerGroup = ''
     ): Collection {
+        $stocktakeCutoffs = DB::connection('internal')
+            ->table('internal_stocktake_lines as stocktake_line')
+            ->join('internal_stocktake_sessions as stocktake_session', 'stocktake_session.id', '=', 'stocktake_line.session_id')
+            ->where('stocktake_session.status', 'posted')
+            ->whereNotNull('stocktake_line.counted_quantity')
+            ->whereDate('stocktake_session.count_date', '<=', $monthEnd)
+            ->whereRaw("TRIM(COALESCE(stocktake_line.internal_item_code, '')) <> ''")
+            ->selectRaw("UPPER(TRIM(stocktake_line.internal_item_code)) as item_code, MAX(stocktake_session.count_date) as cutoff_date")
+            ->groupBy(DB::raw('UPPER(TRIM(stocktake_line.internal_item_code))'))
+            ->get()
+            ->mapWithKeys(fn ($row) => [(string) $row->item_code => (string) $row->cutoff_date]);
+
         $receiptsQuery = DB::connection('internal')
             ->table('internal_material_receipt_lines as l')
             ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
@@ -470,6 +614,11 @@ class InternalInventoryReportController extends Controller
 
         return $receipts
             ->concat($issues)
+            ->filter(function ($row) use ($stocktakeCutoffs) {
+                $code = mb_strtoupper(trim((string) ($row->internal_item_code ?: $row->ma_hh)));
+                $cutoff = $stocktakeCutoffs->get($code);
+                return !$cutoff || (string) $row->transaction_date > $cutoff;
+            })
             ->map(function ($row) use ($catalogMap, $resolver, $customerMap) {
                 $code = trim((string) ($row->internal_item_code ?: $row->ma_hh));
                 $catalog = $catalogMap[mb_strtoupper($code)] ?? null;

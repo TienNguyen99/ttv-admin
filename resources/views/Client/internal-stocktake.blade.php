@@ -234,9 +234,15 @@
         const percent = summary.location_count ? summary.completed_location_count / summary.location_count * 100 : 0;
         document.getElementById('sessionProgress').style.width = `${percent}%`;
         const locked = activeSession.status === 'posted';
+        const postButton = document.getElementById('postSessionBtn');
         document.getElementById('completeSessionBtn').disabled = locked || activeSession.status === 'completed';
-        document.getElementById('postSessionBtn').disabled = locked || Number(activeSession.counted_line_count || 0) === 0;
+        postButton.disabled = locked || Number(summary.counted_line_count || 0) === 0;
+        postButton.innerHTML = locked
+            ? '<i data-lucide="badge-check"></i>Đã chốt & áp dụng'
+            : '<i data-lucide="badge-check"></i>Chốt & áp dụng';
+        postButton.title = locked ? 'Đợt kiểm kê này đã được áp dụng vào tồn kho.' : '';
         document.getElementById('deleteSessionBtn').disabled = locked;
+        if (window.lucide) window.lucide.createIcons();
         renderLocations();
         const wanted = preserveLocation && activeLocation ? locations.find(row => row.id === activeLocation.id) : null;
         const next = wanted || locations.find(row => row.status !== 'completed') || locations[0];

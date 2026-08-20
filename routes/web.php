@@ -162,6 +162,7 @@ Route::get('/client/phieu-nhap-thanh-pham-noi-bo/{receipt}/in', [InternalFinishe
 Route::get('/client/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'index']);
 Route::get('/api/xuat-vat-tu-noi-bo', [InternalMaterialIssueController::class, 'list']);
 Route::get('/api/xuat-vat-tu-noi-bo/lenh-san-xuat', [InternalMaterialIssueController::class, 'productionOrderLines']);
+Route::get('/api/xuat-vat-tu-noi-bo/vi-tri-ton', [InternalMaterialIssueController::class, 'stockLocations']);
 Route::post('/api/xuat-vat-tu-noi-bo/phan-tich-paste', [InternalMaterialIssueController::class, 'resolvePastedLines']);
 Route::get('/api/ma-noi-bo-danh-muc', [InternalItemCatalogController::class, 'suggestions']);
 Route::get('/client/theo-doi-san-xuat', [InternalMaterialIssueController::class, 'productionTrackingIndex']);
