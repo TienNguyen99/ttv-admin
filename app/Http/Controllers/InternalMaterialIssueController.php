@@ -446,6 +446,7 @@ class InternalMaterialIssueController extends Controller
             'lines.*.location_code' => 'nullable|string|max:100',
             'lines.*.location_codes' => 'nullable|array|max:50',
             'lines.*.location_codes.*' => 'string|max:100|distinct',
+            'lines.*.match_by_code_only' => 'nullable|boolean',
             'lines.*.internal_item_code' => 'nullable|string|max:100',
             'lines.*.size' => 'nullable|string|max:255',
             'lines.*.color' => 'nullable|string|max:1000',
@@ -1104,6 +1105,7 @@ class InternalMaterialIssueController extends Controller
             'size' => 'nullable|string|max:255',
             'color' => 'nullable|string|max:1000',
             'side' => 'nullable|string|max:255',
+            'match_by_code_only' => 'nullable|boolean',
         ]);
 
         $internalCode = mb_strtoupper(trim((string) ($data['internal_item_code'] ?? '')));
@@ -1117,7 +1119,7 @@ class InternalMaterialIssueController extends Controller
         } elseif ($maHh !== '') {
             $query->whereRaw('UPPER(TRIM(inventory_packages.ma_sp)) = ?', [$maHh]);
         }
-        foreach (['size', 'color', 'side'] as $field) {
+        foreach (!empty($data['match_by_code_only']) ? [] : ['size', 'color', 'side'] as $field) {
             $value = mb_strtoupper(trim((string) ($data[$field] ?? '')));
             if ($value !== '') {
                 $query->whereRaw("UPPER(TRIM(inventory_packages.{$field})) = ?", [$value]);
@@ -2141,15 +2143,16 @@ class InternalMaterialIssueController extends Controller
             $query->where('internal_item_code', $internalCode);
         }
 
-        if ($size !== '') {
+        $matchByCodeOnly = !empty($line['match_by_code_only']);
+        if (!$matchByCodeOnly && $size !== '') {
             $query->where('size', $size);
         }
 
-        if ($color !== '') {
+        if (!$matchByCodeOnly && $color !== '') {
             $query->where('color', $color);
         }
 
-        if ($side !== '') {
+        if (!$matchByCodeOnly && $side !== '') {
             $query->where('side', $side);
         }
 

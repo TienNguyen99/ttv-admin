@@ -262,7 +262,7 @@
 
         .quick-form-row {
             display: grid;
-            grid-template-columns: 190px minmax(280px, 1fr);
+            grid-template-columns: 190px 190px minmax(280px, 1fr);
             gap: 10px;
             padding: 12px 14px;
             border-bottom: 1px solid #eef2f7;
@@ -612,7 +612,7 @@
                     <div class="quick-toolbar">
                         <span class="quick-pill">Dòng <strong id="lineCount">0</strong></span>
                         <span class="quick-pill">SL <strong id="totalQty">0</strong></span>
-                        <span class="quick-pill">CHUA-XEP</span>
+                        <span class="quick-pill">Vị trí <strong id="receiptLocationPill">CHUA-XEP</strong></span>
                         <button id="addRowBtn" class="quick-btn" type="button"><i data-lucide="plus"></i>Thêm dòng</button>
                         <button id="clearFormBtn" class="quick-btn" type="button"><i data-lucide="rotate-ccw"></i>Mới</button>
                     </div>
@@ -621,6 +621,11 @@
                     <div>
                         <label for="receiptDate">Ngày nhập</label>
                         <input id="receiptDate" class="form-control" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="dd/mm/yyyy">
+                    </div>
+                    <div>
+                        <label for="receiptLocation">Vị trí nhập</label>
+                        <input id="receiptLocation" class="form-control text-uppercase" list="receiptLocationOptions" maxlength="100" autocomplete="off" placeholder="A1 hoặc CHUA-XEP" value="CHUA-XEP">
+                        <datalist id="receiptLocationOptions"></datalist>
                     </div>
                     <div>
                         <label for="receiptNote">Ghi chú</label>
@@ -736,6 +741,30 @@
         let receiptRequestPending = false;
         let orderHistoryToastTimer = null;
         let customerSuggestionTimer = null;
+
+        function selectedReceiptLocation() {
+            return document.getElementById('receiptLocation').value.trim().toUpperCase() || 'CHUA-XEP';
+        }
+
+        function updateReceiptLocation(commitFallback = false) {
+            const input = document.getElementById('receiptLocation');
+            const normalized = input.value.trim().toUpperCase();
+            input.value = commitFallback ? (normalized || 'CHUA-XEP') : input.value.toUpperCase();
+            document.getElementById('receiptLocationPill').textContent = normalized || 'CHUA-XEP';
+        }
+
+        function loadReceiptLocations() {
+            fetch('/api/kiem-ton-kho/vi-tri')
+                .then(response => jsonOrError(response, 'Không tải được danh sách vị trí'))
+                .then(result => {
+                    document.getElementById('receiptLocationOptions').innerHTML = (result.data || [])
+                        .map(location => String(location.location_code || '').trim().toUpperCase())
+                        .filter(Boolean)
+                        .map(code => `<option value="${esc(code)}"></option>`)
+                        .join('');
+                })
+                .catch(() => {});
+        }
 
         function showOrderHistoryToast(orderCode, progress = {}) {
             const toast = document.getElementById('orderHistoryToast');
@@ -1671,6 +1700,7 @@
 
         function collectLines() {
             const isSemiFinished = selectedReceiptKind === 'semi_finished';
+            const locationCode = selectedReceiptLocation();
             return Array.from(document.querySelectorAll('#quickRows tr')).map(row => {
                 const orderInput = row.querySelector('.production-order');
                 const sourceOrder = orderInput.value.trim();
@@ -1683,7 +1713,7 @@
                     side: '',
                     dvt: row.querySelector('.item-unit').value.trim() || 'Cái',
                     quantity: num(row.querySelector('.quantity').value),
-                    location_code: 'CHUA-XEP',
+                    location_code: locationCode,
                     note: row.querySelector('.line-note').value.trim(),
                     production_order_id: orderInput.dataset.productionOrderId || null,
                     production_order: isSemiFinished ? '' : sourceOrder,
@@ -2044,7 +2074,7 @@
                     export_to_customer: exportImmediately,
                     customer_name: exportImmediately ? customerName : null,
                     issue_date: exportImmediately ? issueDate : null,
-                    location_code: 'CHUA-XEP',
+                    location_code: selectedReceiptLocation(),
                     ma_ko: '',
                     checked_at: receiptDate,
                     note: document.getElementById('receiptNote').value.trim(),
@@ -2139,6 +2169,8 @@
             document.getElementById('receiptWorkspace').classList.add('d-none');
             document.getElementById('modeChooser').classList.remove('d-none');
             document.getElementById('receiptNote').value = '';
+            document.getElementById('receiptLocation').value = 'CHUA-XEP';
+            updateReceiptLocation(true);
             document.getElementById('exportImmediately').checked = false;
             document.getElementById('customerName').value = '';
             document.getElementById('issueDate').value = document.getElementById('receiptDate').value || isoToDisplayDate(localIsoDate());
@@ -2233,11 +2265,15 @@
 
         document.getElementById('receiptDate').value = isoToDisplayDate(localIsoDate());
         document.getElementById('issueDate').value = document.getElementById('receiptDate').value;
+        document.getElementById('receiptLocation').addEventListener('input', () => updateReceiptLocation(false));
+        document.getElementById('receiptLocation').addEventListener('blur', () => updateReceiptLocation(true));
+        updateReceiptLocation(true);
         renderRows();
         loadProductionOrderFromQuery();
         updateSummary();
         loadRecentReceipts();
         loadCustomerSuggestions();
+        loadReceiptLocations();
         if (window.lucide) lucide.createIcons();
     </script>
 </body>

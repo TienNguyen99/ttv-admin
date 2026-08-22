@@ -284,7 +284,9 @@
                         : '<span class="wms-badge wms-badge--danger">Âm/thiu</span>';
                 return `<tr>
                     <td>${esc(lot.document_date || '')}</td>
-                    <td class="wms-code">${esc(lot.document_code || '')}</td>
+                    <td class="wms-code">${lot.source_type === 'RECEIPT'
+                        ? `<a href="/client/kiem-ton-kho?view=receipts&keyword=${encodeURIComponent(lot.document_code || '')}">${esc(lot.document_code || '')}</a>`
+                        : esc(lot.document_code || '')}</td>
                     <td>${esc(lot.location_code || 'CHUA-XEP')}</td>
                     <td class="wms-code">${esc(lot.internal_item_code || '-')}</td>
                     <td>${esc(lot.size || '-')}</td>
@@ -292,7 +294,13 @@
                     <td class="wms-number">${num(lot.received_quantity)}</td>
                     <td class="wms-number">${num(lot.issued_quantity)}</td>
                     <td class="wms-number ${remaining < 0 ? 'text-danger' : ''}">${num(remaining)}</td>
-                    <td>${status}</td>
+                    <td>${status}${lot.source_type === 'RECEIPT' && Number(lot.issued_quantity || 0) <= 0 && remaining > 0
+                        ? `<button type="button" class="btn btn-sm btn-outline-danger ms-2 delete-receipt-line"
+                            data-receipt-id="${Number(lot.receipt_id || 0)}"
+                            data-line-id="${Number(lot.source_id || 0)}"
+                            data-code="${esc(lot.internal_item_code || '')}"
+                            data-quantity="${esc(lot.received_quantity || 0)}">Xóa dòng</button>`
+                        : ''}</td>
                 </tr>`;
             }).join('') || '<tr><td colspan="10" class="wms-empty">Không có phiếu nhập cho dòng tồn này.</td></tr>';
 
@@ -502,7 +510,9 @@
                                         data-size="${esc(row.size || '')}"
                                         data-color="${esc(row.color || '')}"
                                         data-side="${esc(row.side || '')}"><i data-lucide="trash-2"></i> Xóa</button>`
-                                    : `<a class="btn btn-sm btn-outline-secondary" href="${Number(row.receipt_quantity || 0) ? '/client/kiem-ton-kho?view=history' : '/client/xuat-vat-tu-noi-bo'}" title="${esc(row.delete_reason || '')}">Xem phiếu</a>`}
+                                    : `<a class="btn btn-sm btn-outline-secondary" href="${Number(row.receipt_quantity || 0)
+                                        ? `/client/kiem-ton-kho?view=receipts&keyword=${encodeURIComponent(row.internal_item_code || row.ma_sp || '')}`
+                                        : '/client/xuat-vat-tu-noi-bo'}" title="${esc(row.delete_reason || '')}">Xem phiếu</a>`}
                             </td>
                         </tr>`;
                     }).join('') || '<tr><td colspan="12" class="wms-empty">Không có tồn phù hợp.</td></tr>';
@@ -571,6 +581,26 @@
                   button.disabled = false;
                   alert(error.message);
               });
+        });
+
+        document.getElementById('fifoLotRows').addEventListener('click', event => {
+            const button = event.target.closest('.delete-receipt-line');
+            if (!button) return;
+            const message = `Xóa dòng nhập ${button.dataset.code} · ${num(button.dataset.quantity)}?\n\nChỉ dòng này và kiện tồn liên quan bị xóa; các dòng khác trong phiếu được giữ nguyên.`;
+            if (!confirm(message)) return;
+
+            button.disabled = true;
+            fetch(`/api/kiem-ton-kho/phieu-nhap-tp/${button.dataset.receiptId}/dong/${button.dataset.lineId}`, {
+                method: 'DELETE',
+                headers: {'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken},
+            })
+                .then(response => jsonOrError(response, 'Không xóa được dòng phiếu nhập'))
+                .then(() => {
+                    stockFifoModal.hide();
+                    loadStock();
+                })
+                .catch(error => alert(error.message))
+                .finally(() => { button.disabled = false; });
         });
 
         function loadLocationOptions() {

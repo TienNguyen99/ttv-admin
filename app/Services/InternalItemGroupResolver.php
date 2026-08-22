@@ -10,8 +10,6 @@ class InternalItemGroupResolver
     {
         $raw = is_array($catalog->raw_data ?? null) ? $catalog->raw_data : [];
         $sourceType = mb_strtoupper(trim((string) ($raw['loai'] ?? '')));
-        $name = $this->normalize($catalog->item_name ?? '');
-
         $specificSourceGroups = [
             'BTP' => 'Bán thành phẩm',
             'GIACONG' => 'Gia công',
@@ -43,16 +41,6 @@ class InternalItemGroupResolver
         ];
         if (isset($specificSourceGroups[$sourceType])) {
             return $specificSourceGroups[$sourceType];
-        }
-
-        if (strpos($name, 'nhan size') !== false || strpos($name, 'size label') !== false) {
-            return 'Nhãn size';
-        }
-        if (strpos($name, 'nhan det') !== false || strpos($name, 'woven label') !== false) {
-            return 'Nhãn dệt';
-        }
-        if (strpos($name, 'thun') !== false || strpos($name, 'elastic tape') !== false) {
-            return 'Thun bản';
         }
 
         return [
@@ -129,17 +117,6 @@ class InternalItemGroupResolver
 
     public function resolveName(string $name): string
     {
-        return $this->resolve((object) [
-            'item_name' => $name,
-            'raw_data' => [],
-        ]);
-    }
-
-    private function normalize($value): string
-    {
-        $value = Str::ascii(mb_strtolower(trim((string) $value)));
-        $value = preg_replace('/[^a-z0-9]+/', ' ', $value);
-
-        return trim(preg_replace('/\s+/', ' ', $value));
+        return 'Chưa phân nhóm';
     }
 }

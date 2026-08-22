@@ -145,7 +145,7 @@
             <div class="wms-panel__header"><h2>Danh sách mã nội bộ</h2><span id="catalogResultLabel" class="text-secondary small">Đang tải...</span></div>
             <div class="wms-table-wrap">
                 <table class="wms-table catalog-table">
-                    <thead><tr><th>Mã hàng</th><th>Tên hàng</th><th>Nhóm hàng</th><th>Khách hàng</th><th>ĐVT</th><th>Size</th><th>Màu</th><th>Màu in</th><th>Mặt</th><th>Kệ</th><th class="text-end">Tồn đầu</th><th>Dòng nguồn</th><th></th></tr></thead>
+                    <thead><tr><th>Mã hàng</th><th>Tên hàng</th><th>Nhóm theo LOẠI</th><th>Khách hàng</th><th>ĐVT</th><th>Size</th><th>Màu</th><th>Màu in</th><th>Mặt</th><th>Kệ</th><th class="text-end">Tồn đầu</th><th>Dòng nguồn</th><th></th></tr></thead>
                     <tbody id="catalogRows"><tr><td colspan="13" class="wms-loading">Chưa có dữ liệu. Bấm Đồng bộ DANH MỤC.</td></tr></tbody>
                 </table>
             </div>

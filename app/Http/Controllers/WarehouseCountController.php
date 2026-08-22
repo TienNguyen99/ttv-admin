@@ -1101,6 +1101,7 @@ class WarehouseCountController extends Controller
 
         $openingLots->select(
             DB::raw('id as source_id'),
+            DB::raw('NULL as receipt_id'),
             DB::raw("'OPENING' as source_type"),
             DB::raw("CONCAT('TONDAU-', id) as document_code"),
             DB::raw('period_month as document_date'),
@@ -1133,6 +1134,7 @@ class WarehouseCountController extends Controller
 
         $receiptQuery->select(
             DB::raw('l.id as source_id'),
+            DB::raw('r.id as receipt_id'),
             DB::raw("'RECEIPT' as source_type"),
             DB::raw('r.receipt_code as document_code'),
             DB::raw('r.receipt_date as document_date'),
@@ -1181,6 +1183,7 @@ class WarehouseCountController extends Controller
             return [
                 'source_type' => $lot->source_type,
                 'source_id' => (int) $lot->source_id,
+                'receipt_id' => $lot->receipt_id ? (int) $lot->receipt_id : null,
                 'document_code' => $lot->document_code,
                 'document_date' => $lot->document_date,
                 'location_code' => $lot->location_code ?: 'CHUA-XEP',
@@ -3631,6 +3634,93 @@ class WarehouseCountController extends Controller
 
         return response()->json([
             'message' => 'Đã xóa phiếu nhập kho nội bộ.',
+        ]);
+    }
+
+    public function destroyReceiptLine(
+        Request $request,
+        InternalMaterialReceipt $receipt,
+        InternalMaterialReceiptLine $line
+    ) {
+        if ((int) $line->receipt_id !== (int) $receipt->id) {
+            abort(404);
+        }
+
+        $package = $this->resolveReceiptLinePackage($line);
+        $lineQuantity = (float) ($line->base_quantity ?: $line->quantity);
+        if (!$package || (float) $package->quantity + 0.0001 < $lineQuantity) {
+            return response()->json([
+                'message' => 'Không thể xóa dòng vì số hàng này đã được xuất hoặc thay đổi.',
+            ], 422);
+        }
+
+        $auditPayload = [
+            'receipt_id' => (int) $receipt->id,
+            'receipt_code' => $receipt->receipt_code,
+            'line_id' => (int) $line->id,
+            'internal_item_code' => $line->internal_item_code,
+            'quantity' => (float) $line->quantity,
+            'base_quantity' => $lineQuantity,
+            'location_code' => $line->location_code,
+        ];
+
+        $receiptDeleted = DB::connection('internal')->transaction(function () use ($receipt, $line) {
+            $lockedLine = InternalMaterialReceiptLine::query()->lockForUpdate()->findOrFail($line->id);
+            $package = $this->resolveReceiptLinePackage($lockedLine, true);
+            $lineQuantity = (float) ($lockedLine->base_quantity ?: $lockedLine->quantity);
+
+            if (!$package || (float) $package->quantity + 0.0001 < $lineQuantity) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'line' => ['Dòng phiếu đã phát sinh thay đổi. Hãy tải lại trước khi xóa.'],
+                ]);
+            }
+
+            $locationId = $package->warehouse_location_id;
+            $count = $package->inventory_count_id
+                ? InternalInventoryCount::query()->lockForUpdate()->find($package->inventory_count_id)
+                : null;
+            $packageQuantity = (float) $package->quantity;
+
+            $lockedLine->delete();
+            $package->delete();
+
+            if ($count) {
+                $remainingQuantity = (float) $count->counted_quantity - $packageQuantity;
+                $hasPackages = InventoryPackage::query()->where('inventory_count_id', $count->id)->exists();
+                if ($remainingQuantity <= 0.0001 && !$hasPackages) {
+                    $count->delete();
+                } else {
+                    $count->counted_quantity = max(0, $remainingQuantity);
+                    $count->save();
+                }
+            }
+
+            $receiptDeleted = !InternalMaterialReceiptLine::query()->where('receipt_id', $receipt->id)->exists();
+            if ($receiptDeleted) {
+                $receipt->delete();
+            }
+
+            $location = $locationId ? WarehouseLocation::query()->find($locationId) : null;
+            if ($location && !InventoryPackage::query()->where('warehouse_location_id', $location->id)->exists()) {
+                $location->status = 'pending';
+                $location->save();
+            }
+
+            return $receiptDeleted;
+        });
+
+        app(InternalAudit::class)->record(
+            'receipt.line_deleted',
+            'InternalMaterialReceiptLine',
+            (int) $line->id,
+            $receipt->receipt_code,
+            $auditPayload,
+            $request
+        );
+
+        return response()->json([
+            'message' => 'Đã xóa dòng nhập và trừ đúng kiện tồn liên quan.',
+            'receipt_deleted' => $receiptDeleted,
         ]);
     }
 

@@ -174,7 +174,7 @@
         .col-variant { width: 125px; }
         .col-qty { width: 110px; }
         .col-unit { width: 90px; }
-        .col-location { width: 170px; }
+        .col-location { width: 250px; }
         .col-note { width: 160px; }
         .col-remove { width: 42px; }
         .suggest-wrap { position: relative; }
@@ -339,6 +339,20 @@
         .location-option span { color: #334155; font-size: 13px; font-weight: 800; }
         .location-option small { color: #64748b; font-size: 11px; text-align: right; }
         .location-empty { padding: 24px 12px; color: #64748b; text-align: center; }
+        .paste-dialog { width: min(960px, calc(100vw - 24px)); }
+        .paste-area {
+            width: 100%;
+            min-height: 260px;
+            resize: vertical;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 12px;
+            background: #f8fbff;
+            color: #102a43;
+            font: 13px/1.5 Consolas, monospace;
+        }
+        .paste-area:focus { border-color: #3b82f6; outline: 3px solid rgba(59, 130, 246, .14); }
+        .paste-summary { min-height: 24px; margin-top: 10px; color: #475569; font-size: 13px; font-weight: 700; }
         @media (max-width: 640px) {
             .location-option { grid-template-columns: auto 1fr auto; }
             .location-option small { grid-column: 2 / 4; text-align: left; }
@@ -421,6 +435,7 @@
             <div class="panel-tools">
                 <span class="pill">Dòng <strong id="lineCount">0</strong></span>
                 <span class="pill">SL <strong id="totalQuantity">0</strong></span>
+                <button id="pasteExcelBtn" class="btn-quick" type="button"><i data-lucide="clipboard-paste"></i>Dán Excel</button>
                 <button id="addRowBtn" class="btn-quick" type="button"><i data-lucide="plus"></i>Thêm dòng</button>
                 <button id="resetBtn" class="btn-quick" type="button"><i data-lucide="rotate-ccw"></i>Mới</button>
             </div>
@@ -502,6 +517,24 @@
     </div>
 </dialog>
 
+<dialog id="pasteExcelDialog" class="confirm-dialog paste-dialog">
+    <div class="confirm-body">
+        <div class="location-dialog-head">
+            <div>
+                <h2>Dán phiếu xuất từ Excel</h2>
+                <p>Dán cả hàng tiêu đề. Hệ thống tự nhận PO, ITEM#, size, màu, số lượng, carton và vị trí.</p>
+            </div>
+            <button id="closePasteExcelBtn" class="location-close" type="button" aria-label="Đóng"><i data-lucide="x"></i></button>
+        </div>
+        <textarea id="pasteExcelData" class="paste-area" spellcheck="false" placeholder="Bấm vào đây rồi Ctrl+V dữ liệu Excel..."></textarea>
+        <div id="pasteExcelSummary" class="paste-summary">Chưa có dữ liệu.</div>
+    </div>
+    <div class="confirm-actions">
+        <button id="cancelPasteExcelBtn" class="btn-quick" type="button">Hủy</button>
+        <button id="applyPasteExcelBtn" class="btn-quick btn-primary-quick" type="button"><i data-lucide="list-plus"></i>Đưa vào phiếu xuất</button>
+    </div>
+</dialog>
+
 <div id="operationLoader" class="operation-loader" role="status" aria-live="polite" aria-hidden="true">
     <div class="operation-loader__card">
         <span class="operation-loader__spinner" aria-hidden="true"></span>
@@ -531,6 +564,8 @@
     const suggestionTimers = new WeakMap();
     const locationTimers = new WeakMap();
     const stockLocationRequests = new Map();
+    const pastedCatalogSearchRequests = new Map();
+    const pastedCatalogResolutions = new Map();
 
     function setOperationLoading(loading, title = 'Đang xử lý phiếu xuất', detail = 'Vui lòng chờ, không đóng trang.') {
         const loader = document.getElementById('operationLoader');
@@ -550,6 +585,130 @@
     const numberFormat = value => new Intl.NumberFormat('vi-VN', {
         maximumFractionDigits: 3
     }).format(Number(value || 0));
+
+    function parseClipboardNumber(value) {
+        let normalized = String(value ?? '').replace(/\s+/g, '').replace(/[^0-9,.-]/g, '');
+        if (!normalized) return 0;
+        if (normalized.includes(',') && normalized.includes('.')) {
+            normalized = normalized.lastIndexOf(',') > normalized.lastIndexOf('.')
+                ? normalized.replaceAll('.', '').replace(',', '.')
+                : normalized.replaceAll(',', '');
+        } else if (normalized.includes(',')) {
+            normalized = normalized.replaceAll('.', '').replace(',', '.');
+        } else if (/^-?\d{1,3}(\.\d{3})+$/.test(normalized)) {
+            normalized = normalized.replaceAll('.', '');
+        }
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function parseTsv(text) {
+        const rows = [];
+        let row = [];
+        let cell = '';
+        let quoted = false;
+        const source = String(text || '').replace(/^\uFEFF/, '');
+        for (let index = 0; index < source.length; index += 1) {
+            const character = source[index];
+            if (character === '"') {
+                if (quoted && source[index + 1] === '"') {
+                    cell += '"';
+                    index += 1;
+                } else {
+                    quoted = !quoted;
+                }
+            } else if (character === '\t' && !quoted) {
+                row.push(cell);
+                cell = '';
+            } else if ((character === '\n' || character === '\r') && !quoted) {
+                if (character === '\r' && source[index + 1] === '\n') index += 1;
+                row.push(cell);
+                if (row.some(value => String(value).trim() !== '')) rows.push(row);
+                row = [];
+                cell = '';
+            } else {
+                cell += character;
+            }
+        }
+        row.push(cell);
+        if (row.some(value => String(value).trim() !== '')) rows.push(row);
+        return rows;
+    }
+
+    function cleanClipboardCell(value) {
+        return String(value ?? '')
+            .replace(/\\_/g, '_')
+            .replace(/&#x(?:9|20);/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function normalizePasteHeader(value) {
+        return cleanClipboardCell(value)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .replace(/[^A-Z0-9#]+/g, ' ')
+            .trim();
+    }
+
+    function pastedHeaderIndex(headers, aliases) {
+        return headers.findIndex(header => aliases.some(alias => header === alias || header.startsWith(`${alias} `)));
+    }
+
+    function parseFinishedGoodsPaste(text) {
+        const rows = parseTsv(text);
+        const headerRowIndex = rows.findIndex(values => {
+            const headers = values.map(normalizePasteHeader);
+            return headers.some(header => header === 'ITEM#' || header.startsWith('ITEM# '))
+                && headers.some(header => header === 'QUANTITY' || header.startsWith('QUANTITY '));
+        });
+        if (headerRowIndex < 0) throw new Error('Không tìm thấy hàng tiêu đề có ITEM# và QUANTITY.');
+
+        const headers = rows[headerRowIndex].map(normalizePasteHeader);
+        const columns = {
+            po: pastedHeaderIndex(headers, ['PO NO', 'PO', 'PS#']),
+            code: pastedHeaderIndex(headers, ['ITEM#', 'ITEM', 'MA HANG']),
+            name: pastedHeaderIndex(headers, ['DESCRIPTION OF GOODS', 'DESCRIPTION', 'TEN HANG']),
+            size: pastedHeaderIndex(headers, ['SIZE']),
+            color: pastedHeaderIndex(headers, ['COLOR', 'MAU']),
+            quantity: pastedHeaderIndex(headers, ['QUANTITY', 'SL']),
+            unit: pastedHeaderIndex(headers, ['UNIT', 'DVT']),
+            remark: pastedHeaderIndex(headers, ['REMARK', 'GHI CHU']),
+            carton: pastedHeaderIndex(headers, ['CARTON NO', 'CARTON']),
+            netWeight: pastedHeaderIndex(headers, ['N WEIGHT']),
+            grossWeight: pastedHeaderIndex(headers, ['G WEIGHT']),
+            location: pastedHeaderIndex(headers, ['VI TRI', 'POSITION', 'LOCATION']),
+        };
+        const valueAt = (values, index) => index >= 0 ? cleanClipboardCell(values[index]) : '';
+        const parsed = rows.slice(headerRowIndex + 1).map((values, index) => {
+            const code = valueAt(values, columns.code);
+            const quantity = parseClipboardNumber(valueAt(values, columns.quantity));
+            const carton = valueAt(values, columns.carton);
+            const netWeight = valueAt(values, columns.netWeight);
+            const grossWeight = valueAt(values, columns.grossWeight);
+            return {
+                sourceRow: headerRowIndex + index + 2,
+                po: valueAt(values, columns.po),
+                code,
+                name: valueAt(values, columns.name),
+                size: valueAt(values, columns.size),
+                color: valueAt(values, columns.color),
+                quantity,
+                unit: valueAt(values, columns.unit) || 'Cái',
+                note: [
+                    valueAt(values, columns.remark),
+                    carton ? `Carton ${carton}` : '',
+                    netWeight ? `NW ${netWeight} kg` : '',
+                    grossWeight ? `GW ${grossWeight} kg` : '',
+                ].filter(Boolean).join(' · '),
+                location: valueAt(values, columns.location).toUpperCase(),
+            };
+        }).filter(item => item.code && item.code.toUpperCase() !== 'TOTAL' && item.quantity > 0);
+
+        if (!parsed.length) throw new Error('Không có dòng ITEM# và QUANTITY hợp lệ để đưa vào phiếu.');
+        return parsed;
+    }
 
     function showOrderHistoryToast(item = {}) {
         const toast = document.getElementById('orderHistoryToast');
@@ -679,6 +838,163 @@
         window.lucide?.createIcons();
     }
 
+    function pastedCodeCandidates(value, color = '') {
+        const code = cleanClipboardCell(value).toUpperCase();
+        const normalizedColor = cleanClipboardCell(color).toUpperCase();
+        const colorSuffix = /(^|\s)(001A\s+)?WHITE(\s|$)/.test(normalizedColor) ? 'W'
+            : /(^|\s)(095A\s+)?BLACK(\s|$)/.test(normalizedColor) ? 'B'
+                : '';
+        return [...new Set([
+            code,
+            code.replaceAll('_', '-'),
+            colorSuffix && !/[-_]\w+$/.test(code) ? `${code}-${colorSuffix}` : '',
+        ].filter(Boolean))];
+    }
+
+    function searchPastedCatalog(keyword) {
+        const searchKey = cleanClipboardCell(keyword).toUpperCase();
+        if (!pastedCatalogSearchRequests.has(searchKey)) {
+            pastedCatalogSearchRequests.set(searchKey,
+                fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(searchKey)}&limit=30&with_color=0`)
+                    .then(jsonOrError)
+                    .then(result => result.data || [])
+                    .catch(() => [])
+            );
+        }
+        return pastedCatalogSearchRequests.get(searchKey);
+    }
+
+    async function resolvePastedCatalogItem(rawCode, color = '') {
+        const cacheKey = `${cleanClipboardCell(rawCode).toUpperCase()}|${cleanClipboardCell(color).toUpperCase()}`;
+        if (!pastedCatalogResolutions.has(cacheKey)) {
+            const candidates = pastedCodeCandidates(rawCode, color);
+            const request = searchPastedCatalog(candidates[0])
+                .then(async primaryItems => {
+                    const findMatch = items => {
+                        for (const candidate of candidates) {
+                            const match = items.find(item =>
+                            String(item.code || item.value || '').trim().toUpperCase() === candidate
+                            );
+                            if (match) return match;
+                        }
+                        return null;
+                    };
+                    const primaryMatch = findMatch(primaryItems);
+                    if (primaryMatch || candidates.length === 1) return primaryMatch;
+
+                    const fallbackItems = (await Promise.all(
+                        candidates.slice(1).map(searchPastedCatalog)
+                    )).flat();
+                    return findMatch(fallbackItems);
+                })
+                .catch(() => null);
+            pastedCatalogResolutions.set(cacheKey, request);
+        }
+        return pastedCatalogResolutions.get(cacheKey);
+    }
+
+    function pastedLocationCodes(value) {
+        return String(value || '')
+            .split(/[,;|]+/)
+            .map(code => code.trim().toUpperCase())
+            .filter(Boolean);
+    }
+
+    function assignPastedLocationsByFifo(rows) {
+        const balancesByVariant = new Map();
+        rows.forEach(row => {
+            const variantKey = String(row.querySelector('.internal-code').value || '').trim().toUpperCase();
+            if (!balancesByVariant.has(variantKey)) balancesByVariant.set(variantKey, new Map());
+            const balances = balancesByVariant.get(variantKey);
+            const stockLocations = row._stockLocations || [];
+            row._fifoLocationAvailability = new Map();
+            row._fifoAllocations = new Map();
+            stockLocations.forEach(location => {
+                if (!balances.has(location.location_code)) {
+                    balances.set(location.location_code, Number(location.available_quantity || 0));
+                }
+                row._fifoLocationAvailability.set(
+                    location.location_code,
+                    Math.max(0, Number(balances.get(location.location_code) || 0))
+                );
+            });
+
+            const explicit = pastedLocationCodes(row.dataset.explicitPastedLocation || '');
+            const preferred = [...(row._preferredLocations || new Set())];
+            const isManualSelection = row.dataset.manualLocationSelection === '1';
+            const orderedCodes = isManualSelection
+                ? preferred
+                : [...new Set([
+                    ...explicit,
+                    ...preferred,
+                    ...stockLocations.map(location => location.location_code),
+                ])];
+            let remaining = Number(row.querySelector('.quantity').value || 0);
+            const selected = [];
+            orderedCodes.forEach(code => {
+                if (remaining <= 0.0001) return;
+                const available = Math.max(0, Number(balances.get(code) || 0));
+                if (available <= 0) return;
+                selected.push(code);
+                const taken = Math.min(available, remaining);
+                const after = available - taken;
+                balances.set(code, after);
+                row._fifoAllocations.set(code, {before: available, taken, after});
+                remaining -= taken;
+            });
+            if (!selected.length && explicit.length) selected.push(...explicit);
+            row._selectedLocations = new Set(selected);
+            row._fifoUnallocated = Math.max(0, remaining);
+            delete row.dataset.explicitPastedLocation;
+            updateLocationTrigger(row);
+        });
+    }
+
+    async function applyPastedLines(lines) {
+        rowsBody.innerHTML = '';
+        setOperationLoading(true, 'Đang đưa dữ liệu vào phiếu', 'Đang đối chiếu mã và tìm kệ có tồn theo FIFO.');
+        const tasks = lines.map(async item => {
+            addRow(false);
+            const row = rowsBody.lastElementChild;
+            const catalogItem = await resolvePastedCatalogItem(item.code, item.color);
+            const code = catalogItem?.code || catalogItem?.value || pastedCodeCandidates(item.code, item.color)[0];
+            row.querySelector('.production-order').value = item.po;
+            row.dataset.purchaseOrder = item.po;
+            row.querySelector('.internal-code').value = code;
+            row.querySelector('.item-name').value = item.name || catalogItem?.name || code;
+            row.querySelector('.size').value = item.size || catalogItem?.size || '';
+            row.querySelector('.color').value = item.color || catalogItem?.color || '';
+            row.querySelector('.quantity').value = item.quantity;
+            row.querySelector('.unit').value = item.unit || catalogItem?.unit || 'Cái';
+            row.querySelector('.line-note').value = item.note;
+            row.dataset.pastedLocation = item.location;
+            row.dataset.explicitPastedLocation = item.location;
+            row.dataset.matchByCodeOnly = '1';
+            row.dataset.pastedFifo = '1';
+            row.querySelector('.row-state').className = catalogItem ? 'row-state' : 'row-state is-new';
+            row.querySelector('.row-state').textContent = catalogItem
+                ? 'Đã dán · đúng danh mục'
+                : 'Mã chưa có trong danh mục';
+            await loadStockLocations(row);
+            return row;
+        });
+
+        try {
+            await Promise.all(tasks);
+            assignPastedLocationsByFifo([...rowsBody.children]);
+            const withoutStock = [...rowsBody.children].filter(row => !(row._stockLocations || []).length).length;
+            updateSummary();
+            setStatus(
+                `Đã đưa ${lines.length} dòng vào phiếu. Hệ thống đã chọn các kệ theo FIFO.`
+                + (withoutStock ? ` Có ${withoutStock} dòng chưa tìm thấy tồn đúng mã, size và màu.` : ''),
+                withoutStock ? 'error' : 'success'
+            );
+            rowsBody.firstElementChild?.scrollIntoView({block: 'nearest'});
+        } finally {
+            setOperationLoading(false);
+        }
+    }
+
     function bindRow(row) {
         const orderInput = row.querySelector('.production-order');
         const codeInput = row.querySelector('.internal-code');
@@ -702,6 +1018,7 @@
         });
         orderInput.addEventListener('keydown', event => chooseFirstSuggestion(event, row.querySelector('.order-suggestions')));
         codeInput.addEventListener('input', () => {
+            delete row.dataset.matchByCodeOnly;
             resetRowLocations(row);
             delete row.dataset.orderLookup;
             row.querySelector('.order-suggestions').classList.add('d-none');
@@ -728,7 +1045,12 @@
             input.addEventListener('change', () => scheduleStockLocationLoad(row));
         });
         row.querySelector('.location-trigger').addEventListener('click', () => openLocationDialog(row));
-        row.querySelector('.quantity').addEventListener('input', updateSummary);
+        row.querySelector('.quantity').addEventListener('input', () => {
+            updateSummary();
+            if (row.dataset.pastedFifo === '1') {
+                assignPastedLocationsByFifo([...rowsBody.children].filter(item => item.dataset.pastedFifo === '1'));
+            }
+        });
         row.querySelector('.quantity').addEventListener('keydown', event => {
             if (event.key !== 'Enter') return;
             event.preventDefault();
@@ -743,6 +1065,7 @@
             row.remove();
             renumberRows();
             updateSummary();
+            assignPastedLocationsByFifo([...rowsBody.children].filter(item => item.dataset.pastedFifo === '1'));
         });
     }
 
@@ -765,6 +1088,11 @@
         delete row.dataset.purchaseOrder;
         delete row.dataset.orderCustomer;
         delete row.dataset.orderLookup;
+        delete row.dataset.matchByCodeOnly;
+        delete row.dataset.pastedFifo;
+        delete row.dataset.explicitPastedLocation;
+        delete row.dataset.manualLocationSelection;
+        row._preferredLocations = new Set();
         row.querySelectorAll('input').forEach(input => {
             input.value = input.classList.contains('quantity') ? '0' : (input.classList.contains('unit') ? 'Cái' : '');
         });
@@ -782,6 +1110,11 @@
     function resetRowLocations(row) {
         row._stockLocations = [];
         row._selectedLocations = new Set();
+        row._fifoLocationAvailability = new Map();
+        row._fifoAllocations = new Map();
+        row._fifoUnallocated = 0;
+        row._preferredLocations = new Set();
+        delete row.dataset.manualLocationSelection;
         delete row.dataset.locationLookup;
         const input = row.querySelector('.location');
         if (input) input.value = '';
@@ -794,18 +1127,30 @@
         const selected = selectedLocationCodes(row);
         const locations = row._stockLocations || [];
         const selectedRows = locations.filter(item => selected.includes(item.location_code));
+        const allocations = row._fifoAllocations || new Map();
+        const allocated = selected.reduce((sum, code) => sum + Number(allocations.get(code)?.taken || 0), 0);
+        const remainingAfter = selected.reduce((sum, code) => sum + Number(allocations.get(code)?.after || 0), 0);
         const total = selectedRows.reduce((sum, item) => sum + Number(item.available_quantity || 0), 0);
         const loading = row.dataset.locationLoading === '1';
-        const label = loading
+        const singleAllocation = selected.length === 1 ? allocations.get(selected[0]) : null;
+        let label = loading
             ? 'Đang tải kệ...'
             : selected.length === 1
-                ? `${selected[0]} · ${numberFormat(total)}`
+                ? singleAllocation
+                    ? `${selected[0]} · lấy ${numberFormat(singleAllocation.taken)} · còn ${numberFormat(singleAllocation.after)}`
+                    : `${selected[0]} · ${numberFormat(total)}`
                 : selected.length > 1
-                    ? `${selected.length} kệ · ${numberFormat(total)}`
+                    ? allocations.size
+                        ? `${selected.length} kệ · lấy ${numberFormat(allocated)} · còn ${numberFormat(remainingAfter)}`
+                        : `${selected.length} kệ · ${numberFormat(total)}`
                     : locations.length
                         ? 'Chưa chọn kệ'
                         : 'Không có tồn';
+        if (!loading && Number(row._fifoUnallocated || 0) > 0) {
+            label += ` · thiếu ${numberFormat(row._fifoUnallocated)}`;
+        }
         trigger.querySelector('span').textContent = label;
+        trigger.title = label;
         trigger.classList.toggle('is-empty', !selected.length && !locations.length);
         trigger.classList.toggle('is-warning', !loading && !selected.length);
         row.querySelector('.location').value = selected.join(', ');
@@ -827,7 +1172,12 @@
             size: row.querySelector('.size').value.trim(),
             color: row.querySelector('.color').value.trim(),
         });
+        if (row.dataset.matchByCodeOnly === '1') params.set('match_by_code_only', '1');
         const requestKey = params.toString().toUpperCase();
+        if (row.dataset.locationLookup && row.dataset.locationLookup !== requestKey) {
+            row._preferredLocations = new Set();
+            delete row.dataset.manualLocationSelection;
+        }
         row.dataset.locationLookup = requestKey;
         row.dataset.locationLoading = '1';
         updateLocationTrigger(row);
@@ -844,7 +1194,11 @@
             const result = await stockLocationRequests.get(requestKey);
             if (row.dataset.locationLookup !== requestKey) return;
             row._stockLocations = result.data || [];
-            row._selectedLocations = new Set(row._stockLocations.map(item => item.location_code));
+            const requestedLocations = pastedLocationCodes(row.dataset.pastedLocation || '');
+            row._selectedLocations = new Set(requestedLocations.length
+                ? requestedLocations
+                : row._stockLocations.map(item => item.location_code));
+            delete row.dataset.pastedLocation;
         } catch (error) {
             if (row.dataset.locationLookup !== requestKey) return;
             row._stockLocations = [];
@@ -854,21 +1208,37 @@
             if (row.dataset.locationLookup === requestKey) {
                 delete row.dataset.locationLoading;
                 updateLocationTrigger(row);
+                if (row.dataset.pastedFifo === '1') {
+                    assignPastedLocationsByFifo([...rowsBody.children].filter(item => item.dataset.pastedFifo === '1'));
+                }
             }
         }
+    }
+
+    function fifoLocationState(row, item) {
+        const code = item.location_code;
+        const before = Number(row?._fifoLocationAvailability?.get(code) ?? item.available_quantity ?? 0);
+        const allocation = row?._fifoAllocations?.get(code) || null;
+        return {
+            before,
+            taken: Number(allocation?.taken || 0),
+            after: Number(allocation?.after ?? before),
+        };
     }
 
     function renderLocationDialog() {
         const options = activeLocationRow?._stockLocations || [];
         const list = document.getElementById('locationOptions');
-        list.innerHTML = options.length ? options.map((item, index) => `
+        list.innerHTML = options.length ? options.map((item, index) => {
+            const fifo = fifoLocationState(activeLocationRow, item);
+            return `
             <label class="location-option">
                 <input type="checkbox" data-index="${index}" ${locationDraft.has(item.location_code) ? 'checked' : ''}>
                 <strong>${escapeHtml(item.location_code)}</strong>
-                <span>${numberFormat(item.available_quantity)}</span>
-                <small>${numberFormat(item.package_count)} kiện${item.fifo_date ? ` · FIFO ${escapeHtml(isoToDisplayDate(String(item.fifo_date).slice(0, 10)))}` : ''}</small>
+                <span>Còn trước dòng: ${numberFormat(fifo.before)}</span>
+                <small>${fifo.taken > 0 ? `Lấy ${numberFormat(fifo.taken)} · còn sau ${numberFormat(fifo.after)} · ` : ''}${numberFormat(item.package_count)} kiện${item.fifo_date ? ` · FIFO ${escapeHtml(isoToDisplayDate(String(item.fifo_date).slice(0, 10)))}` : ''}</small>
             </label>
-        `).join('') : '<div class="location-empty">Không có tồn phù hợp với đúng mã, size và màu của dòng này.</div>';
+        `;}).join('') : '<div class="location-empty">Không có tồn phù hợp với đúng mã, size và màu của dòng này.</div>';
         list.querySelectorAll('input[type="checkbox"]').forEach(input => {
             input.addEventListener('change', () => {
                 const item = options[Number(input.dataset.index)];
@@ -883,8 +1253,8 @@
     function updateLocationDialogSummary() {
         const options = activeLocationRow?._stockLocations || [];
         const selectedRows = options.filter(item => locationDraft.has(item.location_code));
-        const total = selectedRows.reduce((sum, item) => sum + Number(item.available_quantity || 0), 0);
-        document.getElementById('locationDialogTotal').textContent = `${selectedRows.length} kệ · ${numberFormat(total)}`;
+        const total = selectedRows.reduce((sum, item) => sum + fifoLocationState(activeLocationRow, item).before, 0);
+        document.getElementById('locationDialogTotal').textContent = `${selectedRows.length} kệ · còn trước dòng ${numberFormat(total)}`;
         const selectAll = document.getElementById('selectAllLocations');
         selectAll.checked = options.length > 0 && selectedRows.length === options.length;
         selectAll.indeterminate = selectedRows.length > 0 && selectedRows.length < options.length;
@@ -1264,6 +1634,7 @@
                 dvt: row.querySelector('.unit').value.trim(),
                 location_codes: locationCodes,
                 location_code: locationCodes.join(', '),
+                match_by_code_only: row.dataset.matchByCodeOnly === '1',
                 note: row.querySelector('.line-note').value.trim(),
                 customer: row.dataset.orderCustomer || document.getElementById('customerName').value.trim(),
             };
@@ -1323,6 +1694,17 @@
         }
         if (!lines.length || lines.some(line => !line.internal_item_code || line.quantity <= 0)) {
             setStatus('Mỗi dòng sử dụng cần mã nội bộ và số lượng lớn hơn 0.', 'error');
+            return;
+        }
+        const missingManualLocationRow = [...rowsBody.children].find(row =>
+            row.dataset.manualLocationSelection === '1'
+            && row.querySelector('.internal-code').value.trim()
+            && Number(row.querySelector('.quantity').value || 0) > 0
+            && selectedLocationCodes(row).length === 0
+        );
+        if (missingManualLocationRow) {
+            setStatus('Dòng đã bỏ chọn kệ đang để trống. Hãy chọn lại đúng kệ trước khi lưu.', 'error');
+            missingManualLocationRow.querySelector('.location-trigger')?.focus();
             return;
         }
 
@@ -1454,6 +1836,32 @@
         rowsBody.querySelector('.internal-code')?.focus();
     }
 
+    function previewPastedExcel() {
+        const summary = document.getElementById('pasteExcelSummary');
+        const text = document.getElementById('pasteExcelData').value;
+        if (!text.trim()) {
+            summary.textContent = 'Chưa có dữ liệu.';
+            return;
+        }
+        try {
+            const lines = parseFinishedGoodsPaste(text);
+            const total = lines.reduce((sum, line) => sum + line.quantity, 0);
+            const locations = new Set(lines.flatMap(line => pastedLocationCodes(line.location)));
+            summary.textContent = `${numberFormat(lines.length)} dòng · Tổng ${numberFormat(total)} · ${locations.size ? `${locations.size} vị trí có sẵn` : 'sẽ tự dò kệ FIFO'}`;
+        } catch (error) {
+            summary.textContent = error.message;
+        }
+    }
+
+    function openPasteExcelDialog() {
+        const dialog = document.getElementById('pasteExcelDialog');
+        document.getElementById('pasteExcelData').value = '';
+        previewPastedExcel();
+        dialog.showModal();
+        setTimeout(() => document.getElementById('pasteExcelData').focus(), 0);
+        window.lucide?.createIcons();
+    }
+
     document.addEventListener('click', event => {
         if (event.target.closest('.suggest-wrap')) return;
         document.querySelectorAll('.suggestions').forEach(panel => panel.classList.add('d-none'));
@@ -1467,18 +1875,38 @@
     });
     document.getElementById('applyLocationBtn').addEventListener('click', () => {
         if (!activeLocationRow) return;
-        if ((activeLocationRow._stockLocations || []).length && locationDraft.size === 0) {
-            setStatus('Chọn ít nhất một kệ đang có tồn cho dòng này.', 'error');
-            return;
-        }
         activeLocationRow._selectedLocations = new Set(locationDraft);
-        updateLocationTrigger(activeLocationRow);
+        activeLocationRow._preferredLocations = new Set(locationDraft);
+        activeLocationRow.dataset.manualLocationSelection = '1';
+        if (activeLocationRow.dataset.pastedFifo === '1') {
+            assignPastedLocationsByFifo([...rowsBody.children].filter(item => item.dataset.pastedFifo === '1'));
+        } else {
+            updateLocationTrigger(activeLocationRow);
+        }
         document.getElementById('locationDialog').close();
     });
     ['closeLocationDialogBtn', 'cancelLocationBtn'].forEach(id => {
         document.getElementById(id).addEventListener('click', () => document.getElementById('locationDialog').close());
     });
     document.getElementById('addRowBtn').addEventListener('click', () => addRow(true));
+    document.getElementById('pasteExcelBtn').addEventListener('click', openPasteExcelDialog);
+    document.getElementById('pasteExcelData').addEventListener('input', previewPastedExcel);
+    ['closePasteExcelBtn', 'cancelPasteExcelBtn'].forEach(id => {
+        document.getElementById(id).addEventListener('click', () => document.getElementById('pasteExcelDialog').close());
+    });
+    document.getElementById('applyPasteExcelBtn').addEventListener('click', async event => {
+        const button = event.currentTarget;
+        try {
+            const lines = parseFinishedGoodsPaste(document.getElementById('pasteExcelData').value);
+            button.disabled = true;
+            document.getElementById('pasteExcelDialog').close();
+            await applyPastedLines(lines);
+        } catch (error) {
+            document.getElementById('pasteExcelSummary').textContent = error.message;
+        } finally {
+            button.disabled = false;
+        }
+    });
     document.getElementById('resetBtn').addEventListener('click', () => resetForm(true));
     document.getElementById('saveIssueBtn').addEventListener('click', () => saveIssue(false));
     customerNameInput.addEventListener('focus', () => loadCustomerSuggestions(customerNameInput.value));

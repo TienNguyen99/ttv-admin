@@ -324,6 +324,7 @@ Route::get('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}', [WarehouseCountControlle
 Route::get('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}/lien-ket', [WarehouseCountController::class, 'receiptLinks']);
 Route::put('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}', [WarehouseCountController::class, 'updateReceiptBatch']);
 Route::patch('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}/vi-tri', [WarehouseCountController::class, 'updateReceiptLocation']);
+Route::delete('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}/dong/{line}', [WarehouseCountController::class, 'destroyReceiptLine']);
 Route::delete('/api/kiem-ton-kho/phieu-nhap-tp/{receipt}', [WarehouseCountController::class, 'destroyReceipt']);
 Route::patch('/api/kiem-ton-kho/kien/{inventoryPackage}/chuyen-vi-tri', [WarehouseCountController::class, 'movePackage']);
 Route::delete('/api/kiem-ton-kho/kien/{inventoryPackage}', [WarehouseCountController::class, 'destroyPackage']);
