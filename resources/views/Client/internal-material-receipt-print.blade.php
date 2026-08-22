@@ -45,6 +45,8 @@
         .company-logo { display: block; width: 16mm; height: auto; margin-bottom: 1px; }
         .company { margin-top: 1px; font-size: 10px; font-weight: 700; }
         h1 { margin: 0; text-align: center; font-size: 18px; font-weight: 800; text-transform: uppercase; }
+        .operation { margin-top: 1mm; text-align: center; font-family: Arial, sans-serif; font-size: 8px; font-weight: 700; }
+        .operation.is-issued { color: #047857; }
         .department { position: absolute; right: 15mm; top: 9mm; font-size: 11px; font-weight: 700; }
         .receipt-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9px; }
         .receipt-table th,
@@ -77,6 +79,9 @@
 <body>
     <div class="toolbar">
         <button type="button" onclick="window.print()">In phiếu</button>
+        @if ($customerIssue)
+            <button type="button" onclick="window.open('{{ url('/client/xuat-vat-tu-noi-bo/' . $customerIssue->id . '/in') }}', '_blank')">Mở phiếu xuất {{ $customerIssue->issue_code }}</button>
+        @endif
         <button type="button" onclick="window.close()">Đóng</button>
     </div>
 
@@ -100,6 +105,9 @@
                             <div class="company">Công ty Nhãn Thời Gian Việt Tiến</div>
                         </div>
                         <h1>Phiếu nhập kho</h1>
+                        <div class="operation {{ $customerIssue ? 'is-issued' : '' }}">
+                            {{ $customerIssue ? 'NGHIỆP VỤ: NHẬP + XUẤT THÀNH PHẨM' : 'NGHIỆP VỤ: CHỈ NHẬP KHO' }}
+                        </div>
                         <div class="department">BỘ PHẬN: KCS</div>
                     </header>
 
@@ -162,6 +170,9 @@
                         Số phiếu: {{ $receipt->receipt_code }}
                         @if ($pages->count() > 1)
                             · Trang {{ $pageIndex + 1 }}/{{ $pages->count() }}
+                        @endif
+                        @if ($customerIssue)
+                            · Phiếu xuất: {{ $customerIssue->issue_code }}
                         @endif
                         · Liên {{ $copy }}
                     </div>

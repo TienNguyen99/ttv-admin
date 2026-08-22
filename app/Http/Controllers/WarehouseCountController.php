@@ -754,14 +754,18 @@ class WarehouseCountController extends Controller
         $limit = min(max((int) $request->query('limit', 100), 1), 500);
         $receipts = $query->with('lines')->limit($limit)->get();
         $fifoStatuses = $this->receiptFifoStatuses($receipts);
+        $customerIssues = InternalMaterialIssue::query()
+            ->where('issue_type', 'customer')
+            ->where('status', 'posted')
+            ->whereIn('source_receipt_id', $receipts->pluck('id'))
+            ->orderByDesc('id')
+            ->get()
+            ->unique('source_receipt_id')
+            ->keyBy('source_receipt_id');
 
         return response()->json([
-            'data' => $receipts->map(function ($receipt) use ($fifoStatuses) {
-                $issue = InternalMaterialIssue::query()
-                    ->where('source_receipt_id', $receipt->id)
-                    ->orWhere('note', 'like', '%' . $receipt->receipt_code . '%')
-                    ->orderByDesc('id')
-                    ->first();
+            'data' => $receipts->map(function ($receipt) use ($fifoStatuses, $customerIssues) {
+                $issue = $customerIssues->get($receipt->id);
                 $fifo = $fifoStatuses[$receipt->id] ?? [
                     'issue_status' => $issue ? 'exported' : 'not_exported',
                     'issued_quantity' => $issue ? (float) ($receipt->total_quantity ?? 0) : 0,
@@ -791,6 +795,8 @@ class WarehouseCountController extends Controller
                     'issue_code' => $issue->issue_code ?? null,
                     'issue_type' => $issue->issue_type ?? null,
                     'issue_id' => $issue->id ?? null,
+                    'receipt_flow' => $issue ? 'receipt_and_customer_issue' : 'receipt_only',
+                    'operation_label' => $issue ? 'Nhập + xuất thành phẩm' : 'Chỉ nhập kho',
                     'issue_print_url' => $issue ? url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in') : null,
                     'print_url' => url('/client/nhap-thanh-pham-noi-bo/' . $receipt->id . '/in'),
                 ];
@@ -3984,8 +3990,16 @@ class WarehouseCountController extends Controller
 
     public function printMaterialReceipt(InternalMaterialReceipt $receipt)
     {
+        $customerIssue = InternalMaterialIssue::query()
+            ->where('source_receipt_id', $receipt->id)
+            ->where('issue_type', 'customer')
+            ->where('status', 'posted')
+            ->orderByDesc('id')
+            ->first();
+
         return view('client.internal-material-receipt-print', [
             'receipt' => $receipt->load('lines'),
+            'customerIssue' => $customerIssue,
         ]);
     }
 

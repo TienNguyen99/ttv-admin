@@ -339,6 +339,131 @@
         .location-option span { color: #334155; font-size: 13px; font-weight: 800; }
         .location-option small { color: #64748b; font-size: 11px; text-align: right; }
         .location-empty { padding: 24px 12px; color: #64748b; text-align: center; }
+        .picking-guide {
+            margin: 4px 14px 12px;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f8fbff;
+        }
+        .picking-guide[hidden] { display: none; }
+        .picking-guide__head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-bottom: 1px solid #dbeafe;
+            background: #eff6ff;
+        }
+        .picking-guide__head strong { color: #123b6d; font-size: 14px; }
+        .picking-guide__head span { color: #64748b; font-size: 11px; font-weight: 700; }
+        .picking-guide__list { display: grid; gap: 8px; padding: 10px; }
+        .pick-row { border: 1px solid #dbe3ef; border-radius: 7px; background: #fff; }
+        .pick-row__title {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 10px;
+            color: #0f2f63;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .pick-step {
+            display: grid;
+            grid-template-columns: 22px 72px minmax(130px, 1fr) auto;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            border-top: 1px solid #eef2f7;
+            color: #334155;
+            font-size: 12px;
+        }
+        .pick-step input { width: 17px; height: 17px; accent-color: #168a55; }
+        .pick-step strong { color: #0f2f63; }
+        .pick-step small { color: #64748b; }
+        .pick-step__qty { color: #137a4b; font-weight: 900; white-space: nowrap; }
+        .pick-step.is-done { background: #f0fdf4; color: #64748b; }
+        .pick-step.is-done strong, .pick-step.is-done .pick-step__qty { text-decoration: line-through; opacity: .7; }
+        .picking-guide__actions { display: flex; align-items: center; gap: 10px; }
+        .picking-dialog {
+            width: min(720px, calc(100vw - 24px));
+            max-height: min(760px, calc(100vh - 24px));
+            overflow: hidden;
+        }
+        .picking-dialog__head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px 18px 12px;
+        }
+        .picking-dialog__head strong { display: block; color: var(--blue-dark); font-size: 18px; }
+        .picking-dialog__head span { color: #64748b; font-size: 12px; font-weight: 700; }
+        .picking-progress { height: 6px; background: #e2e8f0; }
+        .picking-progress span {
+            display: block;
+            width: 0;
+            height: 100%;
+            border-radius: 0 999px 999px 0;
+            background: #2563eb;
+            transition: width 180ms ease;
+        }
+        .picking-dialog__body { display: grid; gap: 14px; padding: 20px 18px; }
+        .picking-row-label {
+            overflow: hidden;
+            color: #475569;
+            font-size: 13px;
+            font-weight: 800;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .picking-main {
+            display: grid;
+            grid-template-columns: minmax(150px, .6fr) minmax(0, 1.4fr);
+            gap: 14px;
+        }
+        .picking-shelf {
+            display: grid;
+            min-height: 156px;
+            place-items: center;
+            border: 2px solid #60a5fa;
+            border-radius: 8px;
+            background: #eff6ff;
+            color: #123b6d;
+            font-size: 64px;
+            font-weight: 900;
+            line-height: 1;
+        }
+        .picking-instruction {
+            display: flex;
+            min-width: 0;
+            flex-direction: column;
+            justify-content: center;
+            gap: 7px;
+            padding: 16px;
+            border: 1px solid #dbe3ef;
+            border-radius: 8px;
+            background: #fff;
+        }
+        .picking-instruction small { color: #64748b; font-size: 12px; font-weight: 700; }
+        .picking-instruction strong { color: #0f2f63; font-size: 24px; line-height: 1.25; }
+        .picking-instruction span { color: #137a4b; font-size: 20px; font-weight: 900; }
+        .picking-return {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border: 1px solid #f6c453;
+            border-radius: 8px;
+            background: #fff8e6;
+            color: #7c4a03;
+        }
+        .picking-return[hidden] { display: none; }
+        .picking-return svg { width: 22px; height: 22px; flex: 0 0 auto; }
+        .picking-return strong { display: block; font-size: 13px; }
+        .picking-return span { display: block; margin-top: 2px; font-size: 15px; font-weight: 900; }
+        .picking-dialog .confirm-actions { justify-content: space-between; }
         .paste-dialog { width: min(960px, calc(100vw - 24px)); }
         .paste-area {
             width: 100%;
@@ -353,9 +478,46 @@
         }
         .paste-area:focus { border-color: #3b82f6; outline: 3px solid rgba(59, 130, 246, .14); }
         .paste-summary { min-height: 24px; margin-top: 10px; color: #475569; font-size: 13px; font-weight: 700; }
+        .draft-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 12px; }
+        .draft-results { display: grid; gap: 7px; max-height: min(430px, 55vh); margin-top: 10px; overflow: auto; }
+        .draft-result {
+            display: grid;
+            grid-template-columns: minmax(150px, .7fr) minmax(180px, 1fr) auto;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid #dbe3ef;
+            border-radius: 8px;
+            background: #fff;
+            color: #334155;
+            text-align: left;
+        }
+        .draft-result:hover { border-color: #60a5fa; background: #eff6ff; }
+        .draft-result strong { color: #0f2f63; }
+        .draft-result small { color: #64748b; }
+        .draft-result__main { min-width: 0; }
+        .draft-result__main strong, .draft-result__main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .draft-result__status { color: #b45309; font-size: 11px; font-weight: 900; text-align: right; }
+        .draft-count {
+            display: inline-grid;
+            min-width: 20px;
+            height: 20px;
+            place-items: center;
+            padding: 0 5px;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: #1d4ed8;
+            font-size: 11px;
+            font-weight: 900;
+        }
         @media (max-width: 640px) {
             .location-option { grid-template-columns: auto 1fr auto; }
             .location-option small { grid-column: 2 / 4; text-align: left; }
+            .picking-guide__head { align-items: flex-start; flex-direction: column; }
+            .picking-guide__actions { width: 100%; justify-content: space-between; }
+            .picking-main { grid-template-columns: 1fr; }
+            .picking-shelf { min-height: 105px; font-size: 48px; }
+            .picking-instruction strong { font-size: 20px; }
         }
         .spin { animation: spin .8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -425,6 +587,9 @@
         <h1 class="issue-title">Xuất thành phẩm</h1>
         <div class="issue-actions">
             <a class="btn-quick" href="{{ url('/client/nhap-thanh-pham-nhanh') }}"><i data-lucide="arrow-left"></i>Chọn lại</a>
+            <button id="findDraftBtn" class="btn-quick" type="button"><i data-lucide="search"></i>Phiếu chờ <span id="draftCountBadge" class="draft-count">0</span></button>
+            <button id="startPickingBtn" class="btn-quick btn-primary-quick" type="button" hidden><i data-lucide="play"></i>Bắt đầu soạn</button>
+            <button id="saveDraftBtn" class="btn-quick" type="button"><i data-lucide="save"></i>Lưu chờ soạn</button>
             <button id="saveIssueBtn" class="btn-quick btn-primary-quick" type="button"><i data-lucide="printer"></i>Lưu + in</button>
         </div>
     </header>
@@ -481,6 +646,15 @@
                 <tbody id="issueRows"></tbody>
             </table>
         </div>
+        <section id="pickingGuide" class="picking-guide" hidden>
+            <div class="picking-guide__head">
+                <strong>Hướng dẫn soạn hàng</strong>
+                <div class="picking-guide__actions">
+                    <span id="pickingGuideSummary"></span>
+                </div>
+            </div>
+            <div id="pickingGuideList" class="picking-guide__list"></div>
+        </section>
         <div id="formStatus" class="status"><i data-lucide="info"></i><span>Chọn mã trong danh mục rồi nhập số lượng.</span></div>
     </section>
 </main>
@@ -493,6 +667,40 @@
     <div class="confirm-actions">
         <button id="cancelConfirmBtn" class="btn-quick" type="button">Kiểm tra lại</button>
         <button id="acceptConfirmBtn" class="btn-quick btn-primary-quick" type="button"><i data-lucide="check"></i>Xác nhận xuất</button>
+    </div>
+</dialog>
+
+<dialog id="pickingDialog" class="confirm-dialog picking-dialog" tabindex="-1">
+    <div class="picking-dialog__head">
+        <div>
+            <strong>Soạn hàng</strong>
+            <span id="pickingProgressText">Bước 1/1</span>
+        </div>
+        <button id="closePickingDialogBtn" class="location-close" type="button" aria-label="Đóng"><i data-lucide="x"></i></button>
+    </div>
+    <div class="picking-progress" aria-hidden="true"><span id="pickingProgressBar"></span></div>
+    <div class="picking-dialog__body">
+        <div id="pickingRowLabel" class="picking-row-label"></div>
+        <div class="picking-main">
+            <div id="pickingShelfCode" class="picking-shelf"></div>
+            <div class="picking-instruction">
+                <small>LẤY HÀNG</small>
+                <strong id="pickingInstruction"></strong>
+                <span id="pickingTotal"></span>
+                <small id="pickingPackageHint"></small>
+            </div>
+        </div>
+        <div id="pickingReturnBox" class="picking-return" hidden>
+            <i data-lucide="undo-2"></i>
+            <div>
+                <strong>Đặt phần còn lại về đúng vị trí</strong>
+                <span id="pickingReturnText"></span>
+            </div>
+        </div>
+    </div>
+    <div class="confirm-actions">
+        <button id="previousPickingBtn" class="btn-quick" type="button"><i data-lucide="arrow-left"></i>Trước</button>
+        <button id="completePickingBtn" class="btn-quick btn-primary-quick" type="button"><i data-lucide="check"></i>Xong, bước tiếp</button>
     </div>
 </dialog>
 
@@ -514,6 +722,23 @@
     <div class="confirm-actions">
         <button id="cancelLocationBtn" class="btn-quick" type="button">Hủy</button>
         <button id="applyLocationBtn" class="btn-quick btn-primary-quick" type="button"><i data-lucide="check"></i>Áp dụng</button>
+    </div>
+</dialog>
+
+<dialog id="draftSearchDialog" class="confirm-dialog location-dialog">
+    <div class="confirm-body">
+        <div class="location-dialog-head">
+            <div>
+                <h2>Phiếu chờ soạn <span id="draftDialogCount">(0)</span></h2>
+                <p>Tất cả phiếu chờ mới nhất được hiển thị sẵn. Chọn phiếu để tiếp tục soạn và sửa vị trí.</p>
+            </div>
+            <button id="closeDraftSearchBtn" class="location-close" type="button" aria-label="Đóng"><i data-lucide="x"></i></button>
+        </div>
+        <div class="draft-search">
+            <input id="draftSearchKeyword" class="form-control" autocomplete="off" placeholder="Nhập số phiếu, PO, lệnh hoặc mã hàng">
+            <button id="runDraftSearchBtn" class="btn-quick btn-primary-quick" type="button"><i data-lucide="search"></i>Tìm</button>
+        </div>
+        <div id="draftSearchResults" class="draft-results"></div>
     </div>
 </dialog>
 
@@ -561,11 +786,14 @@
     let customerSuggestionTimer = null;
     let activeLocationRow = null;
     let locationDraft = new Set();
+    let editingIssueId = null;
     const suggestionTimers = new WeakMap();
     const locationTimers = new WeakMap();
     const stockLocationRequests = new Map();
     const pastedCatalogSearchRequests = new Map();
     const pastedCatalogResolutions = new Map();
+    const completedPickingSteps = new Set();
+    let activePickingStepIndex = 0;
 
     function setOperationLoading(loading, title = 'Đang xử lý phiếu xuất', detail = 'Vui lòng chờ, không đóng trang.') {
         const loader = document.getElementById('operationLoader');
@@ -695,6 +923,7 @@
                 size: valueAt(values, columns.size),
                 color: valueAt(values, columns.color),
                 quantity,
+                carton,
                 unit: valueAt(values, columns.unit) || 'Cái',
                 note: [
                     valueAt(values, columns.remark),
@@ -902,17 +1131,41 @@
 
     function assignPastedLocationsByFifo(rows) {
         const balancesByVariant = new Map();
+        const packageBalancesByVariant = new Map();
+        const quantitiesByVariant = new Map();
+        rows.forEach(row => {
+            const key = String(row.querySelector('.internal-code').value || '').trim().toUpperCase();
+            const quantity = Number(row.querySelector('.quantity').value || 0);
+            if (!key || quantity <= 0) return;
+            if (!quantitiesByVariant.has(key)) quantitiesByVariant.set(key, new Map());
+            const frequencies = quantitiesByVariant.get(key);
+            frequencies.set(quantity, Number(frequencies.get(quantity) || 0) + 1);
+        });
+        const cartonNorms = new Map([...quantitiesByVariant.entries()].map(([key, frequencies]) => {
+            const ranked = [...frequencies.entries()].sort((left, right) => right[1] - left[1] || right[0] - left[0]);
+            return [key, Number(ranked[0]?.[0] || 0)];
+        }));
+
         rows.forEach(row => {
             const variantKey = String(row.querySelector('.internal-code').value || '').trim().toUpperCase();
             if (!balancesByVariant.has(variantKey)) balancesByVariant.set(variantKey, new Map());
+            if (!packageBalancesByVariant.has(variantKey)) packageBalancesByVariant.set(variantKey, new Map());
             const balances = balancesByVariant.get(variantKey);
+            const packageBalances = packageBalancesByVariant.get(variantKey);
             const stockLocations = row._stockLocations || [];
             row._fifoLocationAvailability = new Map();
             row._fifoAllocations = new Map();
+            row._fifoPackageAllocations = [];
             stockLocations.forEach(location => {
                 if (!balances.has(location.location_code)) {
                     balances.set(location.location_code, Number(location.available_quantity || 0));
                 }
+                (location.packages || []).forEach(packageItem => {
+                    const packageKey = String(packageItem.id || packageItem.package_code || '');
+                    if (!packageBalances.has(packageKey)) {
+                        packageBalances.set(packageKey, Number(packageItem.quantity || 0));
+                    }
+                });
                 row._fifoLocationAvailability.set(
                     location.location_code,
                     Math.max(0, Number(balances.get(location.location_code) || 0))
@@ -922,14 +1175,37 @@
             const explicit = pastedLocationCodes(row.dataset.explicitPastedLocation || '');
             const preferred = [...(row._preferredLocations || new Set())];
             const isManualSelection = row.dataset.manualLocationSelection === '1';
+            const requestedQuantity = Number(row.querySelector('.quantity').value || 0);
+            const cartonNorm = Number(cartonNorms.get(variantKey) || requestedQuantity || 0);
+            const isPartialCarton = cartonNorm > 0 && requestedQuantity + 0.0001 < cartonNorm;
+            row._cartonNorm = cartonNorm;
+            row._isPartialCarton = isPartialCarton;
+            const isLooseLocation = location => {
+                const available = Math.max(0, Number(balances.get(location.location_code) || 0));
+                if (cartonNorm <= 0 || available <= 0) return false;
+                const remainder = available % cartonNorm;
+                return available + 0.0001 < cartonNorm
+                    || (remainder > 0.0001 && Math.abs(remainder - cartonNorm) > 0.0001);
+            };
+            const prioritizedLocations = isPartialCarton
+                ? [
+                    ...stockLocations.filter(location => !location.is_outsourced && isLooseLocation(location)),
+                    ...stockLocations.filter(location => !location.is_outsourced && !isLooseLocation(location)),
+                    ...stockLocations.filter(location => location.is_outsourced),
+                ]
+                : [
+                    ...stockLocations.filter(location => location.is_outsourced),
+                    ...stockLocations.filter(location => !location.is_outsourced && !isLooseLocation(location)),
+                    ...stockLocations.filter(location => !location.is_outsourced && isLooseLocation(location)),
+                ];
             const orderedCodes = isManualSelection
                 ? preferred
                 : [...new Set([
                     ...explicit,
                     ...preferred,
-                    ...stockLocations.map(location => location.location_code),
+                    ...prioritizedLocations.map(location => location.location_code),
                 ])];
-            let remaining = Number(row.querySelector('.quantity').value || 0);
+            let remaining = requestedQuantity;
             const selected = [];
             orderedCodes.forEach(code => {
                 if (remaining <= 0.0001) return;
@@ -940,6 +1216,26 @@
                 const after = available - taken;
                 balances.set(code, after);
                 row._fifoAllocations.set(code, {before: available, taken, after});
+                let packageQuantityToTake = taken;
+                const location = stockLocations.find(item => item.location_code === code);
+                (location?.packages || []).forEach(packageItem => {
+                    if (packageQuantityToTake <= 0.0001) return;
+                    const packageKey = String(packageItem.id || packageItem.package_code || '');
+                    const packageBefore = Math.max(0, Number(packageBalances.get(packageKey) || 0));
+                    if (packageBefore <= 0) return;
+                    const packageTaken = Math.min(packageBefore, packageQuantityToTake);
+                    const packageAfter = packageBefore - packageTaken;
+                    packageBalances.set(packageKey, packageAfter);
+                    row._fifoPackageAllocations.push({
+                        id: packageKey,
+                        packageCode: packageItem.package_code || `Kiện ${packageKey}`,
+                        locationCode: code,
+                        before: packageBefore,
+                        taken: packageTaken,
+                        after: packageAfter,
+                    });
+                    packageQuantityToTake -= packageTaken;
+                });
                 remaining -= taken;
             });
             if (!selected.length && explicit.length) selected.push(...explicit);
@@ -948,6 +1244,7 @@
             delete row.dataset.explicitPastedLocation;
             updateLocationTrigger(row);
         });
+        renderPickingGuide();
     }
 
     async function applyPastedLines(lines) {
@@ -960,6 +1257,7 @@
             const code = catalogItem?.code || catalogItem?.value || pastedCodeCandidates(item.code, item.color)[0];
             row.querySelector('.production-order').value = item.po;
             row.dataset.purchaseOrder = item.po;
+            row.dataset.pastedCarton = item.carton || '';
             row.querySelector('.internal-code').value = code;
             row.querySelector('.item-name').value = item.name || catalogItem?.name || code;
             row.querySelector('.size').value = item.size || catalogItem?.size || '';
@@ -985,7 +1283,7 @@
             const withoutStock = [...rowsBody.children].filter(row => !(row._stockLocations || []).length).length;
             updateSummary();
             setStatus(
-                `Đã đưa ${lines.length} dòng vào phiếu. Hệ thống đã chọn các kệ theo FIFO.`
+                `Đã đưa ${lines.length} dòng vào phiếu. Thùng nguyên ưu tiên hàng gia công; thùng lẻ ưu tiên vị trí lẻ, sau đó mới áp dụng FIFO.`
                 + (withoutStock ? ` Có ${withoutStock} dòng chưa tìm thấy tồn đúng mã, size và màu.` : ''),
                 withoutStock ? 'error' : 'success'
             );
@@ -1104,7 +1402,9 @@
     }
 
     function selectedLocationCodes(row) {
-        return [...(row._selectedLocations || new Set())];
+        return [...new Set([...(row._selectedLocations || new Set())]
+            .map(value => String(value || '').trim().toUpperCase())
+            .filter(Boolean))];
     }
 
     function resetRowLocations(row) {
@@ -1112,6 +1412,7 @@
         row._selectedLocations = new Set();
         row._fifoLocationAvailability = new Map();
         row._fifoAllocations = new Map();
+        row._fifoPackageAllocations = [];
         row._fifoUnallocated = 0;
         row._preferredLocations = new Set();
         delete row.dataset.manualLocationSelection;
@@ -1171,6 +1472,7 @@
             internal_item_code: code,
             size: row.querySelector('.size').value.trim(),
             color: row.querySelector('.color').value.trim(),
+            include_packages: '1',
         });
         if (row.dataset.matchByCodeOnly === '1') params.set('match_by_code_only', '1');
         const requestKey = params.toString().toUpperCase();
@@ -1641,10 +1943,185 @@
         }).filter(line => line.internal_item_code || line.quantity > 0);
     }
 
+    function buildPickingPlan() {
+        return [...rowsBody.children].flatMap((row, index) => {
+            const packageAllocations = row._fifoPackageAllocations || [];
+            const allocations = packageAllocations.length
+                ? packageAllocations
+                : [...(row._fifoAllocations || new Map()).entries()]
+                    .filter(([, allocation]) => Number(allocation?.taken || 0) > 0.0001)
+                    .map(([locationCode, allocation]) => ({
+                        id: `stock-${locationCode}`,
+                        packageCode: 'Tồn tại kệ',
+                        locationCode,
+                        before: Number(allocation.before || 0),
+                        taken: Number(allocation.taken || 0),
+                        after: Number(allocation.after || 0),
+                    }));
+            if (!allocations.length) return [];
+
+            const code = row.querySelector('.internal-code').value.trim();
+            const order = row.querySelector('.production-order').value.trim();
+            const po = String(row.dataset.purchaseOrder || '').trim();
+            const color = row.querySelector('.color').value.trim();
+            const unit = row.querySelector('.unit').value.trim();
+            const cartonNorm = Number(row._cartonNorm || 0);
+            const title = [`Dòng ${index + 1}`, po ? `PO ${po}` : '', order, code, color].filter(Boolean).join(' · ');
+            const locationGroups = [...allocations.reduce((groups, item) => {
+                if (!groups.has(item.locationCode)) groups.set(item.locationCode, []);
+                groups.get(item.locationCode).push(item);
+                return groups;
+            }, new Map()).entries()];
+
+            return locationGroups.map(([locationCode, packages]) => {
+                const totalTaken = packages.reduce((sum, item) => sum + Number(item.taken || 0), 0);
+                const wholeCartons = cartonNorm > 0 ? Math.floor((totalTaken + 0.0001) / cartonNorm) : 0;
+                const looseTaken = cartonNorm > 0 ? Math.max(0, totalTaken - (wholeCartons * cartonNorm)) : totalTaken;
+                const partiallyUsedPackages = packages.filter(item => item.taken > 0.0001 && item.after > 0.0001);
+                const returnQuantity = looseTaken > 0.0001
+                    ? partiallyUsedPackages.reduce((sum, item) => sum + Number(item.after || 0), 0)
+                    : 0;
+                const instructions = [];
+                if (wholeCartons > 0) instructions.push(`${wholeCartons} thùng nguyên`);
+                if (looseTaken > 0.0001) instructions.push(`${numberFormat(looseTaken)} ${unit} lẻ`);
+                if (!instructions.length) instructions.push(`${numberFormat(totalTaken)} ${unit}`);
+                const packageHint = packages.length <= 3
+                    ? packages.map(item => item.packageCode).join(', ')
+                    : `${packages.length} kiện · ${packages[0].packageCode} … ${packages[packages.length - 1].packageCode}`;
+
+                return {
+                    key: `${row.dataset.rowId}:${locationCode}:${totalTaken}`,
+                    rowIndex: index,
+                    title,
+                    locationCode,
+                    totalTaken,
+                    unit,
+                    instruction: instructions.join(' + '),
+                    packageHint,
+                    returnQuantity,
+                };
+            });
+        });
+    }
+
+    function renderPickingGuide() {
+        const guide = document.getElementById('pickingGuide');
+        const list = document.getElementById('pickingGuideList');
+        const plan = buildPickingPlan();
+        const startButton = document.getElementById('startPickingBtn');
+        const rowGroups = [...plan.reduce((groups, step) => {
+            if (!groups.has(step.rowIndex)) groups.set(step.rowIndex, []);
+            groups.get(step.rowIndex).push(step);
+            return groups;
+        }, new Map()).values()];
+
+        guide.hidden = plan.length === 0;
+        startButton.hidden = plan.length === 0 && !editingIssueId;
+        startButton.disabled = plan.length === 0;
+        startButton.title = plan.length ? `${plan.length} bước soạn hàng` : 'Chưa có dòng nào đủ tồn và vị trí để soạn';
+        if (!plan.length) {
+            list.innerHTML = '';
+            document.getElementById('pickingGuideSummary').textContent = '';
+            return;
+        }
+
+        const completedCount = plan.filter(step => completedPickingSteps.has(step.key)).length;
+        document.getElementById('pickingGuideSummary').textContent = `${completedCount}/${plan.length} bước đã xong`;
+        list.innerHTML = rowGroups.map(steps => {
+            const rowTotal = steps.reduce((sum, step) => sum + step.totalTaken, 0);
+            return `
+                <article class="pick-row">
+                    <div class="pick-row__title">
+                        <span>${escapeHtml(steps[0].title)}</span>
+                        <span>${numberFormat(rowTotal)} ${escapeHtml(steps[0].unit)}</span>
+                    </div>
+                    ${steps.map(step => {
+                        const checked = completedPickingSteps.has(step.key);
+                        return `
+                            <label class="pick-step${checked ? ' is-done' : ''}">
+                                <input type="checkbox" data-pick-key="${escapeHtml(step.key)}" ${checked ? 'checked' : ''}>
+                                <strong>${escapeHtml(step.locationCode)}</strong>
+                                <span>${escapeHtml(step.packageHint)}<br><small>${step.returnQuantity > 0 ? `Trả lại: ${numberFormat(step.returnQuantity)} ${escapeHtml(step.unit)}` : 'Không có hàng lẻ trả lại'}</small></span>
+                                <span class="pick-step__qty">Lấy ${escapeHtml(step.instruction)}<br>${numberFormat(step.totalTaken)} ${escapeHtml(step.unit)}</span>
+                            </label>
+                        `;
+                    }).join('')}
+                </article>
+            `;
+        }).join('');
+
+        list.querySelectorAll('[data-pick-key]').forEach(input => {
+            input.addEventListener('change', () => {
+                if (input.checked) completedPickingSteps.add(input.dataset.pickKey);
+                else completedPickingSteps.delete(input.dataset.pickKey);
+                input.closest('.pick-step')?.classList.toggle('is-done', input.checked);
+                renderPickingGuide();
+            });
+        });
+    }
+
+    function renderPickingDialog() {
+        const plan = buildPickingPlan();
+        const dialog = document.getElementById('pickingDialog');
+        if (!plan.length) {
+            if (dialog.open) dialog.close();
+            return;
+        }
+
+        activePickingStepIndex = Math.max(0, Math.min(activePickingStepIndex, plan.length - 1));
+        const step = plan[activePickingStepIndex];
+        const isLast = activePickingStepIndex === plan.length - 1;
+        document.getElementById('pickingProgressText').textContent = `Bước ${activePickingStepIndex + 1}/${plan.length}`;
+        document.getElementById('pickingProgressBar').style.width = `${((activePickingStepIndex + 1) / plan.length) * 100}%`;
+        document.getElementById('pickingRowLabel').textContent = step.title;
+        document.getElementById('pickingShelfCode').textContent = step.locationCode;
+        document.getElementById('pickingInstruction').textContent = step.instruction;
+        document.getElementById('pickingTotal').textContent = `Tổng ${numberFormat(step.totalTaken)} ${step.unit}`;
+        document.getElementById('pickingPackageHint').textContent = step.packageHint;
+        const returnBox = document.getElementById('pickingReturnBox');
+        returnBox.hidden = step.returnQuantity <= 0.0001;
+        document.getElementById('pickingReturnText').textContent = `Trả ${numberFormat(step.returnQuantity)} ${step.unit} về kệ ${step.locationCode}`;
+        document.getElementById('previousPickingBtn').disabled = activePickingStepIndex === 0;
+        document.getElementById('completePickingBtn').innerHTML = isLast
+            ? '<i data-lucide="check-check"></i>Hoàn tất soạn'
+            : '<i data-lucide="check"></i>Xong, bước tiếp';
+        window.lucide?.createIcons();
+    }
+
+    function openPickingDialog() {
+        const plan = buildPickingPlan();
+        if (!plan.length) {
+            setStatus('Chưa có vị trí FIFO để hướng dẫn soạn hàng.', 'error');
+            return;
+        }
+        const firstIncomplete = plan.findIndex(step => !completedPickingSteps.has(step.key));
+        activePickingStepIndex = firstIncomplete >= 0 ? firstIncomplete : 0;
+        renderPickingDialog();
+        const dialog = document.getElementById('pickingDialog');
+        dialog.showModal();
+        dialog.focus();
+    }
+
+    function completeCurrentPickingStep() {
+        const plan = buildPickingPlan();
+        const step = plan[activePickingStepIndex];
+        if (!step) return;
+        completedPickingSteps.add(step.key);
+        renderPickingGuide();
+        if (activePickingStepIndex < plan.length - 1) {
+            activePickingStepIndex += 1;
+            renderPickingDialog();
+            return;
+        }
+        document.getElementById('pickingDialog').close();
+        setStatus(`Đã hoàn tất ${plan.length}/${plan.length} bước soạn hàng.`, 'success');
+    }
+
     function updateSummary() {
         const lines = collectLines().filter(line => line.internal_item_code && line.quantity > 0);
         document.getElementById('lineCount').textContent = lines.length;
         document.getElementById('totalQuantity').textContent = numberFormat(lines.reduce((sum, line) => sum + line.quantity, 0));
+        renderPickingGuide();
     }
 
     function confirmIssue(message, options = {}) {
@@ -1668,7 +2145,7 @@
         });
     }
 
-    async function saveIssue(allowNegative = false) {
+    async function saveIssue(allowNegative = false, saveAsDraft = false) {
         let customer = document.getElementById('customerName').value.trim();
         const issueDate = displayToIsoDate(document.getElementById('issueDate').value);
         let lines = collectLines();
@@ -1696,15 +2173,14 @@
             setStatus('Mỗi dòng sử dụng cần mã nội bộ và số lượng lớn hơn 0.', 'error');
             return;
         }
-        const missingManualLocationRow = [...rowsBody.children].find(row =>
-            row.dataset.manualLocationSelection === '1'
-            && row.querySelector('.internal-code').value.trim()
+        const missingLocationRow = [...rowsBody.children].find(row =>
+            row.querySelector('.internal-code').value.trim()
             && Number(row.querySelector('.quantity').value || 0) > 0
             && selectedLocationCodes(row).length === 0
         );
-        if (missingManualLocationRow) {
-            setStatus('Dòng đã bỏ chọn kệ đang để trống. Hãy chọn lại đúng kệ trước khi lưu.', 'error');
-            missingManualLocationRow.querySelector('.location-trigger')?.focus();
+        if (!saveAsDraft && missingLocationRow) {
+            setStatus('Có dòng chưa có kệ nên chưa thể xuất. Chọn kệ hoặc bấm Lưu chờ soạn để cập nhật sau.', 'error');
+            missingLocationRow.querySelector('.location-trigger')?.focus();
             return;
         }
 
@@ -1723,13 +2199,18 @@
             ? `\n\n${missingCatalogGroups.length} mã chưa có trong DANH MỤC và sẽ được append:\n${missingCatalogGroups.map(group => group.code).join(', ')}`
             : '';
         const confirmed = await confirmIssue(
-            `Khách hàng: ${customer}\n${lines.length} dòng · Tổng SL ${numberFormat(total)}\nHệ thống sẽ kiểm tồn, trừ FIFO và tạo phiếu xuất.${missingCatalogNotice}`
+            saveAsDraft
+                ? `Lưu phiếu chờ soạn gồm ${lines.length} dòng · Tổng SL ${numberFormat(total)}?\n\nPhiếu chưa trừ tồn cho đến khi chọn đủ kệ và xác nhận xuất.${missingCatalogNotice}`
+                : `Khách hàng: ${customer}\n${lines.length} dòng · Tổng SL ${numberFormat(total)}\nHệ thống sẽ kiểm tồn, trừ FIFO và tạo phiếu xuất.${missingCatalogNotice}`,
+            saveAsDraft ? {title: 'Lưu phiếu chờ soạn', acceptText: 'Lưu phiếu chờ'} : {}
         );
         if (!confirmed) return;
 
-        const printWindow = window.open('', '_blank');
+        const printWindow = saveAsDraft ? null : window.open('', '_blank');
+        const activeButton = saveAsDraft ? document.getElementById('saveDraftBtn') : saveButton;
         saveButton.disabled = true;
-        saveButton.innerHTML = '<i class="spin" data-lucide="loader-circle"></i>Đang lưu';
+        document.getElementById('saveDraftBtn').disabled = true;
+        activeButton.innerHTML = '<i class="spin" data-lucide="loader-circle"></i>Đang lưu';
         window.lucide?.createIcons();
         setOperationLoading(
             true,
@@ -1746,7 +2227,9 @@
             } catch (error) {
                 printWindow?.close();
                 saveButton.disabled = false;
+                document.getElementById('saveDraftBtn').disabled = false;
                 saveButton.innerHTML = '<i data-lucide="printer"></i>Lưu + in';
+                document.getElementById('saveDraftBtn').innerHTML = '<i data-lucide="save"></i>Lưu chờ soạn';
                 window.lucide?.createIcons();
                 setOperationLoading(false);
                 setStatus(error.message, 'error');
@@ -1757,9 +2240,13 @@
         }
 
         try {
-            setOperationLoading(true, 'Đang tạo phiếu xuất', 'Đang trừ tồn FIFO và ghi dữ liệu phiếu.');
-            const result = await fetch('/api/xuat-vat-tu-noi-bo', {
-                method: 'POST',
+            setOperationLoading(
+                true,
+                saveAsDraft ? 'Đang lưu phiếu chờ' : 'Đang tạo phiếu xuất',
+                saveAsDraft ? 'Phiếu chưa tác động đến tồn kho.' : 'Đang trừ tồn FIFO và ghi dữ liệu phiếu.'
+            );
+            const result = await fetch(editingIssueId ? `/api/xuat-vat-tu-noi-bo/${editingIssueId}` : '/api/xuat-vat-tu-noi-bo', {
+                method: editingIssueId ? 'PUT' : 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
@@ -1775,6 +2262,7 @@
                     purpose: 'Xuất thành phẩm cho khách hàng',
                     note: document.getElementById('issueNote').value.trim(),
                     allow_negative: allowNegative,
+                    save_as_draft: saveAsDraft,
                     lines,
                 })
             }).then(jsonOrError);
@@ -1783,10 +2271,16 @@
             else printWindow?.close();
             const negativeCount = Array.isArray(result.stock_warnings) ? result.stock_warnings.length : 0;
             setStatus(
-                `Đã tạo ${result.data?.issue_code || 'phiếu xuất thành phẩm'}.`
+                saveAsDraft
+                    ? `Đã lưu ${result.data?.issue_code || 'phiếu chờ soạn'}. Chưa trừ tồn kho.`
+                    : `Đã tạo ${result.data?.issue_code || 'phiếu xuất thành phẩm'}.`
                 + (negativeCount ? ` Có ${negativeCount} dòng đã xác nhận xuất âm.` : ''),
                 'success'
             );
+            if (saveAsDraft) {
+                localStorage.setItem('lastFinishedGoodsDraftCode', result.data?.issue_code || '');
+                await searchDraftIssues();
+            }
             stockLocationRequests.clear();
             resetForm(false);
         } catch (error) {
@@ -1809,7 +2303,7 @@
                 );
                 if (confirmedNegative) {
                     saveButton.disabled = false;
-                    await saveIssue(true);
+                    await saveIssue(true, false);
                 } else {
                     setStatus('Chưa xuất. Phiếu được giữ nguyên để kiểm tra tồn hoặc phiếu nhập.', 'error');
                 }
@@ -1818,13 +2312,16 @@
             setStatus(error.message, 'error');
         } finally {
             saveButton.disabled = false;
+            document.getElementById('saveDraftBtn').disabled = false;
             saveButton.innerHTML = '<i data-lucide="printer"></i>Lưu + in';
+            document.getElementById('saveDraftBtn').innerHTML = '<i data-lucide="save"></i>Lưu chờ soạn';
             setOperationLoading(false);
             window.lucide?.createIcons();
         }
     }
 
     function resetForm(clearHeader = true) {
+        editingIssueId = null;
         if (clearHeader) {
             document.getElementById('customerName').value = '';
             document.getElementById('receiverName').value = '';
@@ -1834,6 +2331,85 @@
         for (let index = 0; index < 8; index += 1) addRow();
         updateSummary();
         rowsBody.querySelector('.internal-code')?.focus();
+    }
+
+    async function searchDraftIssues() {
+        const keyword = document.getElementById('draftSearchKeyword').value.trim();
+        const results = document.getElementById('draftSearchResults');
+        results.innerHTML = '<div class="location-empty">Đang tìm phiếu chờ...</div>';
+        try {
+            const params = new URLSearchParams({status: 'draft', issue_type: 'customer'});
+            if (keyword) params.set('keyword', keyword);
+            const payload = await fetch(`/api/xuat-vat-tu-noi-bo?${params.toString()}`).then(jsonOrError);
+            const issues = payload.data || [];
+            document.getElementById('draftCountBadge').textContent = numberFormat(issues.length);
+            document.getElementById('draftDialogCount').textContent = `(${numberFormat(issues.length)})`;
+            results.innerHTML = issues.length ? issues.map(issue => `
+                <button class="draft-result" type="button" data-draft-id="${Number(issue.id)}">
+                    <span><strong>${escapeHtml(issue.issue_code || '')}</strong><br><small>${escapeHtml(isoToDisplayDate(String(issue.issue_date || '').slice(0, 10)))} · lưu ${escapeHtml(String(issue.created_at || '').slice(11, 16))}</small></span>
+                    <span class="draft-result__main"><strong>${escapeHtml(issue.customer_label || 'Chưa ghi khách hàng')}</strong><small>${escapeHtml((issue.item_preview || []).join(', ') || issue.production_order || 'Chưa có mã hàng')}</small></span>
+                    <span class="draft-result__status">${numberFormat(issue.lines_count || 0)} dòng<br>${Number(issue.missing_location_count || 0) > 0 ? `${numberFormat(issue.missing_location_count)} chưa có kệ` : 'Đã chọn kệ'}</span>
+                </button>
+            `).join('') : '<div class="location-empty">Hiện không có phiếu chờ trong database nội bộ.</div>';
+            results.querySelectorAll('[data-draft-id]').forEach(button => {
+                button.addEventListener('click', () => loadDraftIssue(Number(button.dataset.draftId)));
+            });
+        } catch (error) {
+            results.innerHTML = `<div class="location-empty">${escapeHtml(error.message)}</div>`;
+        }
+    }
+
+    async function loadDraftIssue(issueId) {
+        setOperationLoading(true, 'Đang mở phiếu chờ', 'Đang kiểm tra lại tồn và vị trí hiện tại.');
+        try {
+            const payload = await fetch(`/api/xuat-vat-tu-noi-bo/${issueId}`).then(jsonOrError);
+            const issue = payload.data || {};
+            if (issue.status !== 'draft') throw new Error('Phiếu này không còn ở trạng thái chờ soạn.');
+            const lines = issue.lines || [];
+
+            resetForm(true);
+            editingIssueId = Number(issue.id);
+            document.getElementById('issueDate').value = isoToDisplayDate(String(issue.issue_date || '').slice(0, 10));
+            document.getElementById('receiverName').value = issue.receiver_name || '';
+            document.getElementById('issueNote').value = issue.note || '';
+            customerNameInput.value = lines.find(line => String(line.customer || '').trim())?.customer || '';
+
+            while (rowsBody.children.length < lines.length) addRow();
+            const rows = [...rowsBody.children];
+            lines.forEach((line, index) => {
+                const row = rows[index];
+                row.querySelector('.production-order').value = line.production_order || '';
+                row.querySelector('.internal-code').value = line.internal_item_code || line.ma_hh || '';
+                row.querySelector('.item-name').value = line.ten_hh || '';
+                row.querySelector('.size').value = line.size || '';
+                row.querySelector('.color').value = line.color || '';
+                row.querySelector('.quantity').value = Number(line.quantity || 0);
+                row.querySelector('.unit').value = line.dvt || 'Cái';
+                row.querySelector('.line-note').value = line.note || '';
+                row.dataset.productionOrderId = line.production_order_id || '';
+                row.dataset.purchaseOrder = line.purchase_order || '';
+                row.dataset.orderCustomer = line.customer || '';
+                row.dataset.pastedLocation = line.location_code || '';
+                row.dataset.pastedFifo = '1';
+            });
+            await Promise.all(lines.map((line, index) => loadStockLocations(rows[index])));
+            assignPastedLocationsByFifo(rows.filter(row => row.dataset.pastedFifo === '1'));
+            updateSummary();
+            document.getElementById('draftSearchDialog').close();
+            const pickingStepCount = buildPickingPlan().length;
+            const missingLocationCount = rows.slice(0, lines.length)
+                .filter(row => selectedLocationCodes(row).length === 0)
+                .length;
+            setStatus(
+                `Đã mở ${issue.issue_code} · ${pickingStepCount} bước soạn`
+                + (missingLocationCount ? ` · ${missingLocationCount} dòng chưa có kệ.` : '.'),
+                missingLocationCount ? 'error' : 'success'
+            );
+        } catch (error) {
+            setStatus(error.message, 'error');
+        } finally {
+            setOperationLoading(false);
+        }
     }
 
     function previewPastedExcel() {
@@ -1888,6 +2464,19 @@
     ['closeLocationDialogBtn', 'cancelLocationBtn'].forEach(id => {
         document.getElementById(id).addEventListener('click', () => document.getElementById('locationDialog').close());
     });
+    document.getElementById('startPickingBtn').addEventListener('click', openPickingDialog);
+    document.getElementById('closePickingDialogBtn').addEventListener('click', () => document.getElementById('pickingDialog').close());
+    document.getElementById('previousPickingBtn').addEventListener('click', () => {
+        activePickingStepIndex = Math.max(0, activePickingStepIndex - 1);
+        renderPickingDialog();
+    });
+    document.getElementById('completePickingBtn').addEventListener('click', completeCurrentPickingStep);
+    document.addEventListener('keydown', event => {
+        const dialog = document.getElementById('pickingDialog');
+        if (!dialog.open || event.code !== 'Space' || event.target.matches('input, textarea, select, button')) return;
+        event.preventDefault();
+        completeCurrentPickingStep();
+    });
     document.getElementById('addRowBtn').addEventListener('click', () => addRow(true));
     document.getElementById('pasteExcelBtn').addEventListener('click', openPasteExcelDialog);
     document.getElementById('pasteExcelData').addEventListener('input', previewPastedExcel);
@@ -1909,6 +2498,20 @@
     });
     document.getElementById('resetBtn').addEventListener('click', () => resetForm(true));
     document.getElementById('saveIssueBtn').addEventListener('click', () => saveIssue(false));
+    document.getElementById('saveDraftBtn').addEventListener('click', () => saveIssue(false, true));
+    document.getElementById('findDraftBtn').addEventListener('click', () => {
+        document.getElementById('draftSearchDialog').showModal();
+        document.getElementById('draftSearchKeyword').value = '';
+        searchDraftIssues();
+        setTimeout(() => document.getElementById('draftSearchKeyword').focus(), 0);
+    });
+    document.getElementById('closeDraftSearchBtn').addEventListener('click', () => document.getElementById('draftSearchDialog').close());
+    document.getElementById('runDraftSearchBtn').addEventListener('click', searchDraftIssues);
+    document.getElementById('draftSearchKeyword').addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        searchDraftIssues();
+    });
     customerNameInput.addEventListener('focus', () => loadCustomerSuggestions(customerNameInput.value));
     customerNameInput.addEventListener('input', () => loadCustomerSuggestions(customerNameInput.value));
     document.getElementById('issueDate').addEventListener('blur', event => {
@@ -1917,6 +2520,7 @@
     });
     document.getElementById('issueDate').value = isoToDisplayDate(localIsoDate());
     loadCustomerSuggestions();
+    searchDraftIssues();
     resetForm(false);
     window.lucide?.createIcons();
 })();

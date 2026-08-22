@@ -363,7 +363,7 @@ class InternalMaterialIssueController extends Controller
     public function list(Request $request)
     {
         $query = InternalMaterialIssue::query()
-            ->with('lines:id,issue_id,production_order')
+            ->with('lines:id,issue_id,production_order,purchase_order,customer,internal_item_code,ma_hh,ten_hh,quantity,dvt,location_code')
             ->withCount('lines')
             ->withSum('lines', 'quantity')
             ->orderByDesc('issue_date')
@@ -376,6 +376,14 @@ class InternalMaterialIssueController extends Controller
 
         if ($request->filled('to_date')) {
             $query->whereDate('issue_date', '<=', $request->query('to_date'));
+        }
+
+        if ($request->filled('status') && $request->query('status') !== 'all') {
+            $query->where('status', $request->query('status'));
+        }
+
+        if ($request->filled('issue_type')) {
+            $query->where('issue_type', $request->query('issue_type'));
         }
 
         $keyword = trim((string) $request->query('keyword', ''));
@@ -411,6 +419,20 @@ class InternalMaterialIssueController extends Controller
             $issue->setAttribute('btp_label_print_url', $btpCodes->isNotEmpty()
                 ? url('/client/lenh-btp/tem-qr?codes=' . urlencode($btpCodes->implode(',')))
                 : null);
+            $issue->setAttribute('customer_label', $issue->lines
+                ->pluck('customer')
+                ->map(fn ($value) => trim((string) $value))
+                ->filter()
+                ->first() ?: trim((string) $issue->receiver_name));
+            $issue->setAttribute('item_preview', $issue->lines
+                ->map(fn ($line) => trim((string) ($line->internal_item_code ?: $line->ma_hh)))
+                ->filter()
+                ->unique()
+                ->take(4)
+                ->values());
+            $issue->setAttribute('missing_location_count', $issue->lines
+                ->filter(fn ($line) => trim((string) $line->location_code) === '')
+                ->count());
 
             return $issue;
         });
@@ -427,6 +449,7 @@ class InternalMaterialIssueController extends Controller
 
     public function store(Request $request)
     {
+        $this->normalizeRequestedLocationCodes($request);
         $data = $request->validate([
             'issue_type' => 'nullable|in:material,production,customer',
             'issue_date' => 'required|date',
@@ -438,6 +461,7 @@ class InternalMaterialIssueController extends Controller
             'note' => 'nullable|string|max:1000',
             'force_new_btp_orders' => 'nullable|boolean',
             'allow_negative' => 'nullable|boolean',
+            'save_as_draft' => 'nullable|boolean',
             'lines' => 'required|array|min:1',
             'lines.*.ma_hh' => 'nullable|string|max:100',
             'lines.*.ten_hh' => 'nullable|string|max:1000',
@@ -445,7 +469,7 @@ class InternalMaterialIssueController extends Controller
             'lines.*.quantity' => 'required|numeric|min:0.001',
             'lines.*.location_code' => 'nullable|string|max:100',
             'lines.*.location_codes' => 'nullable|array|max:50',
-            'lines.*.location_codes.*' => 'string|max:100|distinct',
+            'lines.*.location_codes.*' => 'string|max:100',
             'lines.*.match_by_code_only' => 'nullable|boolean',
             'lines.*.internal_item_code' => 'nullable|string|max:100',
             'lines.*.size' => 'nullable|string|max:255',
@@ -472,15 +496,16 @@ class InternalMaterialIssueController extends Controller
         }
 
         $issueType = $data['issue_type'] ?? 'production';
+        $saveAsDraft = !empty($data['save_as_draft']);
         $warehouseCode = strtoupper(trim($data['warehouse_code'] ?? ''));
-        $stockWarnings = $this->stockShortages($data['lines'], $warehouseCode);
+        $stockWarnings = $saveAsDraft ? [] : $this->stockShortages($data['lines'], $warehouseCode);
         if (!empty($stockWarnings) && empty($data['allow_negative'])) {
             return $this->negativeStockWarningResponse($stockWarnings);
         }
         $createdBtpOrderCodes = [];
 
-        $issue = DB::connection('internal')->transaction(function () use ($data, $issueType, &$createdBtpOrderCodes) {
-            $createdBtpOrderCodes = $this->createMissingBtpOrdersForIssue($data, $issueType);
+        $issue = DB::connection('internal')->transaction(function () use ($data, $issueType, $saveAsDraft, &$createdBtpOrderCodes) {
+            $createdBtpOrderCodes = $saveAsDraft ? [] : $this->createMissingBtpOrdersForIssue($data, $issueType);
 
             $issue = InternalMaterialIssue::query()->create([
                 'issue_code' => $this->nextIssueCode($issueType),
@@ -491,7 +516,7 @@ class InternalMaterialIssueController extends Controller
                 'department' => trim($data['department'] ?? '') ?: ($issueType === 'production' ? 'Sản xuất' : ($issueType === 'customer' ? 'Kinh doanh' : '')),
                 'production_order' => trim($data['production_order'] ?? ''),
                 'purpose' => trim($data['purpose'] ?? '') ?: ($issueType === 'production' ? 'Xuất BTP đi sản xuất' : ($issueType === 'customer' ? 'Xuất thành phẩm cho khách hàng' : 'Xuất kho nội bộ')),
-                'status' => 'posted',
+                'status' => $saveAsDraft ? 'draft' : 'posted',
                 'note' => trim($data['note'] ?? ''),
             ]);
 
@@ -533,12 +558,14 @@ class InternalMaterialIssueController extends Controller
                     'note' => mb_substr(trim($line['note'] ?? ''), 0, 500),
                 ]);
 
-                $this->decreaseInternalStock(
-                    $line,
-                    strtoupper(trim($data['warehouse_code'] ?? '')),
-                    $issueLine->id,
-                    !empty($data['allow_negative']) || $issueType !== 'customer'
-                );
+                if (!$saveAsDraft) {
+                    $this->decreaseInternalStock(
+                        $line,
+                        strtoupper(trim($data['warehouse_code'] ?? '')),
+                        $issueLine->id,
+                        !empty($data['allow_negative']) || $issueType !== 'customer'
+                    );
+                }
             }
 
             $matchedProductionOrders = array_values(array_unique(array_filter($matchedProductionOrders)));
@@ -550,7 +577,7 @@ class InternalMaterialIssueController extends Controller
             return $issue->load('lines');
         });
 
-        if ($issueType === 'production') {
+        if (!$saveAsDraft && $issueType === 'production') {
             $this->markBtpOrdersIssuedFromIssue($issue);
         }
 
@@ -560,13 +587,15 @@ class InternalMaterialIssueController extends Controller
         ], $request);
 
         return response()->json([
-            'message' => $issueType === 'production'
+            'message' => $saveAsDraft
+                ? 'Đã lưu phiếu chờ soạn. Phiếu chưa trừ tồn kho.'
+                : ($issueType === 'production'
                 ? 'Đã tạo phiếu xuất BTP đi sản xuất.'
-                : ($issueType === 'customer' ? 'Đã tạo phiếu xuất thành phẩm cho khách hàng.' : 'Đã tạo phiếu xuất kho nội bộ.'),
+                : ($issueType === 'customer' ? 'Đã tạo phiếu xuất thành phẩm cho khách hàng.' : 'Đã tạo phiếu xuất kho nội bộ.')),
             'data' => $issue,
             'btp_order_codes' => $createdBtpOrderCodes,
             'stock_warnings' => $stockWarnings,
-            'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in'),
+            'print_url' => $saveAsDraft ? null : url('/client/xuat-vat-tu-noi-bo/' . $issue->id . '/in'),
         ]);
     }
 
@@ -1106,6 +1135,7 @@ class InternalMaterialIssueController extends Controller
             'color' => 'nullable|string|max:1000',
             'side' => 'nullable|string|max:255',
             'match_by_code_only' => 'nullable|boolean',
+            'include_packages' => 'nullable|boolean',
         ]);
 
         $internalCode = mb_strtoupper(trim((string) ($data['internal_item_code'] ?? '')));
@@ -1126,27 +1156,72 @@ class InternalMaterialIssueController extends Controller
             }
         }
 
-        $locations = $query
-            ->select(
-                'wl.id',
-                'wl.location_code',
-                DB::raw('SUM(inventory_packages.quantity) as available_quantity'),
-                DB::raw('COUNT(inventory_packages.id) as package_count'),
-                DB::raw('MIN(inventory_packages.checked_at) as fifo_date')
-            )
-            ->groupBy('wl.id', 'wl.location_code')
-            ->orderBy('fifo_date')
-            ->orderBy('wl.location_code')
-            ->get()
-            ->map(fn ($location) => [
-                'id' => (int) $location->id,
-                'location_code' => strtoupper(trim((string) $location->location_code)),
-                'available_quantity' => (float) $location->available_quantity,
-                'package_count' => (int) $location->package_count,
-                'fifo_date' => $location->fifo_date,
-            ])
-            ->filter(fn ($location) => $location['location_code'] !== '')
-            ->values();
+        if (!empty($data['include_packages'])) {
+            $packages = $query
+                ->select(
+                    'wl.id as location_id',
+                    'wl.location_code',
+                    'wl.location_name',
+                    'inventory_packages.id as package_id',
+                    'inventory_packages.package_code',
+                    'inventory_packages.quantity',
+                    'inventory_packages.checked_at'
+                )
+                ->orderBy('inventory_packages.checked_at')
+                ->orderBy('inventory_packages.id')
+                ->get();
+
+            $locations = $packages
+                ->groupBy(fn ($package) => (int) $package->location_id)
+                ->map(function ($locationPackages) {
+                    $first = $locationPackages->first();
+                    return [
+                        'id' => (int) $first->location_id,
+                        'location_code' => strtoupper(trim((string) $first->location_code)),
+                        'location_name' => trim((string) $first->location_name),
+                        'is_outsourced' => mb_strpos(mb_strtoupper((string) $first->location_code), 'GIACONG') !== false
+                            || mb_strpos(mb_strtoupper((string) $first->location_name), 'GIA CÔNG') !== false,
+                        'available_quantity' => (float) $locationPackages->sum('quantity'),
+                        'package_count' => $locationPackages->count(),
+                        'fifo_date' => $locationPackages->min('checked_at'),
+                        'packages' => $locationPackages->map(fn ($package) => [
+                            'id' => (int) $package->package_id,
+                            'package_code' => trim((string) $package->package_code),
+                            'quantity' => (float) $package->quantity,
+                            'checked_at' => $package->checked_at,
+                        ])->values(),
+                    ];
+                })
+                ->filter(fn ($location) => $location['location_code'] !== '')
+                ->sortBy(fn ($location) => sprintf('%s|%s', $location['fifo_date'], $location['location_code']))
+                ->values();
+        } else {
+            $locations = $query
+                ->select(
+                    'wl.id',
+                    'wl.location_code',
+                    'wl.location_name',
+                    DB::raw('SUM(inventory_packages.quantity) as available_quantity'),
+                    DB::raw('COUNT(inventory_packages.id) as package_count'),
+                    DB::raw('MIN(inventory_packages.checked_at) as fifo_date')
+                )
+                ->groupBy('wl.id', 'wl.location_code', 'wl.location_name')
+                ->orderBy('fifo_date')
+                ->orderBy('wl.location_code')
+                ->get()
+                ->map(fn ($location) => [
+                    'id' => (int) $location->id,
+                    'location_code' => strtoupper(trim((string) $location->location_code)),
+                    'location_name' => trim((string) $location->location_name),
+                    'is_outsourced' => mb_strpos(mb_strtoupper((string) $location->location_code), 'GIACONG') !== false
+                        || mb_strpos(mb_strtoupper((string) $location->location_name), 'GIA CÔNG') !== false,
+                    'available_quantity' => (float) $location->available_quantity,
+                    'package_count' => (int) $location->package_count,
+                    'fifo_date' => $location->fifo_date,
+                ])
+                ->filter(fn ($location) => $location['location_code'] !== '')
+                ->values();
+        }
 
         return response()->json([
             'data' => $locations,
@@ -1510,6 +1585,7 @@ class InternalMaterialIssueController extends Controller
 
     public function update(Request $request, InternalMaterialIssue $issue)
     {
+        $this->normalizeRequestedLocationCodes($request);
         $data = $request->validate([
             'issue_type' => 'nullable|in:material,production,customer',
             'issue_date' => 'required|date',
@@ -1520,12 +1596,16 @@ class InternalMaterialIssueController extends Controller
             'purpose' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
             'allow_negative' => 'nullable|boolean',
+            'save_as_draft' => 'nullable|boolean',
             'lines' => 'required|array|min:1',
             'lines.*.ma_hh' => 'nullable|string|max:100',
             'lines.*.ten_hh' => 'nullable|string|max:1000',
             'lines.*.dvt' => 'nullable|string|max:50',
             'lines.*.quantity' => 'required|numeric|min:0.001',
             'lines.*.location_code' => 'nullable|string|max:100',
+            'lines.*.location_codes' => 'nullable|array|max:50',
+            'lines.*.location_codes.*' => 'string|max:100',
+            'lines.*.match_by_code_only' => 'nullable|boolean',
             'lines.*.internal_item_code' => 'nullable|string|max:100',
             'lines.*.size' => 'nullable|string|max:255',
             'lines.*.color' => 'nullable|string|max:1000',
@@ -1548,17 +1628,20 @@ class InternalMaterialIssueController extends Controller
         }
 
         $issueType = $data['issue_type'] ?? $issue->issue_type ?? 'production';
+        $saveAsDraft = !empty($data['save_as_draft']);
         $stockWarnings = [];
         $createdBtpOrderCodes = [];
 
-        $updatedIssue = DB::connection('internal')->transaction(function () use ($issue, $data, $issueType, &$createdBtpOrderCodes, &$stockWarnings) {
+        $updatedIssue = DB::connection('internal')->transaction(function () use ($issue, $data, $issueType, $saveAsDraft, &$createdBtpOrderCodes, &$stockWarnings) {
             $issue->load('lines.allocations');
             foreach ($issue->lines as $line) {
-                $this->restoreIssueLineStock($issue, $line);
+                if ($issue->status !== 'draft') {
+                    $this->restoreIssueLineStock($issue, $line);
+                }
                 $line->delete();
             }
 
-            $stockWarnings = $this->stockShortages(
+            $stockWarnings = $saveAsDraft ? [] : $this->stockShortages(
                 $data['lines'],
                 strtoupper(trim($data['warehouse_code'] ?? ''))
             );
@@ -1568,7 +1651,7 @@ class InternalMaterialIssueController extends Controller
                 ]);
             }
 
-            $createdBtpOrderCodes = $this->createMissingBtpOrdersForIssue($data, $issueType);
+            $createdBtpOrderCodes = $saveAsDraft ? [] : $this->createMissingBtpOrdersForIssue($data, $issueType);
 
             $issue->update([
                 'issue_type' => $issueType,
@@ -1578,7 +1661,7 @@ class InternalMaterialIssueController extends Controller
                 'department' => trim($data['department'] ?? '') ?: ($issueType === 'production' ? 'Sản xuất' : ($issueType === 'customer' ? 'Kinh doanh' : '')),
                 'production_order' => trim($data['production_order'] ?? ''),
                 'purpose' => trim($data['purpose'] ?? '') ?: ($issueType === 'production' ? 'Xuất BTP đi sản xuất' : ($issueType === 'customer' ? 'Xuất thành phẩm cho khách hàng' : 'Xuất kho nội bộ')),
-                'status' => 'posted',
+                'status' => $saveAsDraft ? 'draft' : 'posted',
                 'note' => trim($data['note'] ?? ''),
             ]);
 
@@ -1599,7 +1682,7 @@ class InternalMaterialIssueController extends Controller
                     'base_quantity' => $base['quantity'],
                     'base_dvt' => $base['unit'],
                     'unit_factor' => $base['factor'],
-                    'location_code' => strtoupper(trim($line['location_code'] ?? '')),
+                    'location_code' => mb_substr(implode(', ', $this->selectedLocationCodes($line)), 0, 100),
                     'internal_item_code' => trim($line['internal_item_code'] ?? ''),
                     'size' => mb_substr(trim($line['size'] ?? ''), 0, 100),
                     'color' => mb_substr(trim($line['color'] ?? ''), 0, 100),
@@ -1607,18 +1690,20 @@ class InternalMaterialIssueController extends Controller
                     'note' => mb_substr(trim($line['note'] ?? ''), 0, 500),
                 ]);
 
-                $this->decreaseInternalStock(
-                    $line,
-                    strtoupper(trim($data['warehouse_code'] ?? '')),
-                    $issueLine->id,
-                    !empty($data['allow_negative']) || $issueType !== 'customer'
-                );
+                if (!$saveAsDraft) {
+                    $this->decreaseInternalStock(
+                        $line,
+                        strtoupper(trim($data['warehouse_code'] ?? '')),
+                        $issueLine->id,
+                        !empty($data['allow_negative']) || $issueType !== 'customer'
+                    );
+                }
             }
 
             return $issue->fresh()->load('lines');
         });
 
-        if ($issueType === 'production') {
+        if (!$saveAsDraft && $issueType === 'production') {
             $this->markBtpOrdersIssuedFromIssue($updatedIssue);
         }
 
@@ -1628,11 +1713,13 @@ class InternalMaterialIssueController extends Controller
         ], $request);
 
         return response()->json([
-            'message' => 'Đã cập nhật phiếu xuất kho nội bộ.',
+            'message' => $saveAsDraft
+                ? 'Đã cập nhật phiếu chờ soạn. Phiếu chưa trừ tồn kho.'
+                : 'Đã cập nhật và xác nhận phiếu xuất kho nội bộ.',
             'data' => $updatedIssue,
             'btp_order_codes' => $createdBtpOrderCodes,
             'stock_warnings' => $stockWarnings,
-            'print_url' => url('/client/xuat-vat-tu-noi-bo/' . $updatedIssue->id . '/in'),
+            'print_url' => $saveAsDraft ? null : url('/client/xuat-vat-tu-noi-bo/' . $updatedIssue->id . '/in'),
         ]);
     }
 
@@ -1647,7 +1734,9 @@ class InternalMaterialIssueController extends Controller
             $issue->load('lines.allocations');
 
             foreach ($issue->lines as $line) {
-                $this->restoreIssueLineStock($issue, $line);
+                if ($issue->status !== 'draft') {
+                    $this->restoreIssueLineStock($issue, $line);
+                }
             }
 
             InternalXntRow::query()
@@ -2115,9 +2204,7 @@ class InternalMaterialIssueController extends Controller
         $side = trim($line['side'] ?? '');
 
         $query = InventoryPackage::query()
-            ->where('quantity', '>', 0)
-            ->orderBy('checked_at')
-            ->orderBy('id');
+            ->where('quantity', '>', 0);
 
         if ($lockForUpdate) {
             $query->lockForUpdate();
@@ -2135,9 +2222,21 @@ class InternalMaterialIssueController extends Controller
             $query->whereHas('location', function ($q) use ($locationCodes) {
                 $q->whereIn(DB::raw('UPPER(TRIM(location_code))'), $locationCodes);
             });
+            $cases = collect($locationCodes)
+                ->map(fn ($code, $index) => 'WHEN ? THEN ' . $index)
+                ->implode(' ');
+            $query->orderByRaw(
+                '(SELECT CASE UPPER(TRIM(wl_order.location_code)) '
+                    . $cases
+                    . ' ELSE ' . count($locationCodes)
+                    . ' END FROM warehouse_locations wl_order WHERE wl_order.id = inventory_packages.warehouse_location_id)',
+                $locationCodes
+            );
         } elseif ($locationCode !== '') {
             $query->whereHas('location', fn ($q) => $q->where('location_code', $locationCode));
         }
+
+        $query->orderBy('checked_at')->orderBy('id');
 
         if ($internalCode !== '') {
             $query->where('internal_item_code', $internalCode);
@@ -2176,6 +2275,41 @@ class InternalMaterialIssueController extends Controller
             ->unique()
             ->values()
             ->all();
+    }
+
+    private function normalizeRequestedLocationCodes(Request $request): void
+    {
+        $lines = $request->input('lines', []);
+        if (!is_array($lines)) {
+            return;
+        }
+
+        foreach ($lines as &$line) {
+            if (!is_array($line)) {
+                continue;
+            }
+
+            $values = $line['location_codes'] ?? [];
+            if (!is_array($values)) {
+                $values = [];
+            }
+            if (empty($values)) {
+                $single = trim((string) ($line['location_code'] ?? ''));
+                $values = $single === '' ? [] : preg_split('/\s*[,;|]\s*/', $single);
+            }
+
+            $normalized = collect($values)
+                ->map(fn ($value) => mb_strtoupper(trim((string) $value)))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+            $line['location_codes'] = $normalized;
+            $line['location_code'] = implode(', ', $normalized);
+        }
+        unset($line);
+
+        $request->merge(['lines' => $lines]);
     }
 
     private function createNegativeStockAllocation(array $line, string $warehouseCode, int $issueLineId, float $quantity, float $available, float $requestedQuantity): void

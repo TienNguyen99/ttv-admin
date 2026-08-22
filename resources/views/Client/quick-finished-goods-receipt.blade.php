@@ -435,6 +435,7 @@
 
         .recent-item {
             display: flex;
+            align-items: center;
             justify-content: space-between;
             gap: 10px;
             padding: 10px 0;
@@ -445,6 +446,37 @@
         .recent-code {
             color: #0f2f63;
             font-weight: 800;
+        }
+
+        .recent-main {
+            min-width: 0;
+        }
+
+        .recent-meta,
+        .recent-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .recent-flow {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            padding: 2px 8px;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .recent-flow.is-issued {
+            border-color: #a7f3d0;
+            background: #ecfdf5;
+            color: #047857;
         }
 
         .quick-status {
@@ -2151,6 +2183,7 @@
             setStatus(isBtp
                 ? 'Các dòng sẽ nằm chung một phiếu xuất BTP; mỗi dòng có một lệnh BTP riêng.'
                 : 'Nhập mã và số lượng, bấm Enter để xuống dòng.');
+            loadRecentReceipts();
             if (window.lucide) lucide.createIcons();
             setTimeout(() => document.querySelector('.production-order')?.focus(), 0);
         }
@@ -2205,11 +2238,18 @@
                     const rows = (result.data || []).slice(0, 5);
                     document.getElementById('recentReceipts').innerHTML = rows.map(row => `
                         <div class="recent-item">
-                            <div>
+                            <div class="recent-main">
                                 <div class="recent-code">${esc(row.receipt_code)}</div>
-                                <div class="text-muted">${esc(row.location_code || 'CHUA-XEP')} - ${fmt(row.lines_count || 0)} dòng</div>
+                                <div class="recent-meta">
+                                    <span class="text-muted">${esc(row.location_code || 'CHUA-XEP')} - ${fmt(row.lines_count || 0)} dòng</span>
+                                    <span class="recent-flow ${row.receipt_flow === 'receipt_and_customer_issue' ? 'is-issued' : ''}">${esc(row.operation_label || 'Chỉ nhập kho')}</span>
+                                    ${row.issue_code ? `<span class="text-muted">${esc(row.issue_code)}</span>` : ''}
+                                </div>
                             </div>
-                            <a class="quick-btn py-1 px-2 min-h-0" target="_blank" href="${esc(row.print_url || '#')}">In</a>
+                            <div class="recent-actions">
+                                <a class="quick-btn py-1 px-2 min-h-0" target="_blank" href="${esc(row.print_url || '#')}">In nhập</a>
+                                ${row.issue_print_url ? `<a class="quick-btn quick-btn-primary py-1 px-2 min-h-0" target="_blank" href="${esc(row.issue_print_url)}">In xuất</a>` : ''}
+                            </div>
                         </div>
                     `).join('') || '<div class="text-muted">Chưa có phiếu hôm nay.</div>';
                 })
