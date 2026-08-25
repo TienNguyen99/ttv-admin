@@ -28,10 +28,12 @@ class InternalMaterialIssueLine extends Model
         'base_dvt',
         'unit_factor',
         'location_code',
+        'match_by_code_only',
         'internal_item_code',
         'size',
         'color',
         'side',
+        'component_role',
         'note',
     ];
 
@@ -41,10 +43,21 @@ class InternalMaterialIssueLine extends Model
         'quantity' => 'float',
         'base_quantity' => 'float',
         'unit_factor' => 'float',
+        'match_by_code_only' => 'boolean',
     ];
 
     public function allocations()
     {
         return $this->hasMany(InternalMaterialIssueAllocation::class, 'issue_line_id');
+    }
+
+    public function issue()
+    {
+        return $this->belongsTo(InternalMaterialIssue::class, 'issue_id');
+    }
+
+    public function orderAllocations()
+    {
+        return $this->hasMany(InternalMaterialOrderAllocation::class, 'issue_line_id');
     }
 }

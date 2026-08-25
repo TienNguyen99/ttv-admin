@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\NormalizesDateInput;
 use App\Models\InternalInventoryCount;
 use App\Models\InternalBtpProductionOrder;
+use App\Models\InternalItemCatalog;
 use App\Models\InternalMaterialIssue;
 use App\Models\InternalMaterialIssueAllocation;
 use App\Models\InternalMaterialIssueLine;
+use App\Models\InternalMaterialOrderAllocation;
 use App\Models\InternalMaterialReceiptLine;
 use App\Models\InternalMaterialReceipt;
 use App\Models\InternalProductionOrder;
@@ -436,6 +438,7 @@ class InternalMaterialIssueController extends Controller
 
             return $issue;
         });
+        $this->attachNetWeightToIssues($data);
 
         return response()->json([
             'data' => $data,
@@ -456,7 +459,7 @@ class InternalMaterialIssueController extends Controller
             'warehouse_code' => 'nullable|string|max:50',
             'receiver_name' => 'nullable|string|max:150',
             'department' => 'nullable|string|max:150',
-            'production_order' => 'nullable|string|max:100',
+            'production_order' => 'nullable|string|max:10000',
             'purpose' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
             'force_new_btp_orders' => 'nullable|boolean',
@@ -475,6 +478,7 @@ class InternalMaterialIssueController extends Controller
             'lines.*.size' => 'nullable|string|max:255',
             'lines.*.color' => 'nullable|string|max:1000',
             'lines.*.side' => 'nullable|string|max:255',
+            'lines.*.component_role' => 'nullable|string|max:100',
             'lines.*.note' => 'nullable|string|max:1000',
             'lines.*.production_order_id' => 'nullable|integer',
             'lines.*.production_order' => 'nullable|string|max:100',
@@ -486,8 +490,32 @@ class InternalMaterialIssueController extends Controller
             'lines.*.purchase_order' => 'nullable|string|max:1000',
             'lines.*.customer' => 'nullable|string|max:200',
             'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
+            'lines.*.allocations' => 'nullable|array|max:100',
+            'lines.*.allocations.*.production_order_id' => 'nullable|integer',
+            'lines.*.allocations.*.production_order' => 'required_with:lines.*.allocations|string|max:100',
+            'lines.*.allocations.*.quantity' => 'required_with:lines.*.allocations|numeric|min:0.000001',
+            'lines.*.allocations.*.note' => 'nullable|string|max:500',
         ]);
         $data = $this->normalizeDateFields($data, ['issue_date']);
+
+        foreach ($data['lines'] as $index => $line) {
+            $allocations = collect($line['allocations'] ?? []);
+            if ($allocations->isEmpty()) {
+                continue;
+            }
+
+            $allocated = (float) $allocations->sum(fn ($allocation) => (float) ($allocation['quantity'] ?? 0));
+            if (abs($allocated - (float) $line['quantity']) > 0.000001) {
+                return response()->json([
+                    'message' => 'Phan bo dong ' . ($index + 1) . ' phai bang so luong xuat.',
+                    'errors' => [
+                        'lines.' . $index . '.allocations' => [
+                            'Tong phan bo ' . $allocated . ' khac so luong xuat ' . (float) $line['quantity'] . '.',
+                        ],
+                    ],
+                ], 422);
+            }
+        }
 
         $catalogValidator = app(InternalCatalogValidator::class);
         $catalogErrors = $catalogValidator->errorsForLines(collect($data['lines']));
@@ -551,12 +579,54 @@ class InternalMaterialIssueController extends Controller
                     'base_dvt' => $base['unit'],
                     'unit_factor' => $base['factor'],
                     'location_code' => mb_substr(implode(', ', $this->selectedLocationCodes($line)), 0, 100),
+                    'match_by_code_only' => array_key_exists('match_by_code_only', $line)
+                        ? (bool) $line['match_by_code_only']
+                        : null,
                     'internal_item_code' => trim($line['internal_item_code'] ?? ''),
                     'size' => mb_substr(trim($line['size'] ?? ''), 0, 100),
                     'color' => mb_substr(trim($line['color'] ?? ''), 0, 100),
                     'side' => mb_substr(trim($line['side'] ?? ''), 0, 100),
+                    'component_role' => mb_substr(trim($line['component_role'] ?? '') ?: 'CHUNG', 0, 100),
                     'note' => mb_substr(trim($line['note'] ?? ''), 0, 500),
                 ]);
+
+                $orderAllocations = collect($line['allocations'] ?? []);
+                if ($orderAllocations->isEmpty() && trim((string) ($line['production_order'] ?? '')) !== '') {
+                    $orderAllocations = collect([[
+                        'production_order_id' => $line['production_order_id'] ?? null,
+                        'production_order' => trim((string) $line['production_order']),
+                        'quantity' => (float) $line['quantity'],
+                        'note' => null,
+                    ]]);
+                }
+
+                foreach ($orderAllocations as $allocation) {
+                    $orderCode = trim((string) ($allocation['production_order'] ?? ''));
+                    $productionOrder = null;
+                    if (!empty($allocation['production_order_id'])) {
+                        $productionOrder = InternalProductionOrder::query()->find((int) $allocation['production_order_id']);
+                    }
+                    if (!$productionOrder && $orderCode !== '') {
+                        $productionOrder = InternalProductionOrder::query()
+                            ->where('production_order', $orderCode)
+                            ->where('is_active', true)
+                            ->orderByDesc('id')
+                            ->first();
+                    }
+
+                    InternalMaterialOrderAllocation::query()->create([
+                        'issue_line_id' => $issueLine->id,
+                        'production_order_id' => $productionOrder->id ?? ($allocation['production_order_id'] ?? null),
+                        'production_order_code' => $orderCode,
+                        'finished_item_code' => $productionOrder
+                            ? trim((string) ($productionOrder->standard_item_code ?: $productionOrder->item_code))
+                            : null,
+                        'allocated_quantity' => (float) ($allocation['quantity'] ?? 0) * (float) ($base['factor'] ?: 1),
+                        'returned_quantity' => 0,
+                        'scrap_quantity' => 0,
+                        'note' => mb_substr(trim((string) ($allocation['note'] ?? '')), 0, 500),
+                    ]);
+                }
 
                 if (!$saveAsDraft) {
                     $this->decreaseInternalStock(
@@ -1578,13 +1648,28 @@ class InternalMaterialIssueController extends Controller
 
     public function show(InternalMaterialIssue $issue)
     {
+        $issue->load('lines');
+        $this->attachNetWeightToIssues(collect([$issue]));
+
         return response()->json([
-            'data' => $issue->load('lines'),
+            'data' => $issue,
         ]);
     }
 
     public function update(Request $request, InternalMaterialIssue $issue)
     {
+        $hasReturns = InternalMaterialOrderAllocation::query()
+            ->whereHas('issueLine', fn ($query) => $query->where('issue_id', $issue->id))
+            ->where(function ($query) {
+                $query->where('returned_quantity', '>', 0)->orWhere('scrap_quantity', '>', 0);
+            })
+            ->exists();
+        if ($hasReturns) {
+            return response()->json([
+                'message' => 'Phiếu đã có hoàn trả vật tư. Hãy hủy phiếu trả liên quan trước khi sửa phiếu xuất.',
+            ], 409);
+        }
+
         $this->normalizeRequestedLocationCodes($request);
         $data = $request->validate([
             'issue_type' => 'nullable|in:material,production,customer',
@@ -1592,7 +1677,7 @@ class InternalMaterialIssueController extends Controller
             'warehouse_code' => 'nullable|string|max:50',
             'receiver_name' => 'nullable|string|max:150',
             'department' => 'nullable|string|max:150',
-            'production_order' => 'nullable|string|max:1000',
+            'production_order' => 'nullable|string|max:10000',
             'purpose' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:1000',
             'allow_negative' => 'nullable|boolean',
@@ -1610,6 +1695,7 @@ class InternalMaterialIssueController extends Controller
             'lines.*.size' => 'nullable|string|max:255',
             'lines.*.color' => 'nullable|string|max:1000',
             'lines.*.side' => 'nullable|string|max:255',
+            'lines.*.component_role' => 'nullable|string|max:100',
             'lines.*.note' => 'nullable|string|max:1000',
             'lines.*.production_order_id' => 'nullable|integer',
             'lines.*.production_order' => 'nullable|string|max:100',
@@ -1618,8 +1704,26 @@ class InternalMaterialIssueController extends Controller
             'lines.*.customer' => 'nullable|string|max:200',
             'lines.*.ordered_quantity' => 'nullable|numeric|min:0',
             'lines.*.logo_color' => 'nullable|string|max:100',
+            'lines.*.allocations' => 'nullable|array|max:100',
+            'lines.*.allocations.*.production_order_id' => 'nullable|integer',
+            'lines.*.allocations.*.production_order' => 'required_with:lines.*.allocations|string|max:100',
+            'lines.*.allocations.*.quantity' => 'required_with:lines.*.allocations|numeric|min:0.000001',
+            'lines.*.allocations.*.note' => 'nullable|string|max:500',
         ]);
         $data = $this->normalizeDateFields($data, ['issue_date']);
+
+        foreach ($data['lines'] as $index => $line) {
+            $allocations = collect($line['allocations'] ?? []);
+            if ($allocations->isEmpty()) {
+                continue;
+            }
+            $allocated = (float) $allocations->sum(fn ($allocation) => (float) ($allocation['quantity'] ?? 0));
+            if (abs($allocated - (float) $line['quantity']) > 0.000001) {
+                return response()->json([
+                    'message' => 'Phân bổ dòng ' . ($index + 1) . ' phải bằng số lượng xuất.',
+                ], 422);
+            }
+        }
 
         $catalogValidator = app(InternalCatalogValidator::class);
         $catalogErrors = $catalogValidator->errorsForLines(collect($data['lines']));
@@ -1683,12 +1787,51 @@ class InternalMaterialIssueController extends Controller
                     'base_dvt' => $base['unit'],
                     'unit_factor' => $base['factor'],
                     'location_code' => mb_substr(implode(', ', $this->selectedLocationCodes($line)), 0, 100),
+                    'match_by_code_only' => array_key_exists('match_by_code_only', $line)
+                        ? (bool) $line['match_by_code_only']
+                        : null,
                     'internal_item_code' => trim($line['internal_item_code'] ?? ''),
                     'size' => mb_substr(trim($line['size'] ?? ''), 0, 100),
                     'color' => mb_substr(trim($line['color'] ?? ''), 0, 100),
                     'side' => mb_substr(trim($line['side'] ?? ''), 0, 100),
+                    'component_role' => mb_substr(trim($line['component_role'] ?? '') ?: 'CHUNG', 0, 100),
                     'note' => mb_substr(trim($line['note'] ?? ''), 0, 500),
                 ]);
+
+                $orderAllocations = collect($line['allocations'] ?? []);
+                if ($orderAllocations->isEmpty() && trim((string) ($line['production_order'] ?? '')) !== '') {
+                    $orderAllocations = collect([[
+                        'production_order_id' => $line['production_order_id'] ?? null,
+                        'production_order' => trim((string) $line['production_order']),
+                        'quantity' => (float) $line['quantity'],
+                        'note' => null,
+                    ]]);
+                }
+                foreach ($orderAllocations as $allocation) {
+                    $orderCode = trim((string) ($allocation['production_order'] ?? ''));
+                    $productionOrder = !empty($allocation['production_order_id'])
+                        ? InternalProductionOrder::query()->find((int) $allocation['production_order_id'])
+                        : null;
+                    if (!$productionOrder && $orderCode !== '') {
+                        $productionOrder = InternalProductionOrder::query()
+                            ->where('production_order', $orderCode)
+                            ->where('is_active', true)
+                            ->orderByDesc('id')
+                            ->first();
+                    }
+                    InternalMaterialOrderAllocation::query()->create([
+                        'issue_line_id' => $issueLine->id,
+                        'production_order_id' => $productionOrder->id ?? ($allocation['production_order_id'] ?? null),
+                        'production_order_code' => $orderCode,
+                        'finished_item_code' => $productionOrder
+                            ? trim((string) ($productionOrder->standard_item_code ?: $productionOrder->item_code))
+                            : null,
+                        'allocated_quantity' => (float) ($allocation['quantity'] ?? 0) * (float) ($base['factor'] ?: 1),
+                        'returned_quantity' => 0,
+                        'scrap_quantity' => 0,
+                        'note' => mb_substr(trim((string) ($allocation['note'] ?? '')), 0, 500),
+                    ]);
+                }
 
                 if (!$saveAsDraft) {
                     $this->decreaseInternalStock(
@@ -1725,6 +1868,18 @@ class InternalMaterialIssueController extends Controller
 
     public function destroy(InternalMaterialIssue $issue)
     {
+        $hasReturns = InternalMaterialOrderAllocation::query()
+            ->whereHas('issueLine', fn ($query) => $query->where('issue_id', $issue->id))
+            ->where(function ($query) {
+                $query->where('returned_quantity', '>', 0)->orWhere('scrap_quantity', '>', 0);
+            })
+            ->exists();
+        if ($hasReturns) {
+            return response()->json([
+                'message' => 'Phiếu đã có hoàn trả vật tư. Không thể xóa khi chưa hủy phiếu trả liên quan.',
+            ], 409);
+        }
+
         $auditPayload = [
             'issue_code' => $issue->issue_code,
             'issue_date' => optional($issue->issue_date)->format('Y-m-d'),
@@ -1765,9 +1920,66 @@ class InternalMaterialIssueController extends Controller
 
     public function print(InternalMaterialIssue $issue)
     {
+        $issue->load('lines');
+        $this->attachNetWeightToIssues(collect([$issue]));
+
         return view('client.internal-material-issue-print', [
-            'issue' => $issue->load('lines'),
+            'issue' => $issue,
         ]);
+    }
+
+    private function attachNetWeightToIssues($issues): void
+    {
+        $issues = collect($issues);
+        $lines = $issues->flatMap(function (InternalMaterialIssue $issue) {
+            return $issue->relationLoaded('lines') ? $issue->lines : collect();
+        });
+        $codes = $lines
+            ->map(function (InternalMaterialIssueLine $line) {
+                return mb_strtoupper(trim((string) ($line->internal_item_code ?: $line->ma_hh)));
+            })
+            ->filter()
+            ->unique()
+            ->values();
+
+        $weightByCode = [];
+        if ($codes->isNotEmpty()) {
+            InternalItemCatalog::query()
+                ->where('is_active', true)
+                ->whereIn('item_code', $codes->all())
+                ->get(['item_code', 'weight_per_unit_grams'])
+                ->each(function (InternalItemCatalog $item) use (&$weightByCode) {
+                    $code = mb_strtoupper(trim((string) $item->item_code));
+                    $weight = max(0, (float) ($item->weight_per_unit_grams ?? 0));
+                    if (!array_key_exists($code, $weightByCode) || $weightByCode[$code] <= 0) {
+                        $weightByCode[$code] = $weight;
+                    }
+                });
+        }
+
+        $issues->each(function (InternalMaterialIssue $issue) use ($weightByCode) {
+            $totalNetWeight = 0.0;
+            $missingNormCount = 0;
+
+            foreach ($issue->lines as $line) {
+                $code = mb_strtoupper(trim((string) ($line->internal_item_code ?: $line->ma_hh)));
+                $weightPerUnit = (float) ($weightByCode[$code] ?? 0);
+                $netWeight = $weightPerUnit > 0
+                    ? round(((float) $line->quantity * $weightPerUnit) / 1000, 6)
+                    : null;
+
+                $line->setAttribute('weight_per_unit_grams', $weightPerUnit > 0 ? $weightPerUnit : null);
+                $line->setAttribute('net_weight_kg', $netWeight);
+                if ($netWeight === null) {
+                    $missingNormCount++;
+                } else {
+                    $totalNetWeight += $netWeight;
+                }
+            }
+
+            $issue->setAttribute('total_net_weight_kg', round($totalNetWeight, 6));
+            $issue->setAttribute('missing_weight_norm_count', $missingNormCount);
+        });
     }
 
     public function materialSuggestions(Request $request)

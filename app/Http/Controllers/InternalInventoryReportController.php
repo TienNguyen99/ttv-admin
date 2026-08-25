@@ -124,6 +124,19 @@ class InternalInventoryReportController extends Controller
             }
         }
 
+        $monthlyDocumentRows = $this->transactions(
+            $monthStart,
+            $monthEnd,
+            $catalogMap,
+            $resolver,
+            $productionOrder,
+            $itemCode,
+            $customerMap,
+            $customer,
+            $customerGroup,
+            false
+        )->filter(fn ($row) => $selectedGroups->contains($row['group']));
+
         $transactions = $transactionRows
             ->filter(fn ($row) => $selectedGroups->contains($row['group']))
             ->groupBy('group');
@@ -137,9 +150,13 @@ class InternalInventoryReportController extends Controller
             ->setTitle('Báo cáo nhập xuất tồn theo loại hàng')
             ->setDescription('Dữ liệu database kho nội bộ, không lấy từ TSoft.');
 
-        $usedTitles = [];
-        foreach ($selectedGroups as $index => $group) {
-            $sheet = $index === 0 ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
+        $overviewSheet = $spreadsheet->getActiveSheet();
+        $overviewSheet->setTitle('Phiếu trong tháng');
+        $this->writeMonthlyDocumentsSheet($overviewSheet, $month, $monthlyDocumentRows);
+
+        $usedTitles = ['phiếu trong tháng'];
+        foreach ($selectedGroups as $group) {
+            $sheet = $spreadsheet->createSheet();
             $sheet->setTitle($this->sheetTitle($group, $usedTitles));
             $this->writeSheet(
                 $sheet,
@@ -147,22 +164,6 @@ class InternalInventoryReportController extends Controller
                 $month,
                 $transactions->get($group, collect()),
                 $summary->get($group, collect()),
-                [
-                    'production_order' => $productionOrder,
-                    'item_code' => $itemCode,
-                    'customer' => $customer,
-                    'customer_group' => $customerGroup,
-                ]
-            );
-        }
-
-        if ($selectedGroups->isEmpty()) {
-            $this->writeSheet(
-                $spreadsheet->getActiveSheet(),
-                'Không có dữ liệu',
-                $month,
-                collect(),
-                collect(),
                 [
                     'production_order' => $productionOrder,
                     'item_code' => $itemCode,
@@ -518,7 +519,8 @@ class InternalInventoryReportController extends Controller
         string $itemCode = '',
         array $customerMap = [],
         string $customer = '',
-        string $customerGroup = ''
+        string $customerGroup = '',
+        bool $applyStocktakeCutoff = true
     ): Collection {
         $stocktakeCutoffs = DB::connection('internal')
             ->table('internal_stocktake_lines as stocktake_line')
@@ -537,6 +539,9 @@ class InternalInventoryReportController extends Controller
             ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
             ->leftJoin('internal_production_orders as po', 'po.id', '=', 'l.production_order_id')
             ->where('r.source', 'Phieu nhap thanh pham')
+            ->where(function ($query) {
+                $query->whereNull('r.status')->orWhere('r.status', 'posted');
+            })
             ->whereBetween('r.receipt_date', [$monthStart, $monthEnd]);
         if ($productionOrder !== '') {
             $receiptsQuery->whereRaw(
@@ -577,6 +582,7 @@ class InternalInventoryReportController extends Controller
             ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
             ->leftJoin('internal_production_orders as po', 'po.id', '=', 'l.production_order_id')
             ->whereRaw("COALESCE(i.issue_type, 'material') <> 'production'")
+            ->where('i.status', 'posted')
             ->whereBetween('i.issue_date', [$monthStart, $monthEnd]);
         if ($productionOrder !== '') {
             $issuesQuery->whereRaw(
@@ -614,7 +620,10 @@ class InternalInventoryReportController extends Controller
 
         return $receipts
             ->concat($issues)
-            ->filter(function ($row) use ($stocktakeCutoffs) {
+            ->filter(function ($row) use ($stocktakeCutoffs, $applyStocktakeCutoff) {
+                if (!$applyStocktakeCutoff) {
+                    return true;
+                }
                 $code = mb_strtoupper(trim((string) ($row->internal_item_code ?: $row->ma_hh)));
                 $cutoff = $stocktakeCutoffs->get($code);
                 return !$cutoff || (string) $row->transaction_date > $cutoff;
@@ -655,6 +664,156 @@ class InternalInventoryReportController extends Controller
                 str_pad((string) $row['line_id'], 12, '0', STR_PAD_LEFT),
             ]))
             ->values();
+    }
+
+    private function writeMonthlyDocumentsSheet($sheet, Carbon $month, Collection $rows): void
+    {
+        $sheet->mergeCells('A1:K1');
+        $sheet->setCellValue('A1', 'DANH SÁCH PHIẾU NHẬP / XUẤT THÁNG ' . $month->format('m/Y'));
+        $sheet->mergeCells('A2:K2');
+        $sheet->setCellValue('A2', 'Sắp xếp tăng dần theo ngày · Nhóm theo ngày → số phiếu → mã hàng');
+        $sheet->mergeCells('A4:E4');
+        $sheet->setCellValue('A4', 'PHIẾU NHẬP');
+        $sheet->mergeCells('G4:K4');
+        $sheet->setCellValue('G4', 'PHIẾU XUẤT');
+        $sheet->fromArray(['Ngày', 'Số phiếu', 'Mã hàng', 'Số lượng', 'ĐVT'], null, 'A5');
+        $sheet->fromArray(['Ngày', 'Số phiếu', 'Mã hàng', 'Số lượng', 'ĐVT'], null, 'G5');
+
+        $groupRows = static function (Collection $source, string $operation): Collection {
+            return $source
+                ->where('operation', $operation)
+                ->groupBy('date')
+                ->map(function (Collection $dateRows) {
+                    return $dateRows
+                        ->groupBy('document_code')
+                        ->sortKeys(SORT_NATURAL | SORT_FLAG_CASE)
+                        ->flatMap(function (Collection $documentRows, string $documentCode) {
+                            return $documentRows
+                                ->groupBy(fn ($row) => mb_strtoupper(trim((string) $row['code'])) . '|' . mb_strtoupper(trim((string) $row['unit'])))
+                                ->map(function (Collection $itemRows) use ($documentCode) {
+                                    $first = $itemRows->first();
+
+                                    return [
+                                        'document_code' => $documentCode,
+                                        'code' => $first['code'],
+                                        'quantity' => (float) $itemRows->sum('quantity'),
+                                        'unit' => $first['unit'],
+                                    ];
+                                })
+                                ->sortBy(fn ($row) => mb_strtoupper((string) $row['code']), SORT_NATURAL | SORT_FLAG_CASE)
+                                ->values();
+                        })
+                        ->values();
+                });
+        };
+
+        $receiptsByDate = $groupRows($rows, 'Nhập kho');
+        $issuesByDate = $groupRows($rows, 'Xuất kho');
+        $dates = $receiptsByDate->keys()
+            ->merge($issuesByDate->keys())
+            ->unique()
+            ->sort()
+            ->values();
+        $rowNumber = 6;
+
+        foreach ($dates as $date) {
+            $receiptRows = $receiptsByDate->get($date, collect())->values();
+            $issueRows = $issuesByDate->get($date, collect())->values();
+            $blockStart = $rowNumber;
+            $blockLength = max($receiptRows->count(), $issueRows->count(), 1);
+
+            for ($offset = 0; $offset < $blockLength; $offset++) {
+                $receipt = $receiptRows->get($offset);
+                $issue = $issueRows->get($offset);
+                if ($receipt) {
+                    $sheet->setCellValueExplicit('B' . $rowNumber, $receipt['document_code'], DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('C' . $rowNumber, $receipt['code'], DataType::TYPE_STRING);
+                    $sheet->setCellValue('D' . $rowNumber, $receipt['quantity']);
+                    $sheet->setCellValue('E' . $rowNumber, $receipt['unit']);
+                }
+                if ($issue) {
+                    $sheet->setCellValueExplicit('H' . $rowNumber, $issue['document_code'], DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit('I' . $rowNumber, $issue['code'], DataType::TYPE_STRING);
+                    $sheet->setCellValue('J' . $rowNumber, $issue['quantity']);
+                    $sheet->setCellValue('K' . $rowNumber, $issue['unit']);
+                }
+                $rowNumber++;
+            }
+
+            $blockEnd = $rowNumber - 1;
+            if ($receiptRows->isNotEmpty()) {
+                $sheet->setCellValue('A' . $blockStart, ExcelDate::PHPToExcel(Carbon::parse($date)));
+                if ($blockEnd > $blockStart) $sheet->mergeCells("A{$blockStart}:A{$blockEnd}");
+                $this->mergeDocumentCells($sheet, $receiptRows, 'B', $blockStart);
+            }
+            if ($issueRows->isNotEmpty()) {
+                $sheet->setCellValue('G' . $blockStart, ExcelDate::PHPToExcel(Carbon::parse($date)));
+                if ($blockEnd > $blockStart) $sheet->mergeCells("G{$blockStart}:G{$blockEnd}");
+                $this->mergeDocumentCells($sheet, $issueRows, 'H', $blockStart);
+            }
+            $sheet->getStyle("A{$blockStart}:K{$blockEnd}")->getBorders()->getBottom()->setBorderStyle(Border::BORDER_MEDIUM)->getColor()->setRGB('9CB6CE');
+        }
+
+        if ($dates->isEmpty()) {
+            $sheet->mergeCells('A6:K6');
+            $sheet->setCellValue('A6', 'Không có phiếu nhập hoặc phiếu xuất trong tháng.');
+            $sheet->getStyle('A6')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $rowNumber = 7;
+        }
+
+        $lastRow = max(6, $rowNumber - 1);
+        $sheet->getStyle('A1:K1')->applyFromArray([
+            'font' => ['bold' => true, 'size' => 15, 'color' => ['rgb' => '123653']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'DDEEFF']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ]);
+        $sheet->getStyle('A4:E4')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '16875B']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ]);
+        $sheet->getStyle('G4:K4')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'D97706']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ]);
+        foreach (['A5:E5', 'G5:K5'] as $range) {
+            $sheet->getStyle($range)->applyFromArray([
+                'font' => ['bold' => true, 'color' => ['rgb' => '173F6B']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'EAF4FF']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            ]);
+        }
+        $sheet->getStyle("A5:E{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('CAD8E5');
+        $sheet->getStyle("G5:K{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('CAD8E5');
+        $sheet->getStyle("A6:A{$lastRow}")->getNumberFormat()->setFormatCode('dd/mm/yyyy');
+        $sheet->getStyle("G6:G{$lastRow}")->getNumberFormat()->setFormatCode('dd/mm/yyyy');
+        $sheet->getStyle("D6:D{$lastRow}")->getNumberFormat()->setFormatCode('#,##0.###');
+        $sheet->getStyle("J6:J{$lastRow}")->getNumberFormat()->setFormatCode('#,##0.###');
+        $sheet->getStyle("A5:K{$lastRow}")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet->getStyle("A6:A{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->getStyle("G6:G{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sheet->freezePane('A6');
+        foreach (['A' => 13, 'B' => 24, 'C' => 24, 'D' => 15, 'E' => 12, 'F' => 3, 'G' => 13, 'H' => 24, 'I' => 24, 'J' => 15, 'K' => 12] as $column => $width) {
+            $sheet->getColumnDimension($column)->setWidth($width);
+        }
+        $sheet->getPageSetup()->setOrientation('landscape')->setFitToWidth(1)->setFitToHeight(0);
+        $sheet->getPageMargins()->setTop(0.35)->setBottom(0.35)->setLeft(0.25)->setRight(0.25);
+        $sheet->setShowGridlines(false);
+    }
+
+    private function mergeDocumentCells($sheet, Collection $rows, string $column, int $startRow): void
+    {
+        $offset = 0;
+        foreach ($rows->groupBy('document_code') as $documentRows) {
+            $length = $documentRows->count();
+            if ($length > 1) {
+                $first = $startRow + $offset;
+                $last = $first + $length - 1;
+                $sheet->mergeCells("{$column}{$first}:{$column}{$last}");
+            }
+            $offset += $length;
+        }
     }
 
     private function stockSummary(

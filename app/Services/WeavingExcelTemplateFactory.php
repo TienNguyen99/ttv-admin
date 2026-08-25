@@ -26,7 +26,7 @@ class WeavingExcelTemplateFactory
         $sheet->setCellValue('J2', '');
         $sheet->setCellValue('G19', '');
         $sheet->getPageSetup()
-            ->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE)
+            ->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_PORTRAIT)
             ->setPaperSize(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_A4)
             ->setFitToWidth(1)
             ->setFitToHeight(1)

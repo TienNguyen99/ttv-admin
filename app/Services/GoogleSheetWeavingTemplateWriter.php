@@ -136,6 +136,37 @@ class GoogleSheetWeavingTemplateWriter
         $qrFormula = $orderCode !== ''
             ? '=IMAGE("https://quickchart.io/qr?size=120&text=' . rawurlencode($orderCode) . '")'
             : '';
+        $sizeLines = array_values((array) ($metadata['size_lines'] ?? []));
+        if (empty($sizeLines)) {
+            $sizeLines = array_map(function ($line) {
+                $line = (array) $line;
+
+                return [
+                    'item_code' => $line['item_code'] ?? '',
+                    'size' => $line['size'] ?? '',
+                    'quantity' => $line['order_quantity'] ?? 0,
+                    'row_count' => '',
+                ];
+            }, array_values((array) ($plan['source_items'] ?? [])));
+        }
+        if (empty($sizeLines)) {
+            $sizeLines[] = [
+                'item_code' => $order['item_code'] ?? $sourceItem['item_code'] ?? '',
+                'size' => '',
+                'quantity' => $quantity,
+                'row_count' => $metadata['row_count'] ?? '',
+            ];
+        }
+        $sizeValues = array_fill(0, 10, ['', '', '', '']);
+        foreach (array_slice($sizeLines, 0, 10) as $index => $line) {
+            $line = (array) $line;
+            $sizeValues[$index] = [
+                $this->firstText($line['size'] ?? '', $line['item_code'] ?? ''),
+                $this->number($line['quantity'] ?? 0),
+                '',
+                $this->numericOrBlank($line['row_count'] ?? ''),
+            ];
+        }
 
         return [
             ['range' => 'B2', 'values' => [[$order['customer'] ?? $sourceItem['customer'] ?? '']]],
@@ -175,12 +206,7 @@ class GoogleSheetWeavingTemplateWriter
             ['range' => 'C20', 'values' => [[$metadata['usb_small'] ?? '']]],
             ['range' => 'E20', 'values' => [[$metadata['usb_large'] ?? '']]],
             ['range' => 'G19', 'values' => [[$imageFormula]]],
-            ['range' => 'A33:D33', 'values' => [[
-                $order['item_code'] ?? $sourceItem['item_code'] ?? '',
-                $this->number($quantity),
-                '',
-                $this->numericOrBlank($metadata['row_count'] ?? ''),
-            ]]],
+            ['range' => 'A33:D42', 'values' => $sizeValues],
         ];
     }
 

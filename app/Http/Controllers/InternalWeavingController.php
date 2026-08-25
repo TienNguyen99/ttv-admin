@@ -167,7 +167,7 @@ class InternalWeavingController extends Controller
             return response()->json(['message' => 'Lệnh này đã được gửi xuống sản xuất.']);
         }
 
-        $metadata = json_decode((string) ($order->metadata_json ?? ''), true) ?: [];
+        $metadata = json_decode((string) ($order ? $order->metadata_json : ''), true) ?: [];
         $receiptBaseline = DB::connection('internal')->table('internal_material_receipt_lines as line')
             ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'line.receipt_id')
             ->where('line.production_order', trim((string) $order->order_code))
@@ -990,8 +990,8 @@ class InternalWeavingController extends Controller
     public function plan(Request $request, InternalWeavingOrder $order)
     {
         $order->load('item.boms');
-        $bomRows = $order->item ? $order->item->boms : collect();
         $orderMetadata = json_decode((string) ($order->metadata_json ?? ''), true) ?: [];
+        $bomRows = $this->bomRowsForOrder($order->item, $order);
         $itemMetadata = json_decode((string) ($order->item->metadata_json ?? ''), true) ?: [];
         $itemCatalog = InternalItemCatalog::query()
             ->whereRaw('UPPER(TRIM(item_code)) = ?', [$this->cleanCode($order->item_code)])
@@ -1163,16 +1163,20 @@ class InternalWeavingController extends Controller
         $orderCode = e((string) ($plan['order']['production_order'] ?? $order->order_code));
         $printCss = <<<'CSS'
 <style id="ttv-print-css">
-@page { size: A4 landscape; margin: 4mm; }
+@page { size: A4 portrait; margin: 4mm; }
 html, body { margin: 0; min-height: 100%; background: #e8eef5; }
 body { padding: 58px 12px 16px; }
-body > table { width: min(1120px, calc(100vw - 24px)) !important; margin: 0 auto; background: #fff; box-shadow: 0 8px 30px rgba(15, 42, 75, .14); }
+body > table { width: min(820px, calc(100vw - 24px)) !important; margin: 0 auto; table-layout: fixed; background: #fff; box-shadow: 0 8px 30px rgba(15, 42, 75, .14); }
+.ttv-weaving-product-image { display:flex; align-items:center; justify-content:center; width:100%; height:100%; min-height:190px; position:relative; overflow:hidden; }
+.ttv-weaving-product-image img { display:block; max-width:94%; max-height:180px; object-fit:contain; }
+.ttv-weaving-product-image span { position:absolute; right:4px; bottom:3px; color:#64748b; font:600 8px Arial,sans-serif; }
 .ttv-print-toolbar { position: fixed; z-index: 1000; inset: 0 0 auto; height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; border-bottom: 1px solid #cbd8e8; background: rgba(255,255,255,.96); font: 600 13px Arial,sans-serif; color: #17365d; }
 .ttv-print-toolbar button { min-height: 32px; padding: 0 14px; border: 1px solid #2368c4; border-radius: 6px; background: #2368c4; color: #fff; font-weight: 700; cursor: pointer; }
 @media print {
-    html, body { width: 100%; min-height: 0; background: #fff; }
+    html, body { width: 202mm; height: 289mm; min-height: 0; overflow: hidden; background: #fff; }
     body { padding: 0; }
-    body > table { width: 100% !important; max-width: none; margin: 0 auto; box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
+    body > table { width: 202mm !important; height: 288mm !important; max-width: none; margin: 0 auto; table-layout: fixed; box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
+    body > table tr, body > table td { break-inside: avoid; page-break-inside: avoid; }
     .ttv-print-toolbar { display: none !important; }
 }
 </style>
@@ -1180,7 +1184,7 @@ CSS;
         $toolbar = '<div class="ttv-print-toolbar"><span>Lệnh dệt ' . $orderCode . '</span><button type="button" onclick="window.print()">In / lưu PDF</button></div>';
         $autoPrintScript = request()->boolean('preview')
             ? ''
-            : '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},350);});</script>';
+            : '<script>window.addEventListener("load",function(){var printed=false;var run=function(){if(printed)return;printed=true;window.print();};var images=Array.prototype.slice.call(document.images).filter(function(image){return !image.complete;});if(!images.length){setTimeout(run,150);return;}Promise.all(images.map(function(image){return new Promise(function(resolve){image.addEventListener("load",resolve,{once:true});image.addEventListener("error",resolve,{once:true});});})).then(run);setTimeout(run,3000);});</script>';
         $html = str_replace('</head>', $printCss . '</head>', $html);
         $html = str_replace('<body>', '<body>' . $toolbar, $html);
         $html = str_replace('</body>', $autoPrintScript . '</body>', $html);
@@ -1240,6 +1244,12 @@ CSS;
         foreach ($sourceLines as $sourceLine) {
             $itemCode = $this->cleanCode($sourceLine->item_code);
             $item = $items[$itemCode] ?? null;
+            $itemBomRows = $this->bomRowsForOrder(
+                $item,
+                $matchedWeavingOrder && $this->cleanCode($matchedWeavingOrder->item_code) === $itemCode
+                    ? $matchedWeavingOrder
+                    : null
+            );
             $sourceCatalog = $sourceCatalogs[$itemCode] ?? null;
             $itemMetadata = json_decode((string) ($item->metadata_json ?? ''), true) ?: [];
             $sourceItem = [
@@ -1255,17 +1265,17 @@ CSS;
                 'color' => trim((string) $sourceLine->color),
                 'order_quantity' => (float) $sourceLine->order_quantity,
                 'unit' => trim((string) $sourceLine->unit),
-                'has_bom' => (bool) ($item && $item->boms->isNotEmpty()),
+                'has_bom' => $itemBomRows->isNotEmpty(),
                 'materials' => [],
             ];
 
-            if (!$item || $item->boms->isEmpty()) {
+            if (!$item || $itemBomRows->isEmpty()) {
                 $missingBomItems[$itemCode ?: 'CHUA-CO-MA-HANG'] = true;
                 $sourceItemBreakdown[] = $sourceItem;
                 continue;
             }
 
-            foreach ($item->boms as $bom) {
+            foreach ($itemBomRows as $bom) {
                 $materialCode = $this->cleanCode($bom->material_code);
                 if ($materialCode === '') continue;
                 $bomMetadata = json_decode((string) ($bom->metadata_json ?? ''), true) ?: [];
@@ -1776,6 +1786,12 @@ CSS;
             'metadata.hitex_capacity' => 'nullable|numeric|min:0.000001|max:999999999999',
             'metadata.operations' => 'nullable|array',
             'metadata.operations.*' => 'nullable|string|max:1000',
+            'metadata.size_lines' => 'nullable|array|max:10',
+            'metadata.size_lines.*.item_code' => 'nullable|string|max:120',
+            'metadata.size_lines.*.size' => 'nullable|string|max:100',
+            'metadata.size_lines.*.color' => 'nullable|string|max:200',
+            'metadata.size_lines.*.quantity' => 'required|numeric|min:0',
+            'metadata.size_lines.*.row_count' => 'nullable|numeric|min:0',
         ]);
         $data = $this->normalizeDateFields($data, ['order_date', 'due_date']);
 
@@ -1845,6 +1861,11 @@ CSS;
 
     public function saveDesignerOrder(Request $request)
     {
+        $sizeLines = collect((array) $request->input('metadata.size_lines', []));
+        $sizeTotal = (float) $sizeLines->sum(fn ($line) => $this->toNumber($line['quantity'] ?? 0));
+        if ($sizeLines->isNotEmpty() && $sizeTotal > 0) {
+            $request->merge(['order_quantity' => $sizeTotal]);
+        }
         $request->merge([
             'lines' => $this->deriveBomConsumptionFromTotals(
                 (array) $request->input('lines', []),
@@ -1899,6 +1920,12 @@ CSS;
             'metadata.hitex_capacity' => 'nullable|numeric|min:0.000001|max:999999999999',
             'metadata.operations' => 'nullable|array',
             'metadata.operations.*' => 'nullable|string|max:1000',
+            'metadata.size_lines' => 'nullable|array|max:10',
+            'metadata.size_lines.*.item_code' => 'nullable|string|max:120',
+            'metadata.size_lines.*.size' => 'nullable|string|max:100',
+            'metadata.size_lines.*.color' => 'nullable|string|max:200',
+            'metadata.size_lines.*.quantity' => 'required|numeric|min:0',
+            'metadata.size_lines.*.row_count' => 'nullable|numeric|min:0',
             'lines' => 'required|array|min:1|max:7',
             'lines.*.material_code' => 'required|string|max:120',
             'lines.*.line_role' => 'nullable|string|max:120',
@@ -1995,13 +2022,13 @@ CSS;
             );
             $metadata['designer_source'] = 'web';
             $metadata['designer_saved_at'] = now('Asia/Ho_Chi_Minh')->toIso8601String();
+            $metadata['bom_snapshot'] = collect($data['lines'])->values()->all();
+            $metadata['bom_snapshot_at'] = now('Asia/Ho_Chi_Minh')->toIso8601String();
 
             $status = $data['action'] === 'issued' || ($existingOrder && $existingOrder->status === 'issued')
                 ? 'issued'
                 : 'draft';
             if ($data['action'] === 'issued') {
-                $metadata['bom_snapshot'] = collect($data['lines'])->values()->all();
-                $metadata['bom_snapshot_at'] = now('Asia/Ho_Chi_Minh')->toIso8601String();
                 if (empty($metadata['sent_to_production_at'])) {
                     $receiptBaseline = DB::connection('internal')->table('internal_material_receipt_lines as line')
                         ->join('internal_material_receipts as receipt', 'receipt.id', '=', 'line.receipt_id')
@@ -2060,15 +2087,53 @@ CSS;
             $line['total_grams'] = $totalGrams;
             $line['waste_percent'] = $wastePercent;
 
-            if ($consumption <= 0 && $totalGrams > 0) {
-                $line['consumption_per_unit'] = round(
-                    $totalGrams / $orderQuantity / (1 + $wastePercent / 100),
-                    6
-                );
+            if ($totalGrams > 0) {
+                // Designer's total already includes their production formula.
+                // Do not apply the line waste percentage a second time.
+                $line['consumption_per_unit'] = round($totalGrams / $orderQuantity, 6);
+                $line['waste_percent'] = 0;
             }
 
             return $line;
         })->all();
+    }
+
+    private function bomRowsForOrder(?InternalWeavingItem $item, ?InternalWeavingOrder $order = null)
+    {
+        if (!$item) {
+            return collect();
+        }
+
+        $metadata = json_decode((string) ($order->metadata_json ?? ''), true) ?: [];
+        $snapshot = collect((array) ($metadata['bom_snapshot'] ?? []))
+            ->filter(fn ($line) => $this->cleanCode($line['material_code'] ?? '') !== '')
+            ->values();
+
+        if ($snapshot->isEmpty()) {
+            return $item->relationLoaded('boms') ? $item->boms : $item->boms()->get();
+        }
+
+        return $snapshot->map(function ($line) {
+            $line = (array) $line;
+            $bom = new InternalWeavingBom();
+            $bom->forceFill([
+                'material_code' => $this->cleanCode($line['material_code'] ?? ''),
+                'line_role' => $this->cleanCode($line['line_role'] ?? ''),
+                'material_name' => trim((string) ($line['material_name'] ?? '')),
+                'unit' => trim((string) ($line['unit'] ?? 'gam')) ?: 'gam',
+                'consumption_per_unit' => $this->toNumber($line['consumption_per_unit'] ?? 0),
+                'waste_percent' => $this->toNumber($line['waste_percent'] ?? 0),
+                'note' => trim((string) ($line['note'] ?? '')),
+                'metadata_json' => json_encode([
+                    'type' => trim((string) ($line['type'] ?? '')),
+                    'pick_count' => trim((string) ($line['pick_count'] ?? '')),
+                    'shelf_hint' => trim((string) ($line['shelf_hint'] ?? '')),
+                    'total_grams' => $this->toNumber($line['total_grams'] ?? 0),
+                ], JSON_UNESCAPED_UNICODE),
+            ]);
+
+            return $bom;
+        });
     }
 
     private function latestWeavingMachineDefaults(?int $excludeOrderId = null): array

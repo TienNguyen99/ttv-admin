@@ -3,6 +3,9 @@
 namespace Tests\Unit;
 
 use App\Http\Controllers\InternalWeavingController;
+use App\Models\InternalWeavingBom;
+use App\Models\InternalWeavingItem;
+use App\Models\InternalWeavingOrder;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
@@ -90,7 +93,7 @@ class InternalWeavingDesignSheetParserTest extends TestCase
     {
         $lines = $this->invokePrivate('deriveBomConsumptionFromTotals', [[[
                 'material_code' => '75D',
-                'consumption_per_unit' => 0,
+                'consumption_per_unit' => 9.99,
                 'total_grams' => '11,4',
                 'waste_percent' => 0,
             ], [
@@ -103,7 +106,39 @@ class InternalWeavingDesignSheetParserTest extends TestCase
         ]);
 
         $this->assertSame(0.38, $lines[0]['consumption_per_unit']);
-        $this->assertSame(1.0, $lines[1]['consumption_per_unit']);
+        $this->assertSame(0, $lines[0]['waste_percent']);
+        $this->assertSame(1.1, $lines[1]['consumption_per_unit']);
+        $this->assertSame(0, $lines[1]['waste_percent']);
+    }
+
+    public function test_order_bom_snapshot_is_used_instead_of_shared_item_bom(): void
+    {
+        $sharedBom = new InternalWeavingBom();
+        $sharedBom->forceFill([
+            'material_code' => 'SHARED-YARN',
+            'consumption_per_unit' => 9,
+            'waste_percent' => 0,
+        ]);
+        $item = new InternalWeavingItem();
+        $item->setRelation('boms', collect([$sharedBom]));
+        $order = new InternalWeavingOrder();
+        $order->forceFill([
+            'metadata_json' => json_encode(['bom_snapshot' => [[
+                'material_code' => 'ORDER-YARN',
+                'material_name' => 'Order yarn',
+                'unit' => 'gam',
+                'consumption_per_unit' => 0.38,
+                'waste_percent' => 0,
+                'total_grams' => 94.875,
+            ]]]),
+        ]);
+
+        $rows = $this->invokePrivate('bomRowsForOrder', [$item, $order]);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('ORDER-YARN', $rows->first()->material_code);
+        $this->assertSame(0.38, $rows->first()->consumption_per_unit);
+        $this->assertSame(94.875, json_decode($rows->first()->metadata_json, true)['total_grams']);
     }
 
     private function invokePrivate(string $method, array $arguments)

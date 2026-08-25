@@ -31,6 +31,12 @@ class WeavingExcelTemplateFactoryTest extends TestCase
         $this->assertSame('=+I15*A15/(420*500)', $sheet->getCell('K15')->getValue());
         $this->assertCount(92, $sheet->getMergeCells());
         $this->assertSame('A1:K42', $sheet->getPageSetup()->getPrintArea());
+        $this->assertSame(
+            \PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_PORTRAIT,
+            $sheet->getPageSetup()->getOrientation()
+        );
+        $this->assertSame(1, $sheet->getPageSetup()->getFitToWidth());
+        $this->assertSame(1, $sheet->getPageSetup()->getFitToHeight());
 
         $reopened->disconnectWorksheets();
         unlink($path);

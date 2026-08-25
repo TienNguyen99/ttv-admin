@@ -28,6 +28,10 @@ class GoogleSheetWeavingTemplateWriterTest extends TestCase
                     'density' => '26',
                     'machine' => 'TRẮNG',
                     'file_name' => 'USB-3816',
+                    'size_lines' => [
+                        ['item_code' => 'C006463-NPOR', 'size' => '55', 'quantity' => 10, 'row_count' => 2],
+                        ['item_code' => 'C006463-NPOR', 'size' => '57', 'quantity' => 20, 'row_count' => 3],
+                    ],
                     'operations' => [
                         'UI KEO' => 'Ép dựng',
                         'PHAN TREN' => 'THEO ĐỊNH HÌNH',
@@ -72,6 +76,8 @@ class GoogleSheetWeavingTemplateWriterTest extends TestCase
         $this->assertArrayNotHasKey('K13', $ranges);
         $this->assertArrayNotHasKey('A15:K16', $ranges);
         $this->assertSame('USB-3816', $ranges['A20']['values'][0][0]);
-        $this->assertSame(['C006463-NPOR', 30.0, '', ''], $ranges['A33:D33']['values'][0]);
+        $this->assertSame(['55', 10.0, '', 2.0], $ranges['A33:D42']['values'][0]);
+        $this->assertSame(['57', 20.0, '', 3.0], $ranges['A33:D42']['values'][1]);
+        $this->assertCount(10, $ranges['A33:D42']['values']);
     }
 }

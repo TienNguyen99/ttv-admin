@@ -145,7 +145,7 @@
         }
         .issue-table {
             width: 100%;
-            min-width: 1290px;
+            min-width: 1390px;
             border-collapse: separate;
             border-spacing: 0;
         }
@@ -174,9 +174,23 @@
         .col-variant { width: 125px; }
         .col-qty { width: 110px; }
         .col-unit { width: 90px; }
+        .col-net { width: 100px; }
         .col-location { width: 250px; }
         .col-note { width: 160px; }
         .col-remove { width: 42px; }
+        .net-weight {
+            display: grid;
+            min-height: 38px;
+            place-items: center;
+            border: 1px solid #dbe3ef;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: #137a4b;
+            font-size: 12px;
+            font-weight: 900;
+            text-align: center;
+        }
+        .net-weight.is-missing { color: #b45309; }
         .suggest-wrap { position: relative; }
         .suggestions {
             position: absolute;
@@ -589,6 +603,7 @@
             <a class="btn-quick" href="{{ url('/client/nhap-thanh-pham-nhanh') }}"><i data-lucide="arrow-left"></i>Chọn lại</a>
             <button id="findDraftBtn" class="btn-quick" type="button"><i data-lucide="search"></i>Phiếu chờ <span id="draftCountBadge" class="draft-count">0</span></button>
             <button id="startPickingBtn" class="btn-quick btn-primary-quick" type="button" hidden><i data-lucide="play"></i>Bắt đầu soạn</button>
+            <button id="printPickingBtn" class="btn-quick" type="button" hidden><i data-lucide="printer"></i>In phiếu soạn</button>
             <button id="saveDraftBtn" class="btn-quick" type="button"><i data-lucide="save"></i>Lưu chờ soạn</button>
             <button id="saveIssueBtn" class="btn-quick btn-primary-quick" type="button"><i data-lucide="printer"></i>Lưu + in</button>
         </div>
@@ -600,6 +615,7 @@
             <div class="panel-tools">
                 <span class="pill">Dòng <strong id="lineCount">0</strong></span>
                 <span class="pill">SL <strong id="totalQuantity">0</strong></span>
+                <span class="pill">Net <strong id="totalNetWeight">0 kg</strong></span>
                 <button id="pasteExcelBtn" class="btn-quick" type="button"><i data-lucide="clipboard-paste"></i>Dán Excel</button>
                 <button id="addRowBtn" class="btn-quick" type="button"><i data-lucide="plus"></i>Thêm dòng</button>
                 <button id="resetBtn" class="btn-quick" type="button"><i data-lucide="rotate-ccw"></i>Mới</button>
@@ -638,6 +654,7 @@
                         <th class="col-variant">Màu</th>
                         <th class="col-qty">Số lượng *</th>
                         <th class="col-unit">ĐVT</th>
+                        <th class="col-net">Net kg</th>
                         <th class="col-location">Vị trí</th>
                         <th class="col-note">Ghi chú</th>
                         <th class="col-remove"></th>
@@ -813,6 +830,25 @@
     const numberFormat = value => new Intl.NumberFormat('vi-VN', {
         maximumFractionDigits: 3
     }).format(Number(value || 0));
+
+    function updateRowNetWeight(row) {
+        const output = row.querySelector('.net-weight');
+        if (!output) return null;
+        const norm = Number(row._weightPerUnitGrams || 0);
+        const quantity = Number(row.querySelector('.quantity').value || 0);
+        const netWeight = norm > 0 ? (quantity * norm) / 1000 : null;
+        output.classList.toggle('is-missing', netWeight === null);
+        output.textContent = netWeight === null ? 'Thiếu ĐM' : `${numberFormat(netWeight)} kg`;
+        output.title = netWeight === null
+            ? 'Mã hàng chưa có định mức gram trên một đơn vị trong DANH MỤC'
+            : `Định mức ${numberFormat(norm)} gram/${row.querySelector('.unit').value.trim() || 'đơn vị'}`;
+        return netWeight;
+    }
+
+    function setRowWeightNorm(row, value) {
+        row._weightPerUnitGrams = Math.max(0, Number(value || 0));
+        updateRowNetWeight(row);
+    }
 
     function parseClipboardNumber(value) {
         let normalized = String(value ?? '').replace(/\s+/g, '').replace(/[^0-9,.-]/g, '');
@@ -1046,6 +1082,7 @@
                 <td><input class="form-control color" autocomplete="off"></td>
                 <td><input class="form-control quantity" type="number" min="0" step="0.001" inputmode="decimal" value="0"></td>
                 <td><input class="form-control unit" autocomplete="off" value="Cái"></td>
+                <td><output class="net-weight is-missing" title="Chưa có định mức gram trên một đơn vị">Thiếu ĐM</output></td>
                 <td>
                     <button class="location-trigger is-empty" type="button" title="Chọn kệ xuất">
                         <i data-lucide="map-pin"></i><span>Chọn kệ</span>
@@ -1269,6 +1306,7 @@
             row.dataset.explicitPastedLocation = item.location;
             row.dataset.matchByCodeOnly = '1';
             row.dataset.pastedFifo = '1';
+            setRowWeightNorm(row, catalogItem?.weight_per_unit_grams);
             row.querySelector('.row-state').className = catalogItem ? 'row-state' : 'row-state is-new';
             row.querySelector('.row-state').textContent = catalogItem
                 ? 'Đã dán · đúng danh mục'
@@ -1329,6 +1367,7 @@
                 delete row.dataset.orderCustomer;
             }
             row.querySelector('.row-state').textContent = '';
+            setRowWeightNorm(row, 0);
             debounceSuggestions(codeInput, () => loadSuggestions(row));
             updateSummary();
         });
@@ -1344,6 +1383,7 @@
         });
         row.querySelector('.location-trigger').addEventListener('click', () => openLocationDialog(row));
         row.querySelector('.quantity').addEventListener('input', () => {
+            updateRowNetWeight(row);
             updateSummary();
             if (row.dataset.pastedFifo === '1') {
                 assignPastedLocationsByFifo([...rowsBody.children].filter(item => item.dataset.pastedFifo === '1'));
@@ -1390,6 +1430,7 @@
         delete row.dataset.pastedFifo;
         delete row.dataset.explicitPastedLocation;
         delete row.dataset.manualLocationSelection;
+        row._weightPerUnitGrams = 0;
         row._preferredLocations = new Set();
         row.querySelectorAll('input').forEach(input => {
             input.value = input.classList.contains('quantity') ? '0' : (input.classList.contains('unit') ? 'Cái' : '');
@@ -1817,6 +1858,7 @@
 
     function applySuggestion(row, item) {
         const hasSelectedOrder = Boolean(row.dataset.orderItemCode);
+        setRowWeightNorm(row, item.weight_per_unit_grams);
         row.querySelector('.internal-code').value = item.code || item.value || '';
         row.querySelector('.item-name').value = item.name || row.querySelector('.item-name').value || '';
         row.querySelector('.size').value = item.size || row.querySelector('.size').value || '';
@@ -1837,6 +1879,7 @@
     function applyCatalogItemToIssueRows(rows, item) {
         const savedCode = item.code || item.value || '';
         rows.forEach(row => {
+            setRowWeightNorm(row, item.weight_per_unit_grams);
             row.querySelector('.internal-code').value = savedCode;
             row.querySelector('.item-name').value = item.name || row.querySelector('.item-name').value || savedCode;
             row.querySelector('.size').value = row.querySelector('.size').value || item.size || '';
@@ -1966,6 +2009,7 @@
             const color = row.querySelector('.color').value.trim();
             const unit = row.querySelector('.unit').value.trim();
             const cartonNorm = Number(row._cartonNorm || 0);
+            const weightPerUnitGrams = Number(row._weightPerUnitGrams || 0);
             const title = [`Dòng ${index + 1}`, po ? `PO ${po}` : '', order, code, color].filter(Boolean).join(' · ');
             const locationGroups = [...allocations.reduce((groups, item) => {
                 if (!groups.has(item.locationCode)) groups.set(item.locationCode, []);
@@ -1995,6 +2039,7 @@
                     title,
                     locationCode,
                     totalTaken,
+                    netWeightKg: weightPerUnitGrams > 0 ? (totalTaken * weightPerUnitGrams) / 1000 : null,
                     unit,
                     instruction: instructions.join(' + '),
                     packageHint,
@@ -2009,6 +2054,7 @@
         const list = document.getElementById('pickingGuideList');
         const plan = buildPickingPlan();
         const startButton = document.getElementById('startPickingBtn');
+        const printButton = document.getElementById('printPickingBtn');
         const rowGroups = [...plan.reduce((groups, step) => {
             if (!groups.has(step.rowIndex)) groups.set(step.rowIndex, []);
             groups.get(step.rowIndex).push(step);
@@ -2018,6 +2064,7 @@
         guide.hidden = plan.length === 0;
         startButton.hidden = plan.length === 0 && !editingIssueId;
         startButton.disabled = plan.length === 0;
+        printButton.hidden = !editingIssueId;
         startButton.title = plan.length ? `${plan.length} bước soạn hàng` : 'Chưa có dòng nào đủ tồn và vị trí để soạn';
         if (!plan.length) {
             list.innerHTML = '';
@@ -2029,11 +2076,14 @@
         document.getElementById('pickingGuideSummary').textContent = `${completedCount}/${plan.length} bước đã xong`;
         list.innerHTML = rowGroups.map(steps => {
             const rowTotal = steps.reduce((sum, step) => sum + step.totalTaken, 0);
+            const rowNetWeight = steps.every(step => step.netWeightKg !== null)
+                ? steps.reduce((sum, step) => sum + step.netWeightKg, 0)
+                : null;
             return `
                 <article class="pick-row">
                     <div class="pick-row__title">
                         <span>${escapeHtml(steps[0].title)}</span>
-                        <span>${numberFormat(rowTotal)} ${escapeHtml(steps[0].unit)}</span>
+                        <span>${numberFormat(rowTotal)} ${escapeHtml(steps[0].unit)} · ${rowNetWeight === null ? 'Thiếu ĐM' : `Net ${numberFormat(rowNetWeight)} kg`}</span>
                     </div>
                     ${steps.map(step => {
                         const checked = completedPickingSteps.has(step.key);
@@ -2042,7 +2092,7 @@
                                 <input type="checkbox" data-pick-key="${escapeHtml(step.key)}" ${checked ? 'checked' : ''}>
                                 <strong>${escapeHtml(step.locationCode)}</strong>
                                 <span>${escapeHtml(step.packageHint)}<br><small>${step.returnQuantity > 0 ? `Trả lại: ${numberFormat(step.returnQuantity)} ${escapeHtml(step.unit)}` : 'Không có hàng lẻ trả lại'}</small></span>
-                                <span class="pick-step__qty">Lấy ${escapeHtml(step.instruction)}<br>${numberFormat(step.totalTaken)} ${escapeHtml(step.unit)}</span>
+                                <span class="pick-step__qty">Lấy ${escapeHtml(step.instruction)}<br>${numberFormat(step.totalTaken)} ${escapeHtml(step.unit)} · ${step.netWeightKg === null ? 'Thiếu ĐM' : `Net ${numberFormat(step.netWeightKg)} kg`}</span>
                             </label>
                         `;
                     }).join('')}
@@ -2076,7 +2126,8 @@
         document.getElementById('pickingRowLabel').textContent = step.title;
         document.getElementById('pickingShelfCode').textContent = step.locationCode;
         document.getElementById('pickingInstruction').textContent = step.instruction;
-        document.getElementById('pickingTotal').textContent = `Tổng ${numberFormat(step.totalTaken)} ${step.unit}`;
+        document.getElementById('pickingTotal').textContent = `Tổng ${numberFormat(step.totalTaken)} ${step.unit}`
+            + (step.netWeightKg === null ? ' · Chưa có định mức' : ` · Net ${numberFormat(step.netWeightKg)} kg`);
         document.getElementById('pickingPackageHint').textContent = step.packageHint;
         const returnBox = document.getElementById('pickingReturnBox');
         returnBox.hidden = step.returnQuantity <= 0.0001;
@@ -2119,8 +2170,18 @@
 
     function updateSummary() {
         const lines = collectLines().filter(line => line.internal_item_code && line.quantity > 0);
+        const rowsWithData = [...rowsBody.children].filter(row =>
+            row.querySelector('.internal-code').value.trim()
+            && Number(row.querySelector('.quantity').value || 0) > 0
+        );
+        const weights = rowsWithData.map(updateRowNetWeight);
+        const missingNormCount = weights.filter(weight => weight === null).length;
+        const totalNetWeight = weights.reduce((sum, weight) => sum + Number(weight || 0), 0);
         document.getElementById('lineCount').textContent = lines.length;
         document.getElementById('totalQuantity').textContent = numberFormat(lines.reduce((sum, line) => sum + line.quantity, 0));
+        document.getElementById('totalNetWeight').textContent = missingNormCount
+            ? `${numberFormat(totalNetWeight)} kg + ${missingNormCount} thiếu ĐM`
+            : `${numberFormat(totalNetWeight)} kg`;
         renderPickingGuide();
     }
 
@@ -2322,6 +2383,7 @@
 
     function resetForm(clearHeader = true) {
         editingIssueId = null;
+        document.getElementById('printPickingBtn').hidden = true;
         if (clearHeader) {
             document.getElementById('customerName').value = '';
             document.getElementById('receiverName').value = '';
@@ -2378,6 +2440,7 @@
             const rows = [...rowsBody.children];
             lines.forEach((line, index) => {
                 const row = rows[index];
+                const savedLocations = pastedLocationCodes(line.location_code || '');
                 row.querySelector('.production-order').value = line.production_order || '';
                 row.querySelector('.internal-code').value = line.internal_item_code || line.ma_hh || '';
                 row.querySelector('.item-name').value = line.ten_hh || '';
@@ -2385,12 +2448,21 @@
                 row.querySelector('.color').value = line.color || '';
                 row.querySelector('.quantity').value = Number(line.quantity || 0);
                 row.querySelector('.unit').value = line.dvt || 'Cái';
+                setRowWeightNorm(row, line.weight_per_unit_grams);
                 row.querySelector('.line-note').value = line.note || '';
                 row.dataset.productionOrderId = line.production_order_id || '';
                 row.dataset.purchaseOrder = line.purchase_order || '';
                 row.dataset.orderCustomer = line.customer || '';
                 row.dataset.pastedLocation = line.location_code || '';
                 row.dataset.pastedFifo = '1';
+                row._preferredLocations = new Set(savedLocations);
+                if (savedLocations.length) row.dataset.manualLocationSelection = '1';
+                if (line.match_by_code_only === true || line.match_by_code_only === 1
+                    || line.match_by_code_only == null) {
+                    row.dataset.matchByCodeOnly = '1';
+                } else {
+                    delete row.dataset.matchByCodeOnly;
+                }
             });
             await Promise.all(lines.map((line, index) => loadStockLocations(rows[index])));
             assignPastedLocationsByFifo(rows.filter(row => row.dataset.pastedFifo === '1'));
@@ -2499,6 +2571,10 @@
     document.getElementById('resetBtn').addEventListener('click', () => resetForm(true));
     document.getElementById('saveIssueBtn').addEventListener('click', () => saveIssue(false));
     document.getElementById('saveDraftBtn').addEventListener('click', () => saveIssue(false, true));
+    document.getElementById('printPickingBtn').addEventListener('click', () => {
+        if (!editingIssueId) return;
+        window.open(`/client/xuat-vat-tu-noi-bo/${editingIssueId}/in?mode=picking`, '_blank');
+    });
     document.getElementById('findDraftBtn').addEventListener('click', () => {
         document.getElementById('draftSearchDialog').showModal();
         document.getElementById('draftSearchKeyword').value = '';

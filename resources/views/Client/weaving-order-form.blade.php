@@ -51,6 +51,18 @@
         .designer-field label { display:block; margin-bottom:5px; color:#486681; font-size:11px; font-weight:800; }
         .designer-field input { min-height:39px; }
         .designer-field input[readonly] { background:#f3f7fc; color:#49657f; }
+        .designer-size-editor { grid-column:1 / -1; margin-top:4px; overflow-x:auto; border:1px solid #cbdcf4; border-radius:8px; background:#fff; }
+        .designer-size-editor__head,.designer-size-editor__row { display:grid; grid-template-columns:44px minmax(180px,1fr) 150px 150px; min-width:580px; align-items:center; }
+        .designer-size-editor__head { background:#eaf3ff; color:#284c75; }
+        .designer-size-editor__head > span { padding:9px 10px; border-right:1px solid #d2e0f2; font-size:10px; font-weight:900; text-transform:uppercase; }
+        .designer-size-editor__head > span:last-child { border-right:0; }
+        .designer-size-editor__row { border-top:1px solid #e1eaf6; }
+        .designer-size-editor__row:first-child { border-top:0; }
+        .designer-size-editor__index { text-align:center; color:#1764c0; font-size:11px; font-weight:900; }
+        .designer-size-editor__cell { min-width:0; padding:6px; }
+        .designer-size-editor__cell .form-control { min-height:37px; font-size:12px; }
+        .designer-size-editor__cell .form-control[readonly] { border-style:dashed; }
+        .designer-size-editor__empty { padding:12px; color:#607892; font-size:11px; }
         .designer-formula-box { grid-column:1 / -1; margin-top:2px; padding:12px; border:1px solid #c9dcf5; border-radius:8px; background:#f7fbff; }
         .designer-formula-box summary { display:flex; align-items:center; gap:8px; color:#244f7e; font-size:12px; font-weight:850; cursor:pointer; list-style:none; }
         .designer-formula-box summary::-webkit-details-marker { display:none; }
@@ -60,7 +72,7 @@
         .designer-bom-title { display:flex; align-items:center; gap:10px; min-width:0; }
         .designer-bom-summary { padding:4px 8px; border:1px solid #c9dcf5; border-radius:999px; background:#f4f8ff; color:#315f95; font-size:11px; font-weight:800; white-space:nowrap; }
         .designer-bom-editor { overflow-x:auto; border:1px solid #cbdcf4; border-radius:8px; background:#fff; scrollbar-color:#9bb9df #edf4fc; scrollbar-width:thin; }
-        .designer-bom-columns,.designer-bom-row { display:grid; grid-template-columns:34px 64px 112px 66px minmax(140px,1fr) 82px 82px 34px; min-width:700px; }
+        .designer-bom-columns,.designer-bom-row { display:grid; grid-template-columns:34px 64px 112px 66px minmax(140px,1fr) 92px 92px 34px; min-width:720px; }
         .designer-bom-columns { position:sticky; top:0; z-index:3; background:#eaf3ff; color:#284c75; border-bottom:1px solid #c2d5ed; }
         .designer-bom-columns > span { padding:9px 8px; border-right:1px solid #d2e0f2; font-size:10px; font-weight:900; line-height:1.2; text-transform:uppercase; }
         .designer-bom-columns > span:last-child { border-right:0; }
@@ -71,6 +83,7 @@
         .designer-bom-cell { min-width:0; padding:7px 5px; }
         .designer-bom-cell .form-control { min-height:38px; padding:7px 8px; border-color:#b8cce7; font-size:12px; }
         .designer-bom-cell .form-control:focus { border-color:#4f8fe8; box-shadow:0 0 0 2px rgba(59,130,246,.12); }
+        .designer-bom-cell .form-control[readonly] { border-style:dashed; background:#f1f6fc; color:#47627d; cursor:default; }
         .designer-bom-index { justify-self:center; display:grid; place-items:center; width:25px; height:25px; border-radius:6px; background:#e7f1ff; color:#1764c0; font-size:11px; font-weight:900; }
         .designer-stock { margin-top:12px; border:1px solid #cbdcf4; border-radius:8px; overflow:hidden; background:#fff; }
         .designer-stock.is-short { border-color:#f3b5b5; background:#fffafa; }
@@ -133,7 +146,7 @@
         .designer-loader__panel small { display:block; margin-top:2px; color:#647b96; font-size:11px; }
         body.is-designer-loading { overflow:hidden; }
         @media (max-width:1250px) { .designer-preview { position:static; } }
-        @media (max-width:900px) { .designer-field-grid,.designer-formula-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+        @media (max-width:900px) { .designer-field-grid,.designer-formula-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .designer-field-grid .machine-pair { grid-column:span 1; } }
         @media (max-width:620px) {
             .designer-create { width:100% !important; padding:80px 12px 120px !important; }
             .designer-create > *,.designer-create .wms-heading > div { min-width:0; max-width:100%; }
@@ -258,14 +271,13 @@
                             <div class="designer-field"><label>Số pick</label><input id="pick" class="form-control" data-metadata placeholder="Ví dụ: 714"></div>
                             <div class="designer-field"><label>Mật độ</label><input id="density" class="form-control" data-metadata placeholder="Ví dụ: 26"></div>
                             <div class="designer-field"><label>Máy</label><input id="machine" class="form-control" data-metadata placeholder="Ví dụ: TRẮNG"></div>
-                            <div class="designer-field"><label>Số dòng</label><input id="row_count" type="number" min="0" step="1" class="form-control" data-metadata placeholder="Nhập số dòng"></div>
                             <div class="designer-field"><label>Số lượng +10%</label><input id="quantity_plus_10" type="number" min="0" step="0.001" class="form-control" data-metadata placeholder="Tự tính từ số lượng lệnh"></div>
-                            <div class="designer-field"><label>Số cuộn Muller</label><input id="roll_count_small" type="number" min="0" step="0.001" class="form-control" data-metadata placeholder="Ví dụ: 15"></div>
-                            <div class="designer-field"><label>Số dòng +10% Muller</label><input id="row_count_plus_10" type="number" min="0" step="0.001" class="form-control" data-metadata placeholder="Ví dụ: 2"></div>
-                            <div class="designer-field"><label>Ca Muller</label><input id="shift" class="form-control" data-metadata placeholder="Ví dụ: 0,0"></div>
-                            <div class="designer-field"><label>Số cuộn Hi-Tex</label><input id="roll_count_large" type="number" min="0" step="0.001" class="form-control" data-metadata placeholder="Ví dụ: 24"></div>
-                            <div class="designer-field"><label>Số dòng +10% Hi-Tex</label><input id="row_count_plus_10_large" type="number" min="0" step="0.001" class="form-control" data-metadata placeholder="Ví dụ: 1"></div>
-                            <div class="designer-field"><label>Ca Hi-Tex</label><input id="shift_large" class="form-control" data-metadata placeholder="Ví dụ: 0,0"></div>
+                            <div class="designer-field span-2 machine-pair"><label>Số cuộn Muller</label><input id="roll_count_small" type="number" min="0" step="0.001" class="form-control" data-metadata placeholder="Ví dụ: 15"></div>
+                            <div class="designer-field span-2 machine-pair"><label>Số cuộn Hi-Tex</label><input id="roll_count_large" type="number" min="0" step="0.001" class="form-control" data-metadata placeholder="Ví dụ: 24"></div>
+                            <div class="designer-field span-2 machine-pair"><label>Số dòng Muller</label><input id="row_count_plus_10" type="number" min="0" step="0.001" class="form-control" data-metadata placeholder="Ví dụ: 2"></div>
+                            <div class="designer-field span-2 machine-pair"><label>Số dòng Hi-Tex</label><input id="row_count_plus_10_large" type="number" min="0" step="0.001" class="form-control" data-metadata placeholder="Ví dụ: 1"></div>
+                            <div class="designer-field span-2 machine-pair"><label>Số ca Muller</label><input id="shift" class="form-control" data-metadata placeholder="Ví dụ: 0,0"></div>
+                            <div class="designer-field span-2 machine-pair"><label>Số ca Hi-Tex</label><input id="shift_large" class="form-control" data-metadata placeholder="Ví dụ: 0,0"></div>
                             <input id="roll_machine_small" type="hidden" value="Muller" data-metadata>
                             <input id="roll_machine_large" type="hidden" value="Hi-Tex" data-metadata>
                             <input id="row_machine_small" type="hidden" value="Muller" data-metadata>
@@ -273,6 +285,12 @@
                             <div class="designer-field"><label>Tên file</label><input id="file_name" class="form-control" data-metadata></div>
                             <div class="designer-field"><label>USB máy nhỏ</label><input id="usb_small" class="form-control" data-metadata></div>
                             <div class="designer-field"><label>USB máy lớn</label><input id="usb_large" class="form-control" data-metadata></div>
+                            <div class="designer-size-editor" aria-label="Số lượng và số dòng theo size">
+                                <div class="designer-size-editor__head">
+                                    <span>STT</span><span>Size / mã hàng</span><span>Số lượng</span><span>Số dòng</span>
+                                </div>
+                                <div id="sizeRows"><div class="designer-size-editor__empty">Chọn lệnh để nạp danh sách size.</div></div>
+                            </div>
                             <details class="designer-formula-box">
                                 <summary><i data-lucide="calculator"></i>Hệ số tính Excel</summary>
                                 <div class="designer-formula-grid">
@@ -298,7 +316,7 @@
                     </div>
                     <div class="designer-bom-editor" role="table" aria-label="Định mức sợi">
                         <div class="designer-bom-columns" role="row">
-                            <span>STT</span><span>Loại</span><span>Mã sợi *</span><span>Số picks</span><span>Tên màu sợi</span><span title="Trọng lượng cho một sản phẩm">TL/1PCS (g) *</span><span title="Tổng trọng lượng">T.L (g)</span><span></span>
+                            <span>STT</span><span>Loại</span><span>Mã sợi *</span><span>Số picks</span><span>Tên màu sợi</span><span title="Số designer nhập theo công thức riêng">Tổng gram *</span><span title="Tự tính bằng Tổng gram chia số lượng lệnh">TL/1PCS</span><span></span>
                         </div>
                         <div id="bomRows" class="designer-bom-list" role="rowgroup">
                             <div class="wms-empty">Chọn lệnh để nạp định mức.</div>
@@ -310,7 +328,7 @@
                             <strong><i data-lucide="package-check"></i>Kiểm tra tồn sợi</strong>
                             <span id="stockCheckState" class="designer-stock__state">Chờ định mức</span>
                         </div>
-                        <div id="stockCheckRows" class="designer-stock__empty">Nhập mã sợi và TL/1PCS để kiểm tra.</div>
+                        <div id="stockCheckRows" class="designer-stock__empty">Nhập mã sợi và Tổng gram để kiểm tra.</div>
                     </div>
                 </div>
             </div>
@@ -358,7 +376,7 @@
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 const currentYear = {{ (int) now('Asia/Ho_Chi_Minh')->format('Y') }};
 const currentDateCompact = '{{ now('Asia/Ho_Chi_Minh')->format('Ymd') }}';
-const metadataFields = ['job_number','label_name','length','finished_size','box_code','quantity_per_box','pick','density','machine','roll_machine_small','roll_count_small','roll_machine_large','roll_count_large','quantity_plus_10','row_machine_small','row_count_plus_10','row_machine_large','row_count_plus_10_large','shift','shift_large','row_count','file_name','usb_small','usb_large','calculation_waste_percent','color_weight_factor','color_weight_multiplier','warp_weight_factor','warp_extra_waste_percent','muller_capacity','hitex_capacity'];
+const metadataFields = ['job_number','label_name','length','finished_size','box_code','quantity_per_box','pick','density','machine','roll_machine_small','roll_count_small','roll_machine_large','roll_count_large','quantity_plus_10','row_machine_small','row_count_plus_10','row_machine_large','row_count_plus_10_large','shift','shift_large','file_name','usb_small','usb_large','calculation_waste_percent','color_weight_factor','color_weight_multiplier','warp_weight_factor','warp_extra_waste_percent','muller_capacity','hitex_capacity'];
 const formulaDefaults = {
     calculation_waste_percent:10,
     color_weight_factor:0.23,
@@ -469,6 +487,65 @@ function professionalFileName(orderCode, itemCode, orderDate) {
 function getValue(id) {
     return String(document.getElementById(id)?.value || '').trim();
 }
+function sourceSizeLines(sourceItems = []) {
+    const grouped = new Map();
+    sourceItems.forEach(item => {
+        const itemCode = String(item.item_code || '').trim();
+        const size = String(item.size || '').trim();
+        const color = String(item.color || '').trim();
+        const key = [itemCode.toUpperCase(),size.toUpperCase(),color.toUpperCase()].join('|');
+        if (!grouped.has(key)) grouped.set(key, {item_code:itemCode,size,color,quantity:0,row_count:''});
+        grouped.get(key).quantity += Number(item.order_quantity || 0);
+    });
+    return Array.from(grouped.values()).slice(0, 10);
+}
+function mergeSizeLines(sourceLines, savedLines) {
+    if (!savedLines.length) return sourceLines;
+    const saved = new Map(savedLines.map(line => [[line.item_code,line.size,line.color].map(value => String(value || '').trim().toUpperCase()).join('|'), line]));
+    return sourceLines.map(line => {
+        const key = [line.item_code,line.size,line.color].map(value => String(value || '').trim().toUpperCase()).join('|');
+        const previous = saved.get(key);
+        return previous ? {...line,quantity:previous.quantity ?? line.quantity,row_count:previous.row_count ?? ''} : line;
+    }).slice(0, 10);
+}
+function renderSizeRows(lines = []) {
+    const box = document.getElementById('sizeRows');
+    const rows = (lines || []).slice(0, 10);
+    if (!rows.length) {
+        box.innerHTML = '<div class="designer-size-editor__empty">Lệnh không có dữ liệu size.</div>';
+        document.getElementById('order_quantity').readOnly = false;
+        return;
+    }
+    box.innerHTML = rows.map((line,index) => {
+        const label = line.size || line.item_code || `Dòng ${index + 1}`;
+        const detail = [line.item_code, line.color].filter(Boolean).join(' · ');
+        return `<div class="designer-size-editor__row" data-size-row data-item-code="${esc(line.item_code || '')}" data-size="${esc(line.size || '')}" data-color="${esc(line.color || '')}">
+            <div class="designer-size-editor__index">${index + 1}</div>
+            <div class="designer-size-editor__cell"><input class="form-control" value="${esc(label)}" title="${esc(detail)}" readonly></div>
+            <div class="designer-size-editor__cell"><input class="form-control" type="number" min="0" step="0.001" data-size-quantity value="${esc(line.quantity ?? '')}" aria-label="Số lượng ${esc(label)}"></div>
+            <div class="designer-size-editor__cell"><input class="form-control" type="number" min="0" step="1" data-size-row-count value="${esc(line.row_count ?? '')}" aria-label="Số dòng ${esc(label)}"></div>
+        </div>`;
+    }).join('');
+    document.getElementById('order_quantity').readOnly = true;
+    syncSizeTotal();
+}
+function collectSizeLines() {
+    return Array.from(document.querySelectorAll('[data-size-row]')).map(row => ({
+        item_code:row.dataset.itemCode || '',
+        size:row.dataset.size || '',
+        color:row.dataset.color || '',
+        quantity:decimalValue(row.querySelector('[data-size-quantity]')?.value),
+        row_count:decimalValue(row.querySelector('[data-size-row-count]')?.value),
+    }));
+}
+function syncSizeTotal() {
+    const rows = collectSizeLines();
+    if (!rows.length) return;
+    const total = rows.reduce((sum,line) => sum + Number(line.quantity || 0), 0);
+    setValue('order_quantity', Number(total.toFixed(3)));
+    setDefaultQuantityPlusTen();
+    recalculateBom();
+}
 function setWizardStep(step) {
     currentWizardStep = Math.min(3, Math.max(1, Number(step) || 1));
     document.querySelectorAll('[data-wizard-step]').forEach(section => {
@@ -563,6 +640,9 @@ function populateForm(result) {
     setValue('order_date', dateForInput(order.order_date));
     setValue('due_date', dateForInput(order.due_date));
     setValue('order_quantity', order.planned_quantity ?? item.order_quantity ?? '');
+    const savedSizeLines = Array.isArray(metadata.size_lines) ? metadata.size_lines : [];
+    const currentSizeLines = sourceSizeLines(result.source_items || []);
+    renderSizeRows(currentSizeLines.length ? mergeSizeLines(currentSizeLines, savedSizeLines) : savedSizeLines);
     let usedPreviousMachineDefaults = false;
     metadataFields.forEach(key => {
         const ownValue = metadata[key];
@@ -608,7 +688,7 @@ function bomRow(line = {}, index) {
     const colorHex = normalizeHex(line.color_hex);
     const colorLabel = swatchLabel(line);
     return `
-        <div class="designer-bom-row" data-bom-row data-total-manual="${Number(total) > 0 ? '1' : '0'}" role="row">
+        <div class="designer-bom-row" data-bom-row role="row">
             <div class="designer-bom-index">${index + 1}</div>
             <div class="designer-bom-cell"><input class="form-control" data-bom="type" value="${esc(line.type || '')}" aria-label="Loại sợi" placeholder="75D"></div>
             <div class="designer-bom-cell"><input class="form-control" list="materialOptions" data-bom="material_code" data-material-code value="${esc(line.material_code || '')}" aria-label="Mã sợi" placeholder="Mã sợi"></div>
@@ -617,12 +697,12 @@ function bomRow(line = {}, index) {
                 <span class="designer-color-swatch${colorHex ? '' : ' is-empty'}" data-color-swatch style="${colorHex ? `--swatch-color:${colorHex}` : ''}" title="${esc(colorLabel)}" aria-label="${esc(colorLabel)}"></span>
                 <input class="form-control" data-bom="material_name" value="${esc(line.catalog_name || line.material_name || '')}" aria-label="Tên màu sợi" placeholder="Tự điền theo mã">
             </div></div>
-            <div class="designer-bom-cell bom-consumption"><input type="text" inputmode="decimal" class="form-control" data-bom="consumption_per_unit" value="${esc(line.consumption_per_unit || '')}" placeholder="0,38" aria-label="Trọng lượng trên một sản phẩm"></div>
-            <div class="designer-bom-cell bom-total"><input type="text" inputmode="decimal" class="form-control" data-bom="total_grams" value="${esc(total)}" placeholder="Tự tính" title="Có thể nhập tổng gram để tính ngược TL/1PCS" aria-label="Tổng trọng lượng gram"></div>
+            <div class="designer-bom-cell bom-total"><input type="text" inputmode="decimal" class="form-control" data-bom="total_grams" value="${esc(total)}" placeholder="Nhập gram" title="Tổng gram do designer xác định" aria-label="Tổng trọng lượng gram"></div>
+            <div class="designer-bom-cell bom-consumption"><input type="text" inputmode="decimal" class="form-control" data-bom="consumption_per_unit" value="${esc(line.consumption_per_unit || '')}" placeholder="Tự tính" aria-label="Trọng lượng trên một sản phẩm" readonly tabindex="-1"></div>
             <button class="designer-icon-btn" type="button" data-remove-row title="Xóa dòng"><i data-lucide="x"></i></button>
             <input type="hidden" data-bom="line_role" value="${esc(line.line_role || `DONG-${index + 1}`)}">
             <input type="hidden" data-bom="unit" value="${esc(line.bom_unit || line.unit || 'gam')}">
-            <input type="hidden" data-bom="waste_percent" value="${esc(line.waste_percent || 0)}">
+            <input type="hidden" data-bom="waste_percent" value="0">
             <input type="hidden" data-bom="shelf_hint" value="${esc(line.first_location || line.catalog_shelf_code || line.shelf_hint || '')}">
             <input type="hidden" data-color-hex value="${esc(colorHex)}">
             <input type="hidden" data-pantone-code value="${esc(line.pantone_code || '')}">
@@ -693,22 +773,18 @@ function decimalValue(value) {
 function calculateConsumptionFromTotal(row) {
     const quantity = decimalValue(getValue('order_quantity'));
     const total = decimalValue(row.querySelector('[data-bom="total_grams"]').value);
-    const waste = decimalValue(row.querySelector('[data-bom="waste_percent"]').value);
-    if (!(quantity > 0) || !(total > 0)) return;
-    const consumption = total / quantity / (1 + waste / 100);
-    row.querySelector('[data-bom="consumption_per_unit"]').value = consumption
+    const consumptionInput = row.querySelector('[data-bom="consumption_per_unit"]');
+    row.querySelector('[data-bom="waste_percent"]').value = '0';
+    if (!(quantity > 0) || !(total > 0)) {
+        consumptionInput.value = '';
+        return;
+    }
+    consumptionInput.value = (total / quantity)
         .toFixed(6)
         .replace(/\.?0+$/, '');
 }
-function recalculateBom(skipTotalRow = null) {
-    const quantity = decimalValue(getValue('order_quantity'));
-    document.querySelectorAll('[data-bom-row]').forEach(row => {
-        const consumption = decimalValue(row.querySelector('[data-bom="consumption_per_unit"]').value);
-        const waste = decimalValue(row.querySelector('[data-bom="waste_percent"]').value);
-        if (row !== skipTotalRow && row.dataset.totalManual !== '1') {
-            row.querySelector('[data-bom="total_grams"]').value = consumption > 0 ? (quantity * consumption * (1 + waste / 100)).toFixed(3).replace(/\.?0+$/, '') : '';
-        }
-    });
+function recalculateBom() {
+    document.querySelectorAll('[data-bom-row]').forEach(calculateConsumptionFromTotal);
     updateBomSummary();
 }
 
@@ -741,6 +817,7 @@ function metadataPayload() {
         ? decimalValue(getValue(key))
         : getValue(key));
     Object.entries(operationFields).forEach(([id,key]) => metadata.operations[key] = getValue(id));
+    metadata.size_lines = collectSizeLines();
     return metadata;
 }
 function scheduleStockCheck(delay = 350) {
@@ -758,7 +835,7 @@ async function checkStock() {
         panel.classList.remove('is-short');
         state.textContent = 'Chờ định mức';
         rows.className = 'designer-stock__empty';
-        rows.textContent = 'Nhập mã sợi và TL/1PCS để kiểm tra.';
+        rows.textContent = 'Nhập mã sợi và Tổng gram để kiểm tra.';
         const review = document.getElementById('reviewStockAlert');
         review.classList.remove('is-short');
         review.textContent = 'Chưa có đủ định mức để kiểm tra tồn sợi.';
@@ -828,7 +905,7 @@ function validatePayload(data) {
     if (!data.lines.length) missing.push('định mức sợi');
     data.lines.forEach((line,index) => {
         if (!line.material_code) missing.push(`mã sợi dòng ${index + 1}`);
-        if (!(line.consumption_per_unit > 0)) missing.push(`TL/1PCS dòng ${index + 1}`);
+        if (!(line.total_grams > 0)) missing.push(`Tổng gram dòng ${index + 1}`);
     });
     if (data.lines.length > 7) missing.push('BOM vượt 7 dòng');
     return [...new Set(missing)];
@@ -860,9 +937,9 @@ async function saveWithButton(button, action) {
     }
 }
 
-function renderPreview(skipTotalRow = null) {
+function renderPreview() {
     if (!selectedPlan) return;
-    recalculateBom(skipTotalRow);
+    recalculateBom();
     const data = payload('draft');
     const missing = validatePayload(data);
     const badge = document.getElementById('completeness');
@@ -901,9 +978,11 @@ function renderPreview(skipTotalRow = null) {
                 ${previewOp('Mật độ',data.metadata.density)}
                 ${previewOp('Máy',data.metadata.machine)}
                 ${previewOp('Cuộn Muller',data.metadata.roll_count_small)}
-                ${previewOp('Dòng +10% Muller',data.metadata.row_count_plus_10)}
+                ${previewOp('Dòng Muller',data.metadata.row_count_plus_10)}
                 ${previewOp('Cuộn Hi-Tex',data.metadata.roll_count_large)}
-                ${previewOp('Dòng +10% Hi-Tex',data.metadata.row_count_plus_10_large)}
+                ${previewOp('Dòng Hi-Tex',data.metadata.row_count_plus_10_large)}
+                ${previewOp('Ca Muller',data.metadata.shift)}
+                ${previewOp('Ca Hi-Tex',data.metadata.shift_large)}
             </div>
             <div><table><thead><tr><th>Loại</th><th>Mã sợi</th><th>Số picks</th><th>Tên màu</th><th>TL/PCS</th><th>T.L(g)</th></tr></thead><tbody>
                 ${data.lines.map((line,index) => {
@@ -932,6 +1011,8 @@ function clearForm(clearSearch = true) {
     if (clearSearch) setValue('orderSearch','');
     document.querySelectorAll('.designer-form-panel input').forEach(input => input.value = '');
     document.getElementById('bomRows').innerHTML = '<div class="wms-empty">Chọn lệnh để nạp định mức.</div>';
+    document.getElementById('sizeRows').innerHTML = '<div class="designer-size-editor__empty">Chọn lệnh để nạp danh sách size.</div>';
+    document.getElementById('order_quantity').readOnly = false;
     document.getElementById('bomSummary').textContent = '0/7 dòng · 0 g';
     document.getElementById('sheetPreview').innerHTML = '<div class="designer-sheet-title">LỆNH DỆT</div><div class="designer-sheet-empty p-5">Chọn một lệnh sản xuất để bắt đầu.</div>';
     document.getElementById('completeness').textContent = 'Chưa chọn lệnh';
@@ -942,7 +1023,7 @@ function clearForm(clearSearch = true) {
     if (document.getElementById('stockCheckState')) document.getElementById('stockCheckState').textContent = 'Chờ định mức';
     if (document.getElementById('stockCheckRows')) {
         document.getElementById('stockCheckRows').className = 'designer-stock__empty';
-        document.getElementById('stockCheckRows').textContent = 'Nhập mã sợi và TL/1PCS để kiểm tra.';
+        document.getElementById('stockCheckRows').textContent = 'Nhập mã sợi và Tổng gram để kiểm tra.';
     }
     document.getElementById('reviewStockAlert').classList.remove('is-short');
     document.getElementById('reviewStockAlert').textContent = 'Chưa kiểm tra tồn sợi.';
@@ -1016,9 +1097,9 @@ document.getElementById('bomRows').addEventListener('click', event => {
     scheduleStockCheck();
 });
 document.getElementById('bomRows').addEventListener('keydown', event => {
-    if (event.key !== 'Enter' || !event.target.matches('input:not([type="hidden"])')) return;
+    if (event.key !== 'Enter' || !event.target.matches('input:not([type="hidden"]):not([readonly])')) return;
     event.preventDefault();
-    const inputs = Array.from(document.querySelectorAll('#bomRows [data-bom-row] input:not([type="hidden"])'));
+    const inputs = Array.from(document.querySelectorAll('#bomRows [data-bom-row] input:not([type="hidden"]):not([readonly])'));
     const next = inputs[inputs.indexOf(event.target) + 1];
     if (next) return next.focus();
     document.getElementById('addBomRowBtn').click();
@@ -1032,13 +1113,9 @@ document.getElementById('bomRows').addEventListener('input', event => {
         ? event.target.closest('[data-bom-row]')
         : null;
     if (totalRow) {
-        totalRow.dataset.totalManual = '1';
         calculateConsumptionFromTotal(totalRow);
     }
-    if (event.target.matches('[data-bom="consumption_per_unit"]')) {
-        event.target.closest('[data-bom-row]').dataset.totalManual = '0';
-    }
-    renderPreview(totalRow);
+    renderPreview();
     scheduleStockCheck();
 });
 document.getElementById('bomRows').addEventListener('change', event => {
@@ -1046,8 +1123,16 @@ document.getElementById('bomRows').addEventListener('change', event => {
     renderPreview();
     scheduleStockCheck();
 });
+document.getElementById('sizeRows').addEventListener('input', event => {
+    if (!event.target.matches('[data-size-quantity],[data-size-row-count]')) return;
+    if (event.target.matches('[data-size-quantity]')) {
+        syncSizeTotal();
+        scheduleStockCheck();
+    }
+    renderPreview();
+});
 document.querySelector('.designer-form-panel').addEventListener('input', event => {
-    if (event.target.matches('input') && !event.target.closest('#bomRows')) {
+    if (event.target.matches('input') && !event.target.closest('#bomRows') && !event.target.closest('#sizeRows')) {
         if (event.target.id === 'quantity_plus_10') event.target.dataset.autoDefault = '0';
         if (event.target.id === 'order_quantity') setDefaultQuantityPlusTen();
         renderPreview();

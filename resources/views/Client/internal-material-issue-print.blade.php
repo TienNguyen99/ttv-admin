@@ -23,6 +23,10 @@
         th { text-align: center; }
         .text-end { text-align: right; }
         .text-center { text-align: center; }
+        .missing-location { background: #fff1f2; color: #b91c1c; font-weight: 700; }
+        .pick-check { font-size: 20px; line-height: 1; }
+        .picking-table { font-size: 9.5px; table-layout: fixed; }
+        .picking-table th, .picking-table td { padding: 5px 4px; overflow-wrap: anywhere; }
         .signatures { margin-top: 28px; table-layout: fixed; }
         .signature { height: 92px; text-align: center; vertical-align: top; font-weight: 700; }
         .signature span { font-weight: 400; }
@@ -41,12 +45,17 @@
         $isCustomerFinishedGoodsIssue = (string) $issue->issue_type === 'customer'
             || strpos((string) $issue->issue_code, 'PXTP-') === 0
             || trim((string) $issue->purpose) === 'Xuất thành phẩm cho khách hàng';
-        $documentTitle = $isCustomerFinishedGoodsIssue
+        $isPickingDraft = (string) $issue->status === 'draft' && request()->query('mode') === 'picking';
+        $documentTitle = $isPickingDraft
+            ? 'Phiếu Chờ Soạn Hàng'
+            : ($isCustomerFinishedGoodsIssue
             ? 'Phiếu Xuất Kho Thành Phẩm'
-            : ($isProductionIssue ? 'Phiếu Xuất Bán Thành Phẩm' : 'Phiếu Xuất Kho Nội Bộ');
-        $documentNote = $isCustomerFinishedGoodsIssue
+            : ($isProductionIssue ? 'Phiếu Xuất Bán Thành Phẩm' : 'Phiếu Xuất Kho Nội Bộ'));
+        $documentNote = $isPickingDraft
+            ? 'Phiếu hướng dẫn soạn hàng, chưa trừ tồn kho.'
+            : ($isCustomerFinishedGoodsIssue
             ? 'Phiếu xuất thành phẩm cho khách hàng, dùng để trừ tồn kho nội bộ.'
-            : ($isProductionIssue ? 'Phiếu giao bán thành phẩm cho bộ phận sản xuất.' : 'Phiếu xuất kho nội bộ, dùng để thủ kho bàn giao chứng từ.');
+            : ($isProductionIssue ? 'Phiếu giao bán thành phẩm cho bộ phận sản xuất.' : 'Phiếu xuất kho nội bộ, dùng để thủ kho bàn giao chứng từ.'));
         $nameColumnTitle = 'Tên hàng';
         $formatQuantity = static function ($value) {
             return rtrim(rtrim(number_format((float) $value, 3, ',', '.'), '0'), ',');
@@ -96,6 +105,59 @@
             <div style="grid-column: 1 / -1;"><strong>Ghi chú:</strong> {{ $issue->note }}</div>
         </section>
 
+        @if($isPickingDraft)
+        <table class="picking-table">
+            <thead>
+                <tr>
+                    <th style="width: 30px;">Xong</th>
+                    <th style="width: 38px;">STT</th>
+                    <th style="width: 55px;">Carton</th>
+                    <th style="width: 82px;">PO / Lệnh</th>
+                    <th style="width: 95px;">Mã nội bộ</th>
+                    <th>Tên hàng / Size</th>
+                    <th style="width: 60px;">Số lượng</th>
+                    <th style="width: 46px;">ĐVT</th>
+                    <th style="width: 62px;">Kệ</th>
+                    <th style="width: 60px;">ĐM g/ĐVT</th>
+                    <th style="width: 58px;">Net kg</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($issue->lines as $index => $line)
+                    @php
+                        preg_match('/Carton\s+([^·|]+)/iu', (string) $line->note, $cartonMatch);
+                        $cartonNumber = trim((string) ($cartonMatch[1] ?? ''));
+                        $locationCode = trim((string) $line->location_code);
+                    @endphp
+                    <tr>
+                        <td class="text-center pick-check">&#9633;</td>
+                        <td class="text-center">{{ $index + 1 }}</td>
+                        <td class="text-center">{{ $cartonNumber !== '' ? $cartonNumber : '-' }}</td>
+                        <td>{{ $line->purchase_order ?: $line->production_order }}</td>
+                        <td><strong>{{ $line->internal_item_code ?: $line->ma_hh }}</strong></td>
+                        <td>{{ $line->ten_hh }}{{ $line->size ? ' / ' . $line->size : '' }}</td>
+                        <td class="text-end">{{ $formatQuantity($line->quantity) }}</td>
+                        <td class="text-center">{{ $line->dvt }}</td>
+                        <td class="{{ $locationCode === '' ? 'missing-location' : '' }}">
+                            {{ $locationCode !== '' ? $locationCode : 'CHƯA CHỌN' }}
+                        </td>
+                        <td class="text-end">
+                            {{ $line->weight_per_unit_grams !== null ? $formatQuantity($line->weight_per_unit_grams) : '-' }}
+                        </td>
+                        <td class="text-end">
+                            {{ $line->net_weight_kg !== null ? $formatQuantity($line->net_weight_kg) : '-' }}
+                        </td>
+                    </tr>
+                @endforeach
+                <tr>
+                    <td colspan="6" class="text-end"><strong>Tổng cộng</strong></td>
+                    <td class="text-end"><strong>{{ $formatQuantity($issue->lines->sum('quantity')) }}</strong></td>
+                    <td colspan="3"></td>
+                    <td class="text-end"><strong>{{ $formatQuantity($issue->total_net_weight_kg) }}</strong></td>
+                </tr>
+            </tbody>
+        </table>
+        @else
         <table>
             <thead>
                 <tr>
@@ -105,6 +167,7 @@
                     <th style="width: 58px;">ĐVT</th>
                     <th style="width: 70px;">SL lệnh</th>
                     <th style="width: 76px;">Thực xuất</th>
+                    <th style="width: 74px;">Net kg</th>
                     <th style="width: 82px;">Vị trí</th>
                     <th style="width: 100px;">Mã nội bộ / Size</th>
                 </tr>
@@ -118,6 +181,9 @@
                         <td class="text-center">{{ $line->dvt }}</td>
                         <td class="text-end">{{ $line->ordered_quantity !== null ? $formatQuantity($line->ordered_quantity) : '' }}</td>
                         <td class="text-end">{{ $formatQuantity($line->quantity) }}</td>
+                        <td class="text-end">
+                            {{ $line->net_weight_kg !== null ? $formatQuantity($line->net_weight_kg) : '-' }}
+                        </td>
                         <td>{{ $line->location_code }}</td>
                         <td>{{ $line->internal_item_code }}{{ $line->size ? ' / ' . $line->size : '' }}</td>
                     </tr>
@@ -125,10 +191,16 @@
                 <tr>
                     <td colspan="5" class="text-end"><strong>Tổng cộng</strong></td>
                     <td class="text-end"><strong>{{ $formatQuantity($issue->lines->sum('quantity')) }}</strong></td>
+                    <td class="text-end"><strong>{{ $formatQuantity($issue->total_net_weight_kg) }}</strong></td>
                     <td colspan="2"></td>
                 </tr>
             </tbody>
         </table>
+        @endif
+
+        @if((int) $issue->missing_weight_norm_count > 0)
+            <p><strong>Lưu ý:</strong> {{ $issue->missing_weight_norm_count }} dòng chưa có định mức nên chưa được cộng vào tổng Net kg.</p>
+        @endif
 
         <table class="signatures">
             <tr>

@@ -222,9 +222,35 @@ class WeavingExcelBatchExporter
         $html = $writer->generateHTMLHeader(true)
             . $writer->generateSheetData()
             . $writer->generateHTMLFooter();
+        $html = $this->injectPrintableProductImage($html, $plan);
         $spreadsheet->disconnectWorksheets();
 
         return $html;
+    }
+
+    private function injectPrintableProductImage(string $html, array $plan): string
+    {
+        $order = (array) ($plan['order'] ?? []);
+        $sourceItem = (array) ($plan['source_items'][0] ?? []);
+        $metadata = array_merge(
+            (array) ($sourceItem['metadata'] ?? []),
+            (array) ($order['metadata'] ?? [])
+        );
+        $imageUrl = $this->firstText(
+            $order['image_url'] ?? '',
+            $sourceItem['image_url'] ?? '',
+            $metadata['image_url'] ?? ''
+        );
+        if (!filter_var($imageUrl, FILTER_VALIDATE_URL) || stripos($imageUrl, 'https://') !== 0) {
+            return $html;
+        }
+
+        $image = '<div class="ttv-weaving-product-image">'
+            . '<img src="' . htmlspecialchars($imageUrl, ENT_QUOTES, 'UTF-8') . '" alt="Hình ảnh mã hàng" referrerpolicy="no-referrer">'
+            . '<span>HÌNH ẢNH</span></div>';
+        $pattern = '/(<td\b[^>]*class="[^"]*\bcolumn6\b[^"]*"[^>]*rowspan="13"[^>]*>)\s*HÌNH ẢNH\s*(<\/td>)/u';
+
+        return preg_replace($pattern, '$1' . $image . '$2', $html, 1) ?: $html;
     }
 
     private function buildSpreadsheet(array $plan): Spreadsheet

@@ -787,7 +787,7 @@
                 : 'Xuất phiếu nhập / xuất';
             document.getElementById('inventoryReportHint').textContent = isCurrent
                 ? 'Mỗi mã hàng là một dòng; subtotal được tách theo đơn vị tính.'
-                : 'Chi tiết từng phiếu nhập / xuất; subtotal được tách theo đơn vị tính.';
+                : 'Sheet đầu tiên đặt phiếu nhập bên trái, phiếu xuất bên phải và nhóm theo ngày → số phiếu → mã hàng.';
         }
 
         function loadReportCustomers(keyword = '') {
