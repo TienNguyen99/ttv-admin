@@ -561,13 +561,14 @@
     <nav class="summary-sidebar__nav" aria-label="Điều hướng chính">
         <div class="summary-sidebar__label">Nghiệp vụ</div>
 
-        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/lenh-san-xuat-trung-tam*', 'client/lenh-san-xuat-sheet*', 'client/lenh-btp*', 'client/theo-doi-san-xuat*', 'client/vat-tu-san-xuat*', 'client/quan-ly-det*', 'client/home', 'client/view-all-sx-data') ? 'open' : '' }}>
+        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/lenh-san-xuat-trung-tam*', 'client/lenh-san-xuat-sheet*', 'client/lenh-btp*', 'client/theo-doi-san-xuat*', 'client/vat-tu-san-xuat*', 'client/dinh-muc-san-xuat*', 'client/quan-ly-det*', 'client/home', 'client/view-all-sx-data') ? 'open' : '' }}>
             <summary class="summary-sidebar__summary"><i data-lucide="factory"></i>Quản lý sản xuất</summary>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/lenh-san-xuat-trung-tam*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-san-xuat-trung-tam') }}"><i data-lucide="route"></i>Lệnh SX trung tâm</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/lenh-san-xuat-sheet*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-san-xuat-sheet') }}"><i data-lucide="refresh-cw"></i>Lệnh SX đồng bộ</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/lenh-btp*') ? 'is-active' : '' }}" href="{{ url('/client/lenh-btp') }}"><i data-lucide="git-branch-plus"></i>Lệnh BTP</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/theo-doi-san-xuat*') ? 'is-active' : '' }}" href="{{ url('/client/theo-doi-san-xuat') }}"><i data-lucide="workflow"></i>Đang sản xuất</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/vat-tu-san-xuat*') ? 'is-active' : '' }}" href="{{ url('/client/vat-tu-san-xuat') }}"><i data-lucide="boxes"></i>Vật tư theo lệnh</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/dinh-muc-san-xuat*') ? 'is-active' : '' }}" href="{{ url('/client/dinh-muc-san-xuat') }}"><i data-lucide="list-checks"></i>BOM &amp; công đoạn</a>
             <details class="summary-sidebar__group summary-sidebar__subgroup" {{ request()->is('client/quan-ly-det*') ? 'open' : '' }}>
                 <summary class="summary-sidebar__summary"><i data-lucide="swatch-book"></i>Quản lý dệt</summary>
                 <a class="summary-sidebar__link summary-sidebar__child summary-sidebar__deep-child {{ request()->routeIs('weaving.dashboard') ? 'is-active' : '' }}" href="{{ route('weaving.dashboard') }}">Quản lý dệt nhanh</a>

@@ -33,7 +33,7 @@
         .workflow-panel__header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid #e3edf7; }
         .workflow-panel__header h2 { margin: 0; font-size: 17px; font-weight: 850; }
         .table-wrap { overflow-x: auto; }
-        .workflow-table { min-width: 1320px; margin: 0; }
+        .workflow-table { min-width: 1660px; margin: 0; }
         .workflow-table thead th { background: #06233f; color: #fff; font-size: 12px; font-weight: 800; white-space: nowrap; vertical-align: middle; }
         .workflow-table tbody td { vertical-align: middle; font-size: 13px; }
         .code { font-family: Consolas, "SFMono-Regular", monospace; font-weight: 800; color: #0b5fc7; }
@@ -62,6 +62,24 @@
         .status-shipped_customer { background: #edf2ff; color: #2846a0; }
         .progress-track { height: 8px; width: 150px; border-radius: 999px; background: #e8eff7; overflow: hidden; }
         .progress-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #60a5fa, #2563eb); }
+        .lifecycle { display:grid; grid-template-columns:repeat(6,minmax(70px,1fr)); min-width:500px; gap:0; }
+        .lifecycle-stage { position:relative; min-width:0; padding:0 5px; text-align:center; }
+        .lifecycle-stage:not(:last-child)::after { content:""; position:absolute; z-index:0; top:15px; left:calc(50% + 17px); right:calc(-50% + 17px); height:2px; background:#d8e3ef; }
+        .lifecycle-stage.is-completed:not(:last-child)::after { background:#86d9b5; }
+        .lifecycle-icon { position:relative; z-index:1; display:grid; place-items:center; width:32px; height:32px; margin:0 auto 5px; border:2px solid #d3deea; border-radius:50%; background:#fff; color:#8294a8; transition:transform .2s ease, box-shadow .2s ease; }
+        .lifecycle-icon i { width:15px; height:15px; }
+        .lifecycle-stage.is-completed .lifecycle-icon { border-color:#36b37e; background:#e7f9f1; color:#087f5b; }
+        .lifecycle-stage.is-active .lifecycle-icon { border-color:#3b82f6; background:#eaf3ff; color:#1d4ed8; box-shadow:0 0 0 5px rgba(59,130,246,.13); animation:lifecyclePulse 1.8s ease-in-out infinite; }
+        .lifecycle-label { overflow:hidden; color:#526a82; font-size:10px; font-weight:850; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }
+        .lifecycle-stage.is-active .lifecycle-label { color:#1d4ed8; }
+        .lifecycle-stage.is-completed .lifecycle-label { color:#087f5b; }
+        .lifecycle-detail { margin-top:2px; overflow:hidden; color:#7a8da1; font-size:9px; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }
+        .lifecycle-meta { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; color:#607991; font-size:10px; }
+        .operation-list { display:grid; gap:8px; }
+        .operation-row { display:grid; grid-template-columns:36px minmax(150px,1fr) 150px; gap:10px; align-items:center; padding:10px 12px; border:1px solid #dbe7f3; border-radius:8px; }
+        .operation-index { display:grid; place-items:center; width:28px; height:28px; border-radius:50%; background:#edf5ff; color:#1d4ed8; font-weight:850; }
+        @keyframes lifecyclePulse { 50% { transform:scale(1.06); box-shadow:0 0 0 8px rgba(59,130,246,.06); } }
+        @media (prefers-reduced-motion:reduce) { .lifecycle-stage.is-active .lifecycle-icon { animation:none; } }
         .action-row { display: flex; gap: 6px; flex-wrap: wrap; }
         .empty-row { padding: 34px; color: #64748b; text-align: center; }
         .group-list { display: grid; gap: 12px; padding: 14px; }
@@ -208,6 +226,25 @@
         </div>
     </div>
 
+    <div class="modal fade" id="operationModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div><h2 class="modal-title fs-5">Tiến độ công đoạn</h2><div id="operationOrderLabel" class="muted"></div></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="operationList" class="operation-list"></div>
+                    <div class="row g-2 mt-2">
+                        <div class="col-md-5"><label class="form-label">Người cập nhật</label><input id="operationUpdatedBy" class="form-control"></div>
+                        <div class="col-md-7"><label class="form-label">Ghi chú</label><input id="operationNote" class="form-control"></div>
+                    </div>
+                    <div id="operationStatus" class="small mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     @include('layouts.partials.catalog-image-paste-modal')
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
@@ -231,6 +268,9 @@
         let resetStandardRequested = false;
         let catalogRequestSequence = 0;
         let standardSourceItem = {};
+        let workflowRows = [];
+        let activeOperationOrder = null;
+        const operationModal = new bootstrap.Modal(document.getElementById('operationModal'));
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
         const statuses = {
@@ -276,6 +316,73 @@
 
         function codeList(codes) {
             return (codes || []).slice(0, 4).map(code => `<div class="code">${esc(code)}</div>`).join('') || '<span class="muted">-</span>';
+        }
+
+        function lifecycleHtml(row) {
+            const lifecycle = row.lifecycle || { percent:0, current_stage:'Chưa có dữ liệu', stages:[] };
+            const icons = { order:'clipboard-list', bom:'network', material:'package-minus', production:'factory', receipt:'package-check', shipment:'truck' };
+            const stages = (lifecycle.stages || []).map(stage => `
+                <div class="lifecycle-stage is-${esc(stage.status || 'pending')}" title="${esc(stage.label)}: ${esc(stage.detail || '')}">
+                    <div class="lifecycle-icon"><i data-lucide="${icons[stage.key] || 'circle'}"></i></div>
+                    <div class="lifecycle-label">${esc(stage.label)}</div>
+                    <div class="lifecycle-detail">${esc(stage.detail || '-')}</div>
+                </div>`).join('');
+            return `<div class="lifecycle">${stages}</div>
+                <div class="lifecycle-meta"><span><strong>${esc(lifecycle.current_stage || '-')}</strong></span><span>${num(lifecycle.percent)}%</span></div>`;
+        }
+
+        function openOperationEditor(orderCode) {
+            const row = workflowRows.find(item => item.production_order === orderCode);
+            if (!row) return;
+            activeOperationOrder = row;
+            document.getElementById('operationOrderLabel').textContent = `${row.production_order} · ${row.customer || '-'} · ${row.purchase_order || '-'}`;
+            const operations = row.lifecycle?.operations || [];
+            document.getElementById('operationList').innerHTML = operations.length
+                ? operations.map((operation, index) => `<div class="operation-row">
+                    <span class="operation-index">${index + 1}</span>
+                    <div><strong>${esc(operation.name)}</strong><div class="muted">${esc(operation.code)}${operation.updated_by ? ` · ${esc(operation.updated_by)}` : ''}</div></div>
+                    <select class="form-select form-select-sm" data-operation-code="${esc(operation.code)}">
+                        <option value="pending" ${operation.status === 'pending' ? 'selected' : ''}>Chờ làm</option>
+                        <option value="in_progress" ${operation.status === 'in_progress' ? 'selected' : ''}>Đang làm</option>
+                        <option value="completed" ${operation.status === 'completed' ? 'selected' : ''}>Hoàn tất</option>
+                    </select>
+                </div>`).join('')
+                : '<div class="alert alert-warning mb-0">Mã hàng chưa có tuyến công đoạn trong BOM.</div>';
+            document.getElementById('operationStatus').textContent = '';
+            operationModal.show();
+        }
+
+        async function updateOperation(select) {
+            if (!activeOperationOrder) return;
+            const statusEl = document.getElementById('operationStatus');
+            select.disabled = true;
+            statusEl.className = 'small mt-2 text-primary';
+            statusEl.textContent = 'Đang cập nhật...';
+            try {
+                const response = await fetch('/api/lenh-san-xuat-trung-tam/cong-doan', {
+                    method:'PATCH',
+                    headers:{ 'Accept':'application/json', 'Content-Type':'application/json', 'X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]').content },
+                    body:JSON.stringify({
+                        production_order:activeOperationOrder.production_order,
+                        operation_code:select.dataset.operationCode,
+                        status:select.value,
+                        updated_by:document.getElementById('operationUpdatedBy').value.trim(),
+                        note:document.getElementById('operationNote').value.trim(),
+                    }),
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(payload.message || 'Không cập nhật được công đoạn.');
+                statusEl.className = 'small mt-2 text-success';
+                statusEl.textContent = payload.message;
+                await load();
+                const refreshed = workflowRows.find(item => item.production_order === activeOperationOrder.production_order);
+                if (refreshed) openOperationEditor(refreshed.production_order);
+            } catch (error) {
+                statusEl.className = 'small mt-2 text-danger';
+                statusEl.textContent = error.message;
+            } finally {
+                select.disabled = false;
+            }
         }
 
         function openStandardItemEditor(button) {
@@ -474,8 +581,7 @@
 
         function rowHtml(row) {
             const status = statuses[row.status] || statuses.empty;
-            const progressBase = Math.max(row.planned_quantity || 0, row.received_quantity || 0, row.production_issue_quantity || 0, row.customer_issue_quantity || 0, 1);
-            const progress = Math.min(100, Math.round(((row.customer_issue_quantity || row.production_issue_quantity || row.received_quantity || 0) / progressBase) * 100));
+            const bomItemCode = row.items?.find(item => item.item_code)?.item_code || '';
             return `<tr>
                 <td><div class="code">${esc(row.production_order)}</div><div class="muted">${esc(row.promised_date || '-')}</div></td>
                 <td><strong>${esc(row.customer || '-')}</strong><div class="muted">${esc(row.purchase_order || '-')}</div></td>
@@ -484,7 +590,7 @@
                 <td class="text-end">${num(row.received_quantity)}<div class="muted">${num(row.receipt_document_count)} phiếu</div></td>
                 <td class="text-end">${num(row.production_issue_quantity)}<div class="muted">${num(row.production_document_count)} phiếu</div></td>
                 <td class="text-end">${num(row.customer_issue_quantity)}<div class="muted">${num(row.customer_document_count)} phiếu</div></td>
-                <td><div class="progress-track"><div class="progress-fill" style="width:${progress}%"></div></div><div class="muted mt-1">${progress}%</div></td>
+                <td>${lifecycleHtml(row)}</td>
                 <td><span class="status-pill ${status[1]}">${status[0]}</span></td>
                 <td>
                     <div class="muted">Nhập</div>${codeList(row.receipt_codes)}
@@ -493,9 +599,11 @@
                 </td>
                 <td>
                     <div class="action-row">
+                        ${bomItemCode ? `<a class="btn btn-sm btn-outline-secondary" href="/client/dinh-muc-san-xuat?item_code=${encodeURIComponent(bomItemCode)}">BOM</a>` : ''}
                         <a class="btn btn-sm btn-outline-primary" href="/client/nhap-thanh-pham-nhanh?production_order=${encodeURIComponent(row.production_order)}">Nhập</a>
                         <a class="btn btn-sm btn-outline-primary" href="/client/xuat-vat-tu-noi-bo?production_order=${encodeURIComponent(row.production_order)}">Xuất</a>
                         <a class="btn btn-sm btn-outline-secondary" href="/client/theo-doi-san-xuat?keyword=${encodeURIComponent(row.production_order)}">Theo dõi</a>
+                        <button class="btn btn-sm btn-outline-primary" type="button" data-operation-order="${esc(row.production_order)}">Công đoạn</button>
                     </div>
                 </td>
             </tr>`;
@@ -540,6 +648,7 @@
         }
 
         function renderRows(data) {
+            workflowRows = data;
             document.getElementById('resultLabel').textContent = `${num(data.length)} lệnh`;
             if (!data.length) {
                 groupsEl.innerHTML = '<div class="empty-row">Không có lệnh phù hợp.</div>';
@@ -569,7 +678,7 @@
             if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
             if (statusEl.value) params.set('status', statusEl.value);
             groupsEl.innerHTML = '<div class="empty-row">Đang tải dữ liệu...</div>';
-            fetch('/api/lenh-san-xuat-trung-tam?' + params.toString(), { headers: { Accept: 'application/json' } })
+            return fetch('/api/lenh-san-xuat-trung-tam?' + params.toString(), { headers: { Accept: 'application/json' } })
                 .then(async response => {
                     const json = await response.json().catch(() => ({}));
                     if (!response.ok) throw new Error(json.message || 'Không tải được dữ liệu lệnh');
@@ -601,6 +710,11 @@
             load();
         });
         groupsEl.addEventListener('click', event => {
+            const operationButton = event.target.closest('[data-operation-order]');
+            if (operationButton) {
+                openOperationEditor(operationButton.dataset.operationOrder);
+                return;
+            }
             const imageButton = event.target.closest('[data-catalog-image-open]');
             if (imageButton) {
                 window.CatalogImagePaste?.open({
@@ -616,6 +730,10 @@
             }
             const button = event.target.closest('[data-edit-standard]');
             if (button) openStandardItemEditor(button);
+        });
+        document.getElementById('operationList').addEventListener('change', event => {
+            const select = event.target.closest('[data-operation-code]');
+            if (select) updateOperation(select);
         });
         document.addEventListener('catalog-image-ready', event => {
             const data = event.detail || {};

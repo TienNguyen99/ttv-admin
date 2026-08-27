@@ -27,6 +27,7 @@ use App\Http\Controllers\InternalColorMappingController;
 use App\Http\Controllers\InternalUnitConversionController;
 use App\Http\Controllers\InternalXntController;
 use App\Http\Controllers\InternalProductionMaterialController;
+use App\Http\Controllers\InternalProductBomController;
 use App\Http\Controllers\InternalWeavingController;
 use App\Http\Controllers\WeavingManagementPageController;
 use App\Http\Controllers\InternalInventoryReportController;
@@ -190,6 +191,14 @@ Route::delete('/api/vat-tu-san-xuat/phieu-tra/{materialReturn}', [InternalProduc
 Route::get('/api/vat-tu-san-xuat/bom', [InternalProductionMaterialController::class, 'bom']);
 Route::post('/api/vat-tu-san-xuat/suy-bom', [InternalProductionMaterialController::class, 'inferBom']);
 Route::post('/api/vat-tu-san-xuat/duyet-bom', [InternalProductionMaterialController::class, 'approveBom']);
+Route::get('/client/dinh-muc-san-xuat', [InternalProductBomController::class, 'index']);
+Route::get('/api/dinh-muc-san-xuat/danh-sach', [InternalProductBomController::class, 'profiles']);
+Route::get('/api/dinh-muc-san-xuat/nhu-cau', [InternalProductBomController::class, 'orderNeeds']);
+Route::get('/api/dinh-muc-san-xuat/tong-hop-cap-vat-tu', [InternalProductBomController::class, 'aggregateOrderNeeds']);
+Route::post('/api/dinh-muc-san-xuat/chot-lenh', [InternalProductBomController::class, 'snapshotOrder']);
+Route::get('/api/dinh-muc-san-xuat', [InternalProductBomController::class, 'show']);
+Route::post('/api/dinh-muc-san-xuat/luu', [InternalProductBomController::class, 'save']);
+Route::delete('/api/dinh-muc-san-xuat/{profile}', [InternalProductBomController::class, 'destroy']);
 Route::prefix('client/quan-ly-det')->name('weaving.')->controller(WeavingManagementPageController::class)->group(function () {
     Route::get('/', 'dashboard')->name('dashboard');
     Route::get('/theo-doi', 'tracking')->name('tracking');
@@ -247,6 +256,7 @@ Route::get('/api/lenh-san-xuat-sheet', [InternalProductionOrderController::class
 Route::post('/api/lenh-san-xuat-sheet/dong-bo', [InternalProductionOrderController::class, 'sync']);
 Route::get('/client/lenh-san-xuat-trung-tam', [InternalProductionOrderController::class, 'workflowIndex']);
 Route::get('/api/lenh-san-xuat-trung-tam', [InternalProductionOrderController::class, 'workflow']);
+Route::patch('/api/lenh-san-xuat-trung-tam/cong-doan', [InternalProductionOrderController::class, 'updateOperationProgress']);
 Route::patch('/api/lenh-san-xuat-trung-tam/dong/{order}', [InternalProductionOrderController::class, 'updateStandardItemCode']);
 Route::get('/client/lenh-btp', [InternalBtpProductionOrderController::class, 'index']);
 Route::get('/client/lenh-btp/tem-qr', [InternalBtpProductionOrderController::class, 'printLabels']);

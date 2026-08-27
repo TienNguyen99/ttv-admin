@@ -208,7 +208,7 @@
             </div>
 
             <div class="row g-2 mb-3">
-                <div class="col-md-2"><label class="form-label">Nghiệp vụ</label><select id="issueType" class="form-select"><option value="production">Xuất BTP đi sản xuất</option><option value="customer">Xuất thành phẩm cho khách</option></select></div>
+                <div class="col-md-2"><label class="form-label">Nghiệp vụ</label><select id="issueType" class="form-select"><option value="material">Xuất vật tư theo lệnh</option><option value="production">Xuất BTP đi sản xuất</option><option value="customer">Xuất thành phẩm cho khách</option></select></div>
                 <div class="col-md-2"><label class="form-label">Ngày xuất</label><input id="issueDate" type="text" class="form-control date-vn" inputmode="numeric" placeholder="dd/mm/yyyy" value="{{ now()->format('d/m/Y') }}"></div>
                 <div class="col-md-2"><label class="form-label">Khách hàng</label><input id="customerName" class="form-control" placeholder="UNIPAX / ELITE"></div>
                 <div class="col-md-2"><label class="form-label">Người nhận</label><input id="receiverName" class="form-control"></div>
@@ -493,6 +493,7 @@
             tr.dataset.psNumber = data.ps_number || data.purchase_order || '';
             tr.dataset.logoColor = data.logo_color || '';
             tr.dataset.side = data.side || '';
+            tr.dataset.componentRole = data.component_role || 'CHUNG';
             tr.innerHTML = `
                 <td><input class="form-control internal-code" list="internalCatalogOptions" autocomplete="off" value="${esc(data.internal_item_code || '')}" placeholder="Mã nội bộ"></td>
                 <td><input class="form-control ten-hh" value="${esc(data.ten_hh || '')}"></td>
@@ -540,6 +541,7 @@
                 color: row.querySelector('.color').value.trim(),
                 logo_color: row.dataset.logoColor || '',
                 side: row.dataset.side || '',
+                component_role: row.dataset.componentRole || 'CHUNG',
                 note: row.querySelector('.line-note').value.trim(),
             })).filter(line => line.ma_hh || line.internal_item_code || line.quantity);
         }
@@ -793,18 +795,25 @@
         function applyIssueType(type) {
             const isProduction = type === 'production';
             const isCustomer = type === 'customer';
+            const isMaterial = type === 'material';
             document.getElementById('createBtpAndIssueBtn').classList.toggle('d-none', !isProduction || Boolean(editingIssueId));
+            document.getElementById('openPasteImportBtn').classList.toggle('d-none',isMaterial);
             updatePasteDialogMode();
-            document.getElementById('issueTypeMetric').textContent = isProduction ? 'BTP sản xuất' : 'TP khách hàng';
-            document.getElementById('pageTitle').textContent = isProduction ? 'Xuất bán thành phẩm đi sản xuất' : 'Xuất thành phẩm cho khách';
-            document.getElementById('pageHint').textContent = isProduction
-                ? 'Xuất BTP khỏi kho nội bộ để giao sản xuất. Khi hoàn thành, nhập lại bằng Phiếu nhập thành phẩm.'
-                : 'Xuất thành phẩm cho khách hàng và trừ tồn kho nội bộ theo mã, size, màu và mặt.';
+            document.getElementById('issueTypeMetric').textContent = isMaterial ? 'Vật tư SX' : (isProduction ? 'BTP sản xuất' : 'TP khách hàng');
+            document.getElementById('pageTitle').textContent = isMaterial ? 'Xuất vật tư theo lệnh' : (isProduction ? 'Xuất bán thành phẩm đi sản xuất' : 'Xuất thành phẩm cho khách');
+            document.getElementById('pageHint').textContent = isMaterial
+                ? 'Số thực xuất được gắn riêng theo từng lệnh sản xuất; BOM chỉ dùng để tham chiếu định mức.'
+                : (isProduction
+                    ? 'Xuất BTP khỏi kho nội bộ để giao sản xuất. Khi hoàn thành, nhập lại bằng Phiếu nhập thành phẩm.'
+                    : 'Xuất thành phẩm cho khách hàng và trừ tồn kho nội bộ theo mã, size, màu và mặt.');
             if (!editingIssueId) {
-                document.getElementById('saveBtn').textContent = isProduction ? 'Xuất BTP + in phiếu' : 'Xuất TP + in phiếu';
+                document.getElementById('saveBtn').textContent = isMaterial ? 'Xuất vật tư + in phiếu' : (isProduction ? 'Xuất BTP + in phiếu' : 'Xuất TP + in phiếu');
             }
 
-            if (isProduction) {
+            if (isMaterial) {
+                document.getElementById('department').value = document.getElementById('department').value || 'Sản xuất';
+                document.getElementById('purpose').value = 'Xuất vật tư theo lệnh';
+            } else if (isProduction) {
                 if (!value('department') || value('department') === 'Kinh doanh') document.getElementById('department').value = 'Sản xuất';
                 if (!value('purpose') || value('purpose') === 'Xuất thành phẩm cho khách hàng') document.getElementById('purpose').value = 'Xuất BTP đi sản xuất';
             } else if (isCustomer) {
@@ -1646,10 +1655,23 @@
             document.getElementById('topIssueKeyword').value = requestedKeyword;
         }
         document.getElementById('pasteColumnGuide').textContent = pastePresets.UNIPAX.guide;
-        document.getElementById('issueType').value = requestedType === 'customer' ? 'customer' : 'production';
+        document.getElementById('issueType').value = ['material','production','customer'].includes(requestedType) ? requestedType : 'production';
         applyIssueType(document.getElementById('issueType').value);
         updatePasteDialogMode();
-        addLine();
+        const materialPlanRaw = sessionStorage.getItem('ttv.materialIssuePlan');
+        if (requestedType === 'material' && materialPlanRaw) {
+            try {
+                const materialPlan=JSON.parse(materialPlanRaw);
+                sessionStorage.removeItem('ttv.materialIssuePlan');
+                if(materialPlan.issue_date) setDateValue('issueDate',materialPlan.issue_date);
+                document.getElementById('receiverName').value=materialPlan.receiver_name||'';
+                document.getElementById('department').value='Sản xuất';
+                document.getElementById('purpose').value='Xuất vật tư theo lệnh';
+                (materialPlan.lines||[]).forEach(line=>addLine(line));
+                if(!(materialPlan.lines||[]).length)addLine();
+                document.getElementById('productionOrderStatus').textContent=`Đã nhận ${(materialPlan.lines||[]).length} dòng từ bảng tổng hợp BOM. Kiểm tra vị trí và số thực xuất trước khi lưu.`;
+            } catch(error) { addLine(); }
+        } else addLine();
         loadIssues();
     </script>
 </body>

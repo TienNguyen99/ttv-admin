@@ -3,7 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\InternalItemCatalog;
+use App\Models\InternalProductBomProfile;
 use App\Models\InternalProductionOrder;
+use App\Models\InternalProductionOperationProgress;
+use App\Models\InternalProductionOrderBomSnapshot;
+use App\Services\InternalAudit;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -87,6 +91,27 @@ class InternalProductionOrderController extends Controller
             ]);
         }
 
+        $bomProfiles = InternalProductBomProfile::query()
+            ->with(['routings' => fn ($query) => $query->orderBy('sequence')])
+            ->withCount('lines')
+            ->where('status', 'active')
+            ->whereIn('item_code', $catalogCodes->map(fn ($code) => mb_strtoupper($code))->all())
+            ->get()
+            ->keyBy(fn ($profile) => mb_strtoupper(trim((string) $profile->item_code)));
+        $snapshotItemsByOrder = InternalProductionOrderBomSnapshot::query()
+            ->where('order_type', 'central')
+            ->whereIn('production_order_code', $orderCodes->all())
+            ->select('production_order_code', 'finished_item_code')
+            ->distinct()
+            ->get()
+            ->groupBy('production_order_code')
+            ->map(fn ($rows) => $rows->pluck('finished_item_code')->map(fn ($code) => mb_strtoupper(trim((string) $code)))->unique()->values());
+        $operationProgressByOrder = InternalProductionOperationProgress::query()
+            ->whereIn('production_order_code', $orderCodes->all())
+            ->orderBy('sequence')
+            ->get()
+            ->groupBy('production_order_code');
+
         $receiptRows = DB::connection('internal')->table('internal_material_receipt_lines as l')
             ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
             ->whereIn('l.production_order', $orderCodes->all())
@@ -106,11 +131,13 @@ class InternalProductionOrderController extends Controller
             ->whereIn('l.production_order', $orderCodes->all())
             ->select(
                 'l.production_order',
+                DB::raw("SUM(CASE WHEN i.issue_type = 'material' THEN l.quantity ELSE 0 END) as material_quantity"),
                 DB::raw("SUM(CASE WHEN i.issue_type = 'production' THEN l.quantity ELSE 0 END) as production_quantity"),
                 DB::raw("SUM(CASE WHEN i.issue_type = 'customer' THEN l.quantity ELSE 0 END) as customer_quantity"),
+                DB::raw("COUNT(DISTINCT CASE WHEN i.issue_type = 'material' THEN i.id END) as material_document_count"),
                 DB::raw("COUNT(DISTINCT CASE WHEN i.issue_type = 'production' THEN i.id END) as production_document_count"),
                 DB::raw("COUNT(DISTINCT CASE WHEN i.issue_type = 'customer' THEN i.id END) as customer_document_count"),
-                DB::raw("MAX(CASE WHEN i.status = 'completed' THEN 1 ELSE 0 END) as has_completed_issue"),
+                DB::raw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'material' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as material_issue_codes"),
                 DB::raw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'production' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as production_issue_codes"),
                 DB::raw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'customer' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as customer_issue_codes")
             )
@@ -120,17 +147,16 @@ class InternalProductionOrderController extends Controller
 
         $rows = $orders
             ->groupBy('production_order')
-            ->map(function ($lines, $productionOrder) use ($receiptRows, $issueRows, $catalogsById, $catalogsByCode) {
+            ->map(function ($lines, $productionOrder) use ($receiptRows, $issueRows, $catalogsById, $catalogsByCode, $bomProfiles, $snapshotItemsByOrder, $operationProgressByOrder) {
                 $first = $lines->first();
                 $receipt = $receiptRows->get($productionOrder);
                 $issue = $issueRows->get($productionOrder);
                 $plannedQuantity = $this->plannedQuantityForOrderLines($lines);
                 $receivedQuantity = (float) ($receipt->quantity ?? 0);
+                $issuedMaterial = (float) ($issue->material_quantity ?? 0);
                 $issuedProduction = (float) ($issue->production_quantity ?? 0);
                 $issuedCustomer = (float) ($issue->customer_quantity ?? 0);
                 $remainingAfterCustomer = $receivedQuantity - $issuedCustomer;
-                $status = $this->workflowStatus($plannedQuantity, $receivedQuantity, $issuedProduction, (bool) ($issue->has_completed_issue ?? false), $issuedCustomer);
-
                 $items = $lines->map(function ($line) use ($catalogsById, $catalogsByCode) {
                     $sourceItemCode = trim((string) $line->item_code);
                     $standardItemCode = trim((string) $line->standard_item_code);
@@ -160,6 +186,26 @@ class InternalProductionOrderController extends Controller
                         'unit' => trim((string) ($catalog->unit ?? '')) ?: trim((string) $line->unit),
                     ];
                 })->values();
+                $lifecycle = $this->buildLifecycle(
+                    $productionOrder,
+                    $items,
+                    $bomProfiles,
+                    $snapshotItemsByOrder->get($productionOrder, collect()),
+                    $operationProgressByOrder->get($productionOrder, collect()),
+                    $issuedMaterial,
+                    $issuedProduction,
+                    $receivedQuantity,
+                    $plannedQuantity,
+                    $issuedCustomer
+                );
+                $status = $this->workflowStatus(
+                    $plannedQuantity,
+                    $receivedQuantity,
+                    $issuedMaterial,
+                    $issuedProduction,
+                    $issuedCustomer,
+                    $lifecycle
+                );
 
                 return [
                     'production_order' => $productionOrder,
@@ -172,16 +218,20 @@ class InternalProductionOrderController extends Controller
                     'line_count' => $lines->count(),
                     'planned_quantity' => $plannedQuantity,
                     'received_quantity' => $receivedQuantity,
+                    'material_issue_quantity' => $issuedMaterial,
                     'production_issue_quantity' => $issuedProduction,
                     'customer_issue_quantity' => $issuedCustomer,
                     'remaining_quantity' => $remainingAfterCustomer,
+                    'material_document_count' => (int) ($issue->material_document_count ?? 0),
                     'production_document_count' => (int) ($issue->production_document_count ?? 0),
                     'customer_document_count' => (int) ($issue->customer_document_count ?? 0),
                     'receipt_document_count' => (int) ($receipt->document_count ?? 0),
                     'receipt_codes' => $this->splitCodes($receipt->document_codes ?? ''),
+                    'material_issue_codes' => $this->splitCodes($issue->material_issue_codes ?? ''),
                     'production_issue_codes' => $this->splitCodes($issue->production_issue_codes ?? ''),
                     'customer_issue_codes' => $this->splitCodes($issue->customer_issue_codes ?? ''),
                     'status' => $status,
+                    'lifecycle' => $lifecycle,
                     'items' => $items,
                 ];
             })
@@ -263,6 +313,68 @@ class InternalProductionOrderController extends Controller
                 'image_url' => $catalog ? trim((string) $catalog->image_url) : '',
             ],
         ]);
+    }
+
+    public function updateOperationProgress(Request $request)
+    {
+        $data = $request->validate([
+            'production_order' => 'required|string|max:100',
+            'operation_code' => 'required|string|max:50',
+            'status' => 'required|in:pending,in_progress,completed',
+            'updated_by' => 'nullable|string|max:150',
+            'note' => 'nullable|string|max:500',
+        ]);
+        $orderCode = trim($data['production_order']);
+        $operationCode = mb_strtoupper(trim($data['operation_code']));
+        $orders = InternalProductionOrder::query()
+            ->where('is_active', true)
+            ->where('production_order', $orderCode)
+            ->get();
+        if ($orders->isEmpty()) {
+            return response()->json(['message' => 'Lệnh sản xuất không tồn tại.'], 404);
+        }
+
+        $itemCodes = $orders->map(fn ($order) => mb_strtoupper(trim((string) ($order->standard_item_code ?: $order->item_code))))->filter()->unique();
+        $routing = DB::connection('internal')->table('internal_product_routings as routing')
+            ->join('internal_product_bom_profiles as profile', 'profile.id', '=', 'routing.profile_id')
+            ->where('profile.status', 'active')
+            ->whereIn('profile.item_code', $itemCodes->all())
+            ->where('routing.operation_code', $operationCode)
+            ->orderBy('routing.sequence')
+            ->select('routing.operation_code', 'routing.operation_name', 'routing.sequence')
+            ->first();
+        if (!$routing) {
+            return response()->json(['message' => 'Công đoạn chưa có trong BOM của mã hàng thuộc lệnh này.'], 422);
+        }
+
+        $progress = InternalProductionOperationProgress::query()->firstOrNew([
+            'production_order_code' => $orderCode,
+            'operation_code' => $operationCode,
+        ]);
+        $progress->operation_name = $routing->operation_name;
+        $progress->sequence = (int) $routing->sequence;
+        $progress->status = $data['status'];
+        $progress->updated_by = trim((string) ($data['updated_by'] ?? '')) ?: null;
+        $progress->note = trim((string) ($data['note'] ?? '')) ?: null;
+        if ($data['status'] === 'in_progress') {
+            $progress->started_at = $progress->started_at ?: now();
+            $progress->completed_at = null;
+        } elseif ($data['status'] === 'completed') {
+            $progress->started_at = $progress->started_at ?: now();
+            $progress->completed_at = now();
+        } else {
+            $progress->started_at = null;
+            $progress->completed_at = null;
+        }
+        $progress->save();
+
+        app(InternalAudit::class)->model('production_operation.updated', $progress, [
+            'production_order' => $orderCode,
+            'operation_code' => $operationCode,
+            'status' => $data['status'],
+        ], $request);
+
+        return response()->json(['message' => 'Đã cập nhật công đoạn ' . $routing->operation_name . '.', 'data' => $progress]);
     }
 
     public function data(Request $request)
@@ -787,17 +899,110 @@ class InternalProductionOrderController extends Controller
         return $updated;
     }
 
-    private function workflowStatus(float $planned, float $received, float $issuedProduction, bool $completedIssue, float $issuedCustomer): string
+    private function buildLifecycle(
+        string $productionOrder,
+        $items,
+        $bomProfiles,
+        $snapshotItemCodes,
+        $operationProgressRows,
+        float $issuedMaterial,
+        float $issuedProduction,
+        float $receivedQuantity,
+        float $plannedQuantity,
+        float $issuedCustomer
+    ): array {
+        $itemCodes = collect($items)
+            ->pluck('item_code')
+            ->map(fn ($code) => mb_strtoupper(trim((string) $code)))
+            ->filter()
+            ->unique()
+            ->values();
+        $snapshotItemCodes = collect($snapshotItemCodes)->map(fn ($code) => mb_strtoupper(trim((string) $code)));
+        $bomItemCount = $itemCodes->filter(function ($itemCode) use ($bomProfiles, $snapshotItemCodes) {
+            $profile = $bomProfiles->get($itemCode);
+            return ($profile && (int) $profile->lines_count > 0) || $snapshotItemCodes->contains($itemCode);
+        })->count();
+        $bomComplete = $itemCodes->isNotEmpty() && $bomItemCount === $itemCodes->count();
+        $bomStatus = $bomComplete ? 'completed' : 'active';
+        $bomDetail = $bomComplete
+            ? $bomItemCount . '/' . $itemCodes->count() . ' mã đã có định mức'
+            : $bomItemCount . '/' . $itemCodes->count() . ' mã có định mức';
+
+        $routingRows = $itemCodes->flatMap(function ($itemCode) use ($bomProfiles) {
+            $profile = $bomProfiles->get($itemCode);
+            return $profile ? $profile->routings : collect();
+        })->sortBy('sequence')->unique('operation_code')->values();
+        $savedProgress = collect($operationProgressRows)->keyBy(fn ($row) => mb_strtoupper(trim((string) $row->operation_code)));
+        $productionStarted = $issuedMaterial > 0 || $issuedProduction > 0;
+        $operations = $routingRows->map(function ($routing, $index) use ($savedProgress, $productionStarted) {
+            $code = mb_strtoupper(trim((string) $routing->operation_code));
+            $saved = $savedProgress->get($code);
+            $status = $saved ? $saved->status : 'pending';
+            if (!$saved && $productionStarted && $index === 0) {
+                $status = 'in_progress';
+            }
+            return [
+                'code' => $code,
+                'name' => trim((string) $routing->operation_name),
+                'sequence' => (int) $routing->sequence,
+                'status' => $status,
+                'updated_by' => trim((string) ($saved->updated_by ?? '')),
+                'note' => trim((string) ($saved->note ?? '')),
+            ];
+        })->values();
+        $allOperationsDone = $operations->isNotEmpty() && $operations->every(fn ($operation) => $operation['status'] === 'completed');
+        $currentOperation = $operations->first(fn ($operation) => $operation['status'] === 'in_progress')
+            ?: $operations->first(fn ($operation) => $operation['status'] === 'pending');
+
+        $materialStatus = $productionStarted ? 'completed' : ($bomComplete ? 'active' : 'pending');
+        $productionStatus = $allOperationsDone
+            ? 'completed'
+            : ($productionStarted ? 'active' : 'pending');
+        $receiptStatus = $receivedQuantity > 0
+            ? (($plannedQuantity > 0 && $receivedQuantity >= $plannedQuantity) ? 'completed' : 'active')
+            : ($allOperationsDone ? 'active' : 'pending');
+        $shipmentStatus = $issuedCustomer > 0
+            ? (($plannedQuantity > 0 && $issuedCustomer >= $plannedQuantity) ? 'completed' : 'active')
+            : ($receiptStatus === 'completed' ? 'active' : 'pending');
+        $stages = collect([
+            ['key' => 'order', 'label' => 'Lệnh SX', 'status' => 'completed', 'detail' => $productionOrder],
+            ['key' => 'bom', 'label' => 'Phân tích BOM', 'status' => $bomStatus, 'detail' => $bomDetail],
+            ['key' => 'material', 'label' => 'Xuất vật tư', 'status' => $materialStatus, 'detail' => $issuedMaterial > 0 ? number_format($issuedMaterial, 3, ',', '.') : ($issuedProduction > 0 ? 'Đã xuất BTP' : 'Chưa có phiếu')],
+            ['key' => 'production', 'label' => 'Sản xuất', 'status' => $productionStatus, 'detail' => $currentOperation ? $currentOperation['name'] : ($operations->isEmpty() ? 'Chưa có tuyến công đoạn' : 'Đã xong công đoạn')],
+            ['key' => 'receipt', 'label' => 'Nhập kho', 'status' => $receiptStatus, 'detail' => number_format($receivedQuantity, 3, ',', '.')],
+            ['key' => 'shipment', 'label' => 'Xuất kho', 'status' => $shipmentStatus, 'detail' => number_format($issuedCustomer, 3, ',', '.')],
+        ]);
+        $score = $stages->sum(fn ($stage) => $stage['status'] === 'completed' ? 1 : ($stage['status'] === 'active' ? 0.5 : 0));
+        $currentStage = $stages->first(fn ($stage) => $stage['status'] === 'active');
+
+        return [
+            'percent' => (int) round($score / max($stages->count(), 1) * 100),
+            'current_stage' => $currentStage['label'] ?? 'Hoàn tất',
+            'stages' => $stages->values(),
+            'operations' => $operations,
+            'bom_complete' => $bomComplete,
+        ];
+    }
+
+    private function workflowStatus(
+        float $planned,
+        float $received,
+        float $issuedMaterial,
+        float $issuedProduction,
+        float $issuedCustomer,
+        array $lifecycle
+    ): string
     {
         if ($issuedCustomer > 0) {
             return 'shipped_customer';
         }
 
-        if ($completedIssue) {
+        $productionStage = collect($lifecycle['stages'] ?? [])->firstWhere('key', 'production');
+        if (($productionStage['status'] ?? '') === 'completed') {
             return 'production_done';
         }
 
-        if ($issuedProduction > 0) {
+        if ($issuedMaterial > 0 || $issuedProduction > 0 || ($productionStage['status'] ?? '') === 'active') {
             return 'in_production';
         }
 

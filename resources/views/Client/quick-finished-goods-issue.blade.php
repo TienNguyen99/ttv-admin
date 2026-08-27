@@ -1212,6 +1212,7 @@
             const explicit = pastedLocationCodes(row.dataset.explicitPastedLocation || '');
             const preferred = [...(row._preferredLocations || new Set())];
             const isManualSelection = row.dataset.manualLocationSelection === '1';
+            const preserveSavedLocations = row.dataset.preserveSavedLocations === '1';
             const requestedQuantity = Number(row.querySelector('.quantity').value || 0);
             const cartonNorm = Number(cartonNorms.get(variantKey) || requestedQuantity || 0);
             const isPartialCarton = cartonNorm > 0 && requestedQuantity + 0.0001 < cartonNorm;
@@ -1243,12 +1244,12 @@
                     ...prioritizedLocations.map(location => location.location_code),
                 ])];
             let remaining = requestedQuantity;
-            const selected = [];
+            const selected = preserveSavedLocations ? [...preferred] : [];
             orderedCodes.forEach(code => {
                 if (remaining <= 0.0001) return;
                 const available = Math.max(0, Number(balances.get(code) || 0));
                 if (available <= 0) return;
-                selected.push(code);
+                if (!selected.includes(code)) selected.push(code);
                 const taken = Math.min(available, remaining);
                 const after = available - taken;
                 balances.set(code, after);
@@ -1430,6 +1431,8 @@
         delete row.dataset.pastedFifo;
         delete row.dataset.explicitPastedLocation;
         delete row.dataset.manualLocationSelection;
+        delete row.dataset.preserveSavedLocations;
+        delete row.dataset.deferFifoAssignment;
         row._weightPerUnitGrams = 0;
         row._preferredLocations = new Set();
         row.querySelectorAll('input').forEach(input => {
@@ -1457,6 +1460,8 @@
         row._fifoUnallocated = 0;
         row._preferredLocations = new Set();
         delete row.dataset.manualLocationSelection;
+        delete row.dataset.preserveSavedLocations;
+        delete row.dataset.deferFifoAssignment;
         delete row.dataset.locationLookup;
         const input = row.querySelector('.location');
         if (input) input.value = '';
@@ -1469,6 +1474,7 @@
         const selected = selectedLocationCodes(row);
         const locations = row._stockLocations || [];
         const selectedRows = locations.filter(item => selected.includes(item.location_code));
+        const unavailableSavedLocations = selected.filter(code => !locations.some(item => item.location_code === code));
         const allocations = row._fifoAllocations || new Map();
         const allocated = selected.reduce((sum, code) => sum + Number(allocations.get(code)?.taken || 0), 0);
         const remainingAfter = selected.reduce((sum, code) => sum + Number(allocations.get(code)?.after || 0), 0);
@@ -1488,13 +1494,16 @@
                     : locations.length
                         ? 'Chưa chọn kệ'
                         : 'Không có tồn';
+        if (!loading && unavailableSavedLocations.length) {
+            label = `${selected.join(', ')} · kệ đã lưu · tồn hiện tại đã thay đổi`;
+        }
         if (!loading && Number(row._fifoUnallocated || 0) > 0) {
             label += ` · thiếu ${numberFormat(row._fifoUnallocated)}`;
         }
         trigger.querySelector('span').textContent = label;
         trigger.title = label;
         trigger.classList.toggle('is-empty', !selected.length && !locations.length);
-        trigger.classList.toggle('is-warning', !loading && !selected.length);
+        trigger.classList.toggle('is-warning', !loading && (!selected.length || unavailableSavedLocations.length > 0));
         row.querySelector('.location').value = selected.join(', ');
     }
 
@@ -1520,6 +1529,7 @@
         if (row.dataset.locationLookup && row.dataset.locationLookup !== requestKey) {
             row._preferredLocations = new Set();
             delete row.dataset.manualLocationSelection;
+            delete row.dataset.preserveSavedLocations;
         }
         row.dataset.locationLookup = requestKey;
         row.dataset.locationLoading = '1';
@@ -1551,7 +1561,7 @@
             if (row.dataset.locationLookup === requestKey) {
                 delete row.dataset.locationLoading;
                 updateLocationTrigger(row);
-                if (row.dataset.pastedFifo === '1') {
+                if (row.dataset.pastedFifo === '1' && row.dataset.deferFifoAssignment !== '1') {
                     assignPastedLocationsByFifo([...rowsBody.children].filter(item => item.dataset.pastedFifo === '1'));
                 }
             }
@@ -2455,6 +2465,8 @@
                 row.dataset.orderCustomer = line.customer || '';
                 row.dataset.pastedLocation = line.location_code || '';
                 row.dataset.pastedFifo = '1';
+                row.dataset.preserveSavedLocations = '1';
+                row.dataset.deferFifoAssignment = '1';
                 row._preferredLocations = new Set(savedLocations);
                 if (savedLocations.length) row.dataset.manualLocationSelection = '1';
                 if (line.match_by_code_only === true || line.match_by_code_only === 1
@@ -2465,6 +2477,7 @@
                 }
             });
             await Promise.all(lines.map((line, index) => loadStockLocations(rows[index])));
+            rows.slice(0, lines.length).forEach(row => delete row.dataset.deferFifoAssignment);
             assignPastedLocationsByFifo(rows.filter(row => row.dataset.pastedFifo === '1'));
             updateSummary();
             document.getElementById('draftSearchDialog').close();

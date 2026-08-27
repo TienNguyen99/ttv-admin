@@ -31,6 +31,7 @@ class InternalAudit
     {
         $code = $model->issue_code
             ?? $model->receipt_code
+            ?? $model->production_order_code
             ?? $model->package_code
             ?? $model->location_code
             ?? null;

@@ -32,7 +32,18 @@
         .pm-loading.is-visible { display:grid; }
         .pm-loading__box { display:flex; align-items:center; gap:10px; padding:12px 16px; border:1px solid #bfdbfe; border-radius:8px; background:#fff; color:#0f2f63; font-weight:800; }
         .pm-empty { padding:48px 20px; color:#64748b; text-align:center; }
+        .pm-plan-tools { display:grid; grid-template-columns:minmax(260px,1fr) 150px 150px 180px auto; gap:10px; align-items:end; }
+        .pm-plan-table { min-width:1320px; }
+        .pm-plan-actual { width:110px; text-align:right; font-weight:800; }
+        .pm-plan-suggested { color:#075aa5; font-weight:850; }
+        .pm-plan-complete { color:#15803d; font-weight:800; }
+        .pm-flow { display:flex; flex-wrap:wrap; align-items:center; gap:7px; color:#64748b; font-size:12px; font-weight:750; }
+        .pm-flow span { display:inline-flex; align-items:center; gap:5px; }
+        .pm-flow span:not(:last-child)::after { content:'›'; margin-left:7px; color:#94a3b8; }
+        .pm-plan-message { display:none; margin:12px 16px 0; }
+        .pm-plan-message.is-visible { display:block; }
         @media (max-width:900px) { .pm-summary { grid-template-columns:repeat(2,1fr); } .pm-filter { grid-template-columns:1fr; } }
+        @media (max-width:1100px) { .pm-plan-tools { grid-template-columns:repeat(2,minmax(0,1fr)); } }
         @media (max-width:560px) { .pm-summary { grid-template-columns:1fr; } }
     </style>
 </head>
@@ -54,7 +65,10 @@
             <h1>Vật tư theo lệnh</h1>
             <p>Xuất, hoàn trả và tiêu hao thực tế trong database nội bộ.</p>
         </div>
-        <a class="wms-btn wms-btn--primary" href="{{ url('/client/xuat-vat-tu-noi-bo?type=material') }}"><i data-lucide="package-minus"></i>Tạo phiếu xuất</a>
+        <div class="d-flex gap-2 flex-wrap">
+            <a class="wms-btn" href="{{ url('/client/dinh-muc-san-xuat') }}"><i data-lucide="list-checks"></i>BOM &amp; công đoạn</a>
+            <a class="wms-btn wms-btn--primary" href="{{ url('/client/xuat-vat-tu-noi-bo?type=material') }}"><i data-lucide="package-minus"></i>Tạo phiếu xuất</a>
+        </div>
     </div>
 
     <section class="wms-panel">
@@ -63,6 +77,34 @@
                 <label class="wms-field"><span>Tìm kiếm</span><input id="keyword" placeholder="Lệnh SX, PO, mã thành phẩm hoặc vật tư"></label>
                 <label class="wms-field"><span>Trạng thái</span><select id="status"><option value="open">Còn tại sản xuất</option><option value="closed">Đã xử lý hết</option><option value="all">Tất cả</option></select></label>
                 <button id="reloadBtn" class="wms-btn" type="button"><i data-lucide="refresh-cw"></i>Tải lại</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="wms-panel mt-3">
+        <div class="wms-panel__head"><div><strong>Chuẩn bị phiếu xuất từ BOM</strong><div class="pm-sub">Nhập nhiều lệnh. BOM chỉ đề xuất; số thực xuất có thể sửa trước khi chuyển sang phiếu PXVT hoặc copy sang XNT.</div></div></div>
+        <div class="wms-panel__body">
+            <div class="pm-plan-tools">
+                <label class="wms-field"><span>Lệnh sản xuất</span><input id="planOrderInput" list="planOrderOptions" autocomplete="off" placeholder="Gõ lệnh rồi Enter; có thể dán nhiều lệnh"><datalist id="planOrderOptions"></datalist></label>
+                <label class="wms-field"><span>Số phiếu XNT</span><input id="planVoucher" placeholder="Có thể để trống"></label>
+                <label class="wms-field"><span>Ngày xuất</span><input id="planDate" placeholder="dd/mm/yyyy"></label>
+                <label class="wms-field"><span>Người nhận</span><input id="planReceiver" placeholder="Bộ phận / người nhận"></label>
+                <button id="addPlanOrderBtn" class="wms-btn wms-btn--primary" type="button"><i data-lucide="plus"></i>Thêm lệnh</button>
+            </div>
+        </div>
+        <div id="planMessage" class="alert pm-plan-message" role="alert"></div>
+        <div class="wms-table-wrap">
+            <table class="wms-table pm-plan-table">
+                <thead><tr><th>Lệnh SX</th><th>Mã vật tư</th><th>Tên vật tư</th><th>Vai trò</th><th class="text-end">Nhu cầu BOM</th><th class="text-end">Đã xuất</th><th class="text-end">Đề xuất lần này</th><th class="text-end">Thực xuất</th><th>ĐVT</th><th></th></tr></thead>
+                <tbody id="planBody"><tr><td colspan="10" class="pm-empty">Chưa chọn lệnh sản xuất.</td></tr></tbody>
+            </table>
+        </div>
+        <div class="wms-panel__body d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div><div class="pm-flow"><span>BOM</span><span>Phiếu xuất vật tư</span><span>Sản xuất</span><span>Nhập kho</span><span>Xuất khách</span></div><div class="pm-sub mt-1">Copy XNT: Số phiếu → Ngày xuất → Mã hàng → Tên hàng → Số lượng → ĐVT → Người nhận → Lệnh SX.</div></div>
+            <div class="d-flex flex-wrap gap-2">
+            <button id="clearPlanBtn" class="wms-btn" type="button"><i data-lucide="trash-2"></i>Xóa bảng</button>
+            <button id="copyXntBtn" class="wms-btn" type="button" disabled><i data-lucide="copy"></i>Copy dòng XNT</button>
+            <button id="openIssueBtn" class="wms-btn wms-btn--primary" type="button" disabled><i data-lucide="package-minus"></i>Chuyển sang phiếu PXVT</button>
             </div>
         </div>
     </section>
@@ -117,7 +159,7 @@
 <script>
 (() => {
     const csrf = document.querySelector('meta[name="csrf-token"]').content;
-    const state = { rows: [], returnOrder: null, bomOrder: null };
+    const state = { rows: [], returnOrder: null, bomOrder: null, planOrderCodes:[], planRows:[] };
     const modal = new bootstrap.Modal(document.getElementById('returnModal'));
     const bomModal = new bootstrap.Modal(document.getElementById('bomModal'));
     const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
@@ -132,6 +174,93 @@
         return payload;
     };
     const post = (url, body) => fetch(url, { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrf}, body:JSON.stringify(body) }).then(json);
+    const todayIso = () => new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Ho_Chi_Minh' }).format(new Date());
+    const isoToVn = value => { const parts=String(value||'').split('-'); return parts.length===3?`${parts[2]}/${parts[1]}/${parts[0]}`:value; };
+    const vnToIso = value => { const match=String(value||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return match?`${match[3]}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`:value; };
+    const planKey = row => [row.production_order,row.material_code,row.component_role,row.unit].join('|');
+
+    function planNotice(message,type='info') {
+        const node=document.getElementById('planMessage');
+        node.textContent=message; node.className=`alert alert-${type} pm-plan-message is-visible`;
+    }
+
+    function syncPlanRows() {
+        document.querySelectorAll('#planBody [data-plan-key]').forEach(tr=>{
+            const row=state.planRows.find(item=>planKey(item)===tr.dataset.planKey);
+            if(row) row.actual_quantity=Number(tr.querySelector('.pm-plan-actual').value||0);
+        });
+    }
+
+    function renderPlan() {
+        const body=document.getElementById('planBody');
+        if(!state.planRows.length) body.innerHTML='<tr><td colspan="10" class="pm-empty">Chưa chọn lệnh sản xuất.</td></tr>';
+        else body.innerHTML=state.planRows.map(row=>`<tr data-plan-key="${esc(planKey(row))}"><td><strong class="pm-order">${esc(row.production_order)}</strong><div class="pm-sub">${esc(row.purchase_order||'')}</div></td><td><strong>${esc(row.material_code)}</strong></td><td>${esc(row.material_name||'')}</td><td>${esc(row.component_role||'CHUNG')}</td><td class="text-end"><strong>${number(row.required_quantity)}</strong>${Math.abs(Number(row.required_quantity)-Number(row.exact_required_quantity))>0.000001?`<div class="pm-sub">Tính ra ${number(row.exact_required_quantity)}</div>`:''}</td><td class="text-end ${Number(row.issued_quantity)>0?'pm-plan-complete':''}">${number(row.issued_quantity)}</td><td class="text-end pm-plan-suggested">${number(row.suggested_quantity)}</td><td class="text-end"><input class="form-control form-control-sm pm-plan-actual" type="number" min="0" step="0.001" value="${esc(row.actual_quantity)}" aria-label="Thực xuất ${esc(row.material_code)}"></td><td>${esc(row.unit)}</td><td><button class="wms-btn wms-btn--sm text-danger" data-remove-plan="${esc(planKey(row))}" title="Bỏ dòng"><i data-lucide="x"></i></button></td></tr>`).join('');
+        document.getElementById('copyXntBtn').disabled=!state.planRows.length;
+        document.getElementById('openIssueBtn').disabled=!state.planRows.length;
+        lucide.createIcons();
+    }
+
+    async function loadPlanOrders(codes) {
+        syncPlanRows();
+        state.planOrderCodes=[...new Set(state.planOrderCodes.concat(codes.map(value=>String(value||'').trim()).filter(Boolean)))];
+        if(!state.planOrderCodes.length) return renderPlan();
+        const previous=new Map(state.planRows.map(row=>[planKey(row),row.actual_quantity]));
+        const params=new URLSearchParams(); state.planOrderCodes.forEach(code=>params.append('production_orders[]',code));
+        loading(true,'Đang tính nhu cầu từ BOM...');
+        try {
+            const payload=await fetch('/api/dinh-muc-san-xuat/tong-hop-cap-vat-tu?'+params).then(json);
+            state.planRows=(payload.data||[]).map(row=>({...row,actual_quantity:previous.has(planKey(row))?previous.get(planKey(row)):row.suggested_quantity}));
+            const warnings=[];
+            if((payload.missing_orders||[]).length) warnings.push('Không tìm thấy lệnh: '+payload.missing_orders.join(', '));
+            if((payload.missing_items||[]).length) warnings.push('Chưa có BOM cho mã: '+payload.missing_items.join(', '));
+            if(warnings.length) planNotice(warnings.join(' | '),'warning');
+            else planNotice(`Đã tổng hợp ${state.planRows.length} dòng cho ${state.planOrderCodes.length} lệnh.`,'success');
+            renderPlan();
+        } catch(error) { planNotice(error.message,'danger'); }
+        finally { loading(false); }
+    }
+
+    function addPlanOrders() {
+        const input=document.getElementById('planOrderInput');
+        const codes=input.value.split(/[\n,;]+/).map(value=>value.trim()).filter(Boolean);
+        if(!codes.length) return planNotice('Nhập ít nhất một lệnh sản xuất.','warning');
+        input.value=''; loadPlanOrders(codes);
+    }
+
+    async function copyXntRows() {
+        syncPlanRows();
+        const voucher=document.getElementById('planVoucher').value.trim();
+        const date=document.getElementById('planDate').value.trim();
+        const receiver=document.getElementById('planReceiver').value.trim();
+        const rows=state.planRows.filter(row=>Number(row.actual_quantity)>0).map(row=>[
+            voucher,date,row.material_code,row.material_name,Number(row.actual_quantity),row.unit,receiver,row.production_order
+        ].map(value=>String(value??'').replace(/[\t\r\n]+/g,' ')).join('\t'));
+        if(!rows.length) return planNotice('Không có dòng thực xuất lớn hơn 0.','warning');
+        const text=rows.join('\n');
+        try {
+            if(navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+            else {
+                const area=document.createElement('textarea'); area.value=text; area.style.position='fixed'; area.style.opacity='0';
+                document.body.appendChild(area); area.select(); if(!document.execCommand('copy')) throw new Error('copy'); area.remove();
+            }
+            planNotice(`Đã copy ${rows.length} dòng theo thứ tự cột XNT.`,'success');
+        } catch(error) { planNotice('Không copy được. Hãy cho phép clipboard trong trình duyệt.','danger'); }
+    }
+
+    function openMaterialIssue() {
+        syncPlanRows();
+        const lines=state.planRows.filter(row=>Number(row.actual_quantity)>0).map(row=>({
+            internal_item_code:row.material_code, ma_hh:row.material_code, ten_hh:row.material_name,
+            dvt:row.unit, quantity:Number(row.actual_quantity), production_order:row.production_order,
+            purchase_order:row.purchase_order||'', customer:row.customer||'', component_role:row.component_role||'CHUNG',
+            note:`BOM cần ${number(row.required_quantity)}; đã xuất ${number(row.issued_quantity)}; đề xuất lần này ${number(row.suggested_quantity)} ${row.unit}`
+        }));
+        if(!lines.length) return planNotice('Không có dòng thực xuất lớn hơn 0.','warning');
+        sessionStorage.setItem('ttv.materialIssuePlan',JSON.stringify({
+            issue_date:vnToIso(document.getElementById('planDate').value), receiver_name:document.getElementById('planReceiver').value.trim(), lines
+        }));
+        window.location.href='/client/xuat-vat-tu-noi-bo?type=material&from_bom=1';
+    }
 
     function render(payload) {
         state.rows = payload.data || [];
@@ -236,7 +365,28 @@
     document.getElementById('approveBomBtn').addEventListener('click', approveBom);
     document.getElementById('reloadBtn').addEventListener('click', load);
     document.getElementById('status').addEventListener('change', load);
+    document.getElementById('planDate').value=isoToVn(todayIso());
+    document.getElementById('addPlanOrderBtn').addEventListener('click',addPlanOrders);
+    document.getElementById('planOrderInput').addEventListener('keydown',event=>{ if(event.key==='Enter'){event.preventDefault();addPlanOrders();} });
+    let planSearchTimer;
+    document.getElementById('planOrderInput').addEventListener('input',event=>{
+        clearTimeout(planSearchTimer); const keyword=event.target.value.trim(); if(keyword.length<2)return;
+        planSearchTimer=setTimeout(()=>fetch('/api/lenh-san-xuat-trung-tam?keyword='+encodeURIComponent(keyword)+'&limit=20').then(json).then(payload=>{
+            document.getElementById('planOrderOptions').innerHTML=(payload.data||[]).map(order=>`<option value="${esc(order.production_order)}" label="${esc([order.customer,order.purchase_order,(order.items||[]).map(item=>item.item_code).join(', ')].filter(Boolean).join(' · '))}"></option>`).join('');
+        }).catch(()=>{}),180);
+    });
+    document.getElementById('planBody').addEventListener('click',event=>{
+        const button=event.target.closest('[data-remove-plan]'); if(!button)return;
+        syncPlanRows(); state.planRows=state.planRows.filter(row=>planKey(row)!==button.dataset.removePlan);
+        state.planOrderCodes=[...new Set(state.planRows.map(row=>row.production_order))]; renderPlan();
+    });
+    document.getElementById('clearPlanBtn').addEventListener('click',()=>{state.planOrderCodes=[];state.planRows=[];document.getElementById('planMessage').className='alert pm-plan-message';renderPlan();});
+    document.getElementById('copyXntBtn').addEventListener('click',copyXntRows);
+    document.getElementById('openIssueBtn').addEventListener('click',openMaterialIssue);
     let timer; ['keyword','topKeyword'].forEach(id => document.getElementById(id).addEventListener('input', event => { document.getElementById(id === 'keyword' ? 'topKeyword' : 'keyword').value = event.target.value; clearTimeout(timer); timer=setTimeout(load,300); }));
+    renderPlan();
+    const requestedOrder=new URLSearchParams(window.location.search).get('production_order');
+    if(requestedOrder) loadPlanOrders([requestedOrder]);
     lucide.createIcons(); load();
 })();
 </script>
