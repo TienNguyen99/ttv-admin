@@ -14,6 +14,8 @@ class InternalProductionOrderBomSnapshot extends Model
         'bom_revision' => 'integer',
         'sequence' => 'integer',
         'consumption_per_unit' => 'float',
+        'formula_output_per_unit' => 'float',
+        'formula_part' => 'float',
         'yield_quantity' => 'float',
         'waste_percent' => 'float',
         'round_to_whole' => 'boolean',

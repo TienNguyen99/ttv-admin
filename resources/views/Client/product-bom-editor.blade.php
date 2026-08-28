@@ -16,7 +16,7 @@
         .bom-meta { color:#64748b; font-size:12px; }
         .bom-section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid #dbe7f5; }
         .bom-section-head strong { color:#102f56; }
-        .bom-table { min-width:1280px; }
+        .bom-table { min-width:900px; }
         .bom-table td { padding:8px; }
         .bom-table input, .bom-table select { min-width:0; height:36px; padding:6px 8px; border:1px solid #c8d8ec; border-radius:6px; background:#fff; }
         .bom-table input:focus, .bom-table select:focus { border-color:#60a5fa; outline:3px solid rgba(96,165,250,.16); }
@@ -26,6 +26,16 @@
         .bom-table .bom-mode { width:130px; }
         .bom-table .bom-unit { width:90px; text-transform:uppercase; }
         .bom-table .bom-operation { width:145px; }
+        .bom-detail-row td { padding:0 8px 10px 50px; background:#f7fbff !important; }
+        .bom-detail-strip { display:grid; grid-template-columns:150px 120px 120px minmax(220px,1fr); gap:8px; align-items:end; padding:8px 12px; border:1px solid #d7e5f5; border-radius:8px; background:#fff; }
+        .bom-detail-strip label { display:flex; min-width:0; flex-direction:column; gap:4px; color:#536a84; font-size:11px; font-weight:800; }
+        .bom-detail-strip input { width:100%; height:34px; }
+        .bom-detail-check { min-height:34px; flex-direction:row !important; align-items:center; gap:7px !important; }
+        .bom-detail-check input { width:16px; height:16px; min-height:0; flex:0 0 16px; }
+        .bom-formula-strip { display:grid; grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) 90px minmax(120px,.8fr) minmax(180px,1.4fr); gap:8px; align-items:end; padding:10px 12px; border:1px solid #b9d5f5; border-left:4px solid #4f8df7; border-radius:8px; background:#eef6ff; }
+        .bom-formula-strip label { display:flex; min-width:0; flex-direction:column; gap:4px; color:#38516f; font-size:11px; font-weight:800; }
+        .bom-formula-strip input { width:100%; height:34px; }
+        .bom-formula-help { align-self:center; color:#365b83; font-size:12px; line-height:1.35; }
         .bom-round { display:flex; align-items:center; justify-content:center; gap:6px; min-width:92px; color:#334155; font-size:12px; font-weight:700; white-space:nowrap; }
         .bom-result { display:flex; flex-direction:column; align-items:flex-end; gap:2px; }
         .bom-result small { color:#64748b; font-weight:500; }
@@ -34,7 +44,7 @@
         .bom-suggestions { position:absolute; z-index:1060; top:calc(100% + 5px); left:0; right:0; max-height:310px; overflow:auto; border:1px solid #bfd3ec; border-radius:7px; background:#fff; box-shadow:0 14px 32px rgba(15,47,86,.16); }
         .bom-suggestions--floating { position:fixed; z-index:2100; top:auto; right:auto; min-width:420px; max-width:min(720px,calc(100vw - 24px)); }
         .bom-suggestion { display:grid; grid-template-columns:150px 1fr auto; gap:10px; width:100%; padding:9px 11px; border:0; border-bottom:1px solid #e7eef8; background:#fff; text-align:left; }
-        .bom-suggestion:hover, .bom-suggestion:focus { background:#eff6ff; }
+        .bom-suggestion:hover, .bom-suggestion:focus, .bom-suggestion.is-active { background:#e5f1ff; outline:0; box-shadow:inset 3px 0 0 #4f8df7; }
         .bom-suggestion strong { color:#075aa5; }
         .bom-suggestion small { color:#64748b; }
         .bom-order-grid { display:grid; grid-template-columns:minmax(240px,420px) auto 1fr; gap:10px; align-items:end; }
@@ -51,7 +61,7 @@
             .wms-heading { align-items:flex-start; margin-top:42px; }
             .wms-panel { min-width:0; }
             .wms-panel__body { padding:16px; }
-            .bom-toolbar, .bom-order-grid { grid-template-columns:minmax(0,1fr); }
+            .bom-toolbar, .bom-order-grid, .bom-formula-strip, .bom-detail-strip { grid-template-columns:minmax(0,1fr); }
             .bom-section-head { align-items:flex-start; padding:12px; }
             .bom-section-head > div { min-width:0; }
             .bom-section-head .wms-btn { flex:0 0 auto; white-space:nowrap; }
@@ -91,8 +101,8 @@
     </section>
 
     <section class="wms-panel mt-3">
-        <div class="bom-section-head"><div><strong>Định mức vật tư</strong><div class="bom-meta">Chọn “Dùng / 1 PCS” hoặc “PCS / 1 ĐVT”. Vật tư theo tấm, cuộn, thùng nên bật “Cấp nguyên”.</div></div><button id="addMaterialBtn" class="wms-btn wms-btn--sm" type="button"><i data-lucide="plus"></i>Thêm vật tư</button></div>
-        <div class="wms-table-wrap"><table class="wms-table bom-table"><thead><tr><th style="width:42px">STT</th><th>Mã vật tư *</th><th>Tên vật tư</th><th>Vai trò</th><th>Cách tính</th><th>Giá trị *</th><th>ĐVT *</th><th>Hao hụt %</th><th>Cấp nguyên</th><th>Công đoạn</th><th>Ghi chú</th><th style="width:48px"></th></tr></thead><tbody id="materialBody"></tbody></table></div>
+        <div class="bom-section-head"><div><strong>Định mức vật tư</strong><div class="bom-meta">Vật tư trực tiếp, vật tư theo năng suất hoặc nhóm nguyên liệu pha theo tỷ lệ.</div></div><div class="d-flex flex-wrap gap-2"><button id="addFormulaBtn" class="wms-btn wms-btn--sm" type="button"><i data-lucide="flask-conical"></i>Thêm công thức pha</button><button id="addMaterialBtn" class="wms-btn wms-btn--sm" type="button"><i data-lucide="plus"></i>Thêm vật tư</button></div></div>
+        <div class="wms-table-wrap"><table class="wms-table bom-table"><thead><tr><th style="width:42px">STT</th><th>Mã vật tư *</th><th>Tên vật tư</th><th>Cách tính</th><th>Giá trị *</th><th>ĐVT xuất *</th><th>Công đoạn</th><th style="width:48px"></th></tr></thead><tbody id="materialBody"></tbody></table></div>
     </section>
 
     <section class="wms-panel mt-3">
@@ -119,7 +129,7 @@
 <script>
 (() => {
     const csrf = document.querySelector('meta[name="csrf-token"]').content;
-    const state = { profileId:null, operations:[], materials:[], productTimer:null, materialTimer:null, activeMaterialIndex:null };
+    const state = { profileId:null, operations:[], materials:[], productTimer:null, materialTimer:null, materialRequest:0, activeMaterialIndex:null, activeMaterialInput:null, activeSuggestion:-1 };
     const presets = { DET:'Dệt', EP:'Ép', DUC:'Đúc', IN:'In', CAT:'Cắt', MAY:'May', KCS:'KCS', NHAP_KHO:'Nhập kho', XUAT_KHO:'Xuất kho' };
     const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
     const fmt = value => new Intl.NumberFormat('vi-VN', { maximumFractionDigits:6 }).format(Number(value || 0));
@@ -130,10 +140,10 @@
     const notify = (message, type='success') => { const node=document.getElementById('message'); node.className=`alert alert-${type} bom-message is-visible`; node.textContent=message; window.scrollTo({top:0,behavior:'smooth'}); };
 
     function blankOperation() { return { operation_code:'', operation_name:'', work_center:'', is_outsourced:false, note:'' }; }
-    function blankMaterial() { return { material_code:'', material_name:'', component_role:'CHUNG', calculation_mode:'consumption', calculation_value:'', consumption_per_unit:'', yield_quantity:null, unit:'KG', waste_percent:0, round_to_whole:false, operation_code:'', note:'' }; }
+    function blankMaterial(overrides={}) { return { material_code:'', material_name:'', component_role:'CHUNG', calculation_mode:'consumption', calculation_value:'', consumption_per_unit:'', yield_quantity:null, formula_code:'', formula_output_per_unit:'', formula_output_unit:'G', formula_part:'', unit:'KG', waste_percent:0, round_to_whole:false, operation_code:'', note:'', ...overrides }; }
     function normalizeMaterial(row={}) {
-        const mode=row.calculation_mode==='yield'?'yield':'consumption';
-        return { ...blankMaterial(), ...row, calculation_mode:mode, calculation_value:mode==='yield'?(row.yield_quantity??''):(row.consumption_per_unit??''), round_to_whole:Boolean(row.round_to_whole) };
+        const mode=['yield','formula'].includes(row.calculation_mode)?row.calculation_mode:'consumption';
+        return { ...blankMaterial(), ...row, calculation_mode:mode, calculation_value:mode==='yield'?(row.yield_quantity??''):(mode==='formula'?'':(row.consumption_per_unit??'')), round_to_whole:Boolean(row.round_to_whole) };
     }
     function reset() {
         state.profileId=null; state.operations=[blankOperation()]; state.materials=[blankMaterial()];
@@ -149,19 +159,34 @@
     }
     function renderMaterials() {
         const body=document.getElementById('materialBody');
-        body.innerHTML=state.materials.map((row,index)=>`<tr data-material="${index}"><td class="text-center fw-bold">${index+1}</td><td><input class="bom-code" data-field="material_code" value="${esc(row.material_code)}" autocomplete="off" placeholder="Gõ mã hoặc tên vật tư"></td><td><input class="bom-name" data-field="material_name" value="${esc(row.material_name)}" placeholder="Tự lấy danh mục"></td><td><input data-field="component_role" value="${esc(row.component_role)}" placeholder="Chung / in"></td><td><select class="bom-mode" data-field="calculation_mode"><option value="consumption" ${row.calculation_mode!=='yield'?'selected':''}>Dùng / 1 PCS</option><option value="yield" ${row.calculation_mode==='yield'?'selected':''}>PCS / 1 ĐVT</option></select></td><td><input class="bom-number" data-field="calculation_value" type="number" min="0" step="0.000001" value="${esc(row.calculation_value)}" placeholder="${row.calculation_mode==='yield'?'VD: 1840':'VD: 0,5'}" title="${row.calculation_mode==='yield'?'Số thành phẩm làm được từ 1 đơn vị vật tư':'Số vật tư dùng cho 1 thành phẩm'}"></td><td><input class="bom-unit" data-field="unit" value="${esc(row.unit)}" placeholder="TẤM"></td><td><input class="bom-number" data-field="waste_percent" type="number" min="0" max="100" step="0.1" value="${esc(row.waste_percent)}"></td><td><label class="bom-round" title="Làm tròn lên đơn vị nguyên khi cấp vật tư"><input class="form-check-input" data-field="round_to_whole" type="checkbox" ${row.round_to_whole?'checked':''}>Làm tròn</label></td><td><select class="bom-operation" data-field="operation_code">${operationOptions(row.operation_code)}</select></td><td><input class="bom-name" data-field="note" value="${esc(row.note)}"></td><td><button class="wms-btn wms-btn--sm text-danger" data-remove-material title="Xóa"><i data-lucide="trash-2"></i></button></td></tr>`).join('');
+        body.innerHTML=state.materials.map((row,index)=>{
+            const formula=row.calculation_mode==='formula';
+            const valuePlaceholder=row.calculation_mode==='yield'?'VD: 1840':'VD: 0,5';
+            return `<tr data-material="${index}"><td class="text-center fw-bold">${index+1}</td><td><input class="bom-code" data-field="material_code" value="${esc(row.material_code)}" autocomplete="off" placeholder="Gõ mã hoặc tên vật tư"></td><td><input class="bom-name" data-field="material_name" value="${esc(row.material_name)}" placeholder="Tự lấy danh mục"></td><td><select class="bom-mode" data-field="calculation_mode"><option value="consumption" ${row.calculation_mode==='consumption'?'selected':''}>Dùng / 1 PCS</option><option value="yield" ${row.calculation_mode==='yield'?'selected':''}>PCS / 1 ĐVT</option><option value="formula" ${formula?'selected':''}>Công thức pha</option></select></td><td>${formula?'<span class="bom-pill">Theo tỷ lệ</span>':`<input class="bom-number" data-field="calculation_value" type="number" min="0" step="0.000001" value="${esc(row.calculation_value)}" placeholder="${valuePlaceholder}">`}</td><td><input class="bom-unit" data-field="unit" value="${esc(row.unit)}" placeholder="KG"></td><td><select class="bom-operation" data-field="operation_code">${operationOptions(row.operation_code)}</select></td><td><button class="wms-btn wms-btn--sm text-danger" data-remove-material title="Xóa"><i data-lucide="trash-2"></i></button></td></tr><tr class="bom-detail-row" data-detail-for="${index}"><td colspan="8"><div class="bom-detail-strip"><label>Vai trò<input data-detail-field="component_role" value="${esc(row.component_role)}" placeholder="Chung / pha / in"></label><label>Hao hụt %<input type="number" min="0" max="100" step="0.1" data-detail-field="waste_percent" value="${esc(row.waste_percent)}"></label><label class="bom-detail-check"><input class="form-check-input" data-detail-field="round_to_whole" type="checkbox" ${row.round_to_whole?'checked':''}> Cấp nguyên</label><label>Ghi chú<input data-detail-field="note" value="${esc(row.note)}" placeholder="Thông tin kỹ thuật nếu có"></label></div>${formula?`<div class="bom-formula-strip mt-2"><label>Nhóm công thức<input data-formula-field="formula_code" value="${esc(row.formula_code)}" placeholder="PHA-SILICONE"></label><label>Tổng hỗn hợp / PCS<input type="number" min="0" step="0.000001" data-formula-field="formula_output_per_unit" value="${esc(row.formula_output_per_unit)}" placeholder="2"></label><label>ĐVT hỗn hợp<input data-formula-field="formula_output_unit" value="${esc(row.formula_output_unit)}" placeholder="G"></label><label>Tỷ lệ nguyên liệu<input type="number" min="0" step="0.000001" data-formula-field="formula_part" value="${esc(row.formula_part)}" placeholder="100"></label><div class="bom-formula-help">Các dòng cùng nhóm dùng chung tổng hỗn hợp và đơn vị. Hệ thống tự chia theo tổng tỷ lệ.</div></div>`:''}</td></tr>`;
+        }).join('');
         lucide.createIcons();
     }
-    async function catalogSuggestions(keyword) { return (await request('/api/ma-noi-bo-danh-muc?with_color=0&limit=20&keyword='+encodeURIComponent(keyword))).data || []; }
+    async function catalogSuggestions(keyword) { const value=String(keyword||'').trim(); if(value.length<2) return []; return (await request('/api/ma-noi-bo-danh-muc?with_color=0&limit=20&keyword='+encodeURIComponent(value))).data || []; }
     function suggestionHtml(rows, type, index='') { return rows.map(row=>{ const missing=!code(row.code); return `<button type="button" class="bom-suggestion" data-pick-${type}="${esc(index)}" data-code="${esc(row.code)}" data-name="${esc(row.name)}" data-unit="${esc(row.unit)}" ${missing?'disabled title="Dòng danh mục chưa có mã"':''}><strong>${missing?'Thiếu mã':esc(row.code)}</strong><span>${esc(row.name||'')}</span><small>${missing?'Bổ sung DANH MỤC':esc(row.unit||'')}</small></button>`; }).join(''); }
     async function searchProducts(keyword) { const box=document.getElementById('productSuggestions'); const rows=await catalogSuggestions(keyword); box.innerHTML=suggestionHtml(rows,'product'); box.classList.toggle('d-none',!rows.length); }
     function showMaterialSuggestions(input,index,rows) {
+        if(!input?.isConnected || document.activeElement!==input) return;
         const box=document.getElementById('materialSuggestions'), rect=input.getBoundingClientRect();
         box.innerHTML=suggestionHtml(rows,'material',index);
         box.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-Math.max(420,rect.width)-12))+'px';
-        box.style.top=Math.min(rect.bottom+5,window.innerHeight-320)+'px';
+        const dropdownHeight=Math.min(310,Math.max(52,rows.length*46));
+        box.style.top=(window.innerHeight-rect.bottom>=dropdownHeight+8?rect.bottom+5:Math.max(8,rect.top-dropdownHeight-5))+'px';
         box.style.width=Math.max(420,rect.width)+'px';
         box.classList.toggle('d-none',!rows.length);
+        state.activeSuggestion=-1;
+    }
+    function repositionMaterialSuggestions() {
+        const box=document.getElementById('materialSuggestions'), input=state.activeMaterialInput;
+        if(!input?.isConnected || box.classList.contains('d-none')) return;
+        const rect=input.getBoundingClientRect();
+        if(rect.bottom<0 || rect.top>window.innerHeight) return box.classList.add('d-none');
+        box.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-Math.max(420,rect.width)-12))+'px';
+        box.style.top=Math.min(rect.bottom+5,window.innerHeight-box.offsetHeight-8)+'px';
     }
     async function loadProfile(itemCode) {
         if(!code(itemCode)) return;
@@ -182,8 +207,8 @@
     async function save() {
         syncRows();
         const materials=state.materials.filter(row=>code(row.material_code)).map(row=>{
-            const mode=row.calculation_mode==='yield'?'yield':'consumption', value=Number(row.calculation_value||0);
-            return { ...row, calculation_mode:mode, consumption_per_unit:mode==='yield'?(value>0?1/value:0):value, yield_quantity:mode==='yield'?value:null, round_to_whole:Boolean(row.round_to_whole) };
+            const mode=['yield','formula'].includes(row.calculation_mode)?row.calculation_mode:'consumption', value=Number(row.calculation_value||0);
+            return { ...row, calculation_mode:mode, consumption_per_unit:mode==='yield'?(value>0?1/value:0):(mode==='formula'?0:value), yield_quantity:mode==='yield'?value:null, formula_output_per_unit:mode==='formula'?Number(row.formula_output_per_unit||0):null, formula_part:mode==='formula'?Number(row.formula_part||0):null, round_to_whole:Boolean(row.round_to_whole) };
         });
         const payload={ item_code:code(document.getElementById('itemCode').value), item_name:document.getElementById('itemName').value.trim(), unit:code(document.getElementById('itemUnit').value), operations:state.operations.filter(row=>code(row.operation_code)), materials };
         if(!payload.item_code) return notify('Chưa chọn mã hàng thành phẩm.','warning');
@@ -195,6 +220,7 @@
     function syncRows() {
         document.querySelectorAll('[data-op]').forEach(tr=>{ const row=state.operations[Number(tr.dataset.op)]; tr.querySelectorAll('[data-field]').forEach(input=>row[input.dataset.field]=input.type==='checkbox'?input.checked:input.value); });
         document.querySelectorAll('[data-material]').forEach(tr=>{ const row=state.materials[Number(tr.dataset.material)]; tr.querySelectorAll('[data-field]').forEach(input=>row[input.dataset.field]=input.type==='checkbox'?input.checked:input.value); });
+        document.querySelectorAll('[data-detail-for]').forEach(tr=>{ const row=state.materials[Number(tr.dataset.detailFor)]; tr.querySelectorAll('[data-detail-field]').forEach(input=>row[input.dataset.detailField]=input.type==='checkbox'?input.checked:input.value); tr.querySelectorAll('[data-formula-field]').forEach(input=>row[input.dataset.formulaField]=input.value); });
     }
     async function calculate() {
         const order=code(document.getElementById('orderCode').value); if(!order) return notify('Nhập lệnh sản xuất cần tính.','warning');
@@ -202,26 +228,33 @@
         try { const payload=await request('/api/dinh-muc-san-xuat/nhu-cau?production_order='+encodeURIComponent(order)); renderNeeds(payload); document.getElementById('snapshotBtn').disabled=!(payload.data||[]).length; }
         catch(error) { document.getElementById('needs').innerHTML=''; document.getElementById('snapshotBtn').disabled=true; notify(error.message,'danger'); } finally { loading(false); }
     }
+    function requirementLabel(line) {
+        if(line.calculation_mode==='formula') return `${esc(line.formula_code||'Công thức')} · ${fmt(line.formula_output_per_unit)} ${esc(line.formula_output_unit||'')} / PCS · tỷ lệ ${fmt(line.formula_part)}`;
+        if(line.calculation_mode==='yield') return `${fmt(line.yield_quantity)} PCS / 1 ${esc(line.unit)}`;
+        return `${fmt(line.consumption_per_unit)} ${esc(line.unit)} / PCS`;
+    }
     function renderNeeds(payload) {
         const rows=payload.data||[], missing=payload.missing_items||[];
-        document.getElementById('needs').innerHTML=(missing.length?`<div class="alert alert-warning mx-3">Chưa có BOM: ${esc(missing.join(', '))}</div>`:'')+rows.map(row=>`<div class="bom-need-group"><div class="bom-need-title"><div><strong>${esc(row.production_order)} · ${esc(row.item_code)}</strong><div class="bom-meta">${row.order_type==='btp'?'Lệnh BTP':'Lệnh SX trung tâm'} · ${esc(row.size||'')} ${esc(row.color||'')} · SL lệnh ${fmt(row.order_quantity)}</div></div><div class="d-flex align-items-center gap-2"><span class="bom-pill">${row.is_snapshot?'Đã chốt':'BOM hiện hành'} · Bản ${row.bom_revision}</span><button class="wms-btn wms-btn--sm wms-btn--primary" type="button" data-issue-order="${esc(row.production_order)}"><i data-lucide="package-minus"></i>Lập phiếu xuất vật tư</button></div></div><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Vật tư</th><th>Vai trò</th><th>Công đoạn</th><th>Định mức</th><th>Hao hụt</th><th class="text-end">Đề xuất cấp</th></tr></thead><tbody>${row.materials.map(line=>{ const isYield=line.calculation_mode==='yield'; const rate=isYield?`${fmt(line.yield_quantity)} PCS / 1 ${esc(line.unit)}`:`${fmt(line.consumption_per_unit)} ${esc(line.unit)} / PCS`; const exact=Number(line.exact_required_quantity??line.required_quantity); const rounded=Math.abs(Number(line.required_quantity)-exact)>0.000001; return `<tr><td><strong>${esc(line.material_code)}</strong><div class="bom-meta">${esc(line.material_name)}</div></td><td>${esc(line.component_role)}</td><td>${esc(line.operation_code||'-')}</td><td>${rate}</td><td>${fmt(line.waste_percent)}%</td><td class="text-end"><div class="bom-result"><strong>${fmt(line.required_quantity)} ${esc(line.unit)}</strong>${rounded?`<small>Tính ra ${fmt(exact)} ${esc(line.unit)}</small>`:''}</div></td></tr>`; }).join('')}</tbody></table></div></div>`).join('');
+        document.getElementById('needs').innerHTML=(missing.length?`<div class="alert alert-warning mx-3">Chưa có BOM: ${esc(missing.join(', '))}</div>`:'')+rows.map(row=>`<div class="bom-need-group"><div class="bom-need-title"><div><strong>${esc(row.production_order)} · ${esc(row.item_code)}</strong><div class="bom-meta">${row.order_type==='btp'?'Lệnh BTP':'Lệnh SX trung tâm'} · ${esc(row.size||'')} ${esc(row.color||'')} · SL lệnh ${fmt(row.order_quantity)}</div></div><div class="d-flex align-items-center gap-2"><span class="bom-pill">${row.is_snapshot?'Đã chốt':'BOM hiện hành'} · Bản ${row.bom_revision}</span><button class="wms-btn wms-btn--sm wms-btn--primary" type="button" data-issue-order="${esc(row.production_order)}"><i data-lucide="package-minus"></i>Lập phiếu xuất vật tư</button></div></div><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Vật tư</th><th>Vai trò</th><th>Công đoạn</th><th>Định mức</th><th>Hao hụt</th><th class="text-end">Đề xuất cấp</th></tr></thead><tbody>${row.materials.map(line=>{ const exact=Number(line.exact_required_quantity??line.required_quantity); const rounded=Math.abs(Number(line.required_quantity)-exact)>0.000001; return `<tr><td><strong>${esc(line.material_code)}</strong><div class="bom-meta">${esc(line.material_name)}</div></td><td>${esc(line.component_role)}</td><td>${esc(line.operation_code||'-')}</td><td>${requirementLabel(line)}</td><td>${fmt(line.waste_percent)}%</td><td class="text-end"><div class="bom-result"><strong>${fmt(line.required_quantity)} ${esc(line.unit)}</strong>${rounded?`<small>Tính ra ${fmt(exact)} ${esc(line.unit)}</small>`:''}</div></td></tr>`; }).join('')}</tbody></table></div></div>`).join('');
         lucide.createIcons();
     }
 
     document.addEventListener('input', event=>{
         const input=event.target, tr=input.closest('[data-op], [data-material]');
+        const detail=input.closest('[data-detail-for]');
+        if(detail) { const row=state.materials[Number(detail.dataset.detailFor)]; if(input.dataset.detailField) row[input.dataset.detailField]=input.type==='checkbox'?input.checked:input.value; if(input.dataset.formulaField) row[input.dataset.formulaField]=input.value; }
         if(tr && input.dataset.field) {
             const isOp=tr.hasAttribute('data-op'), index=Number(isOp?tr.dataset.op:tr.dataset.material), row=isOp?state.operations[index]:state.materials[index]; row[input.dataset.field]=input.type==='checkbox'?input.checked:input.value;
             if(isOp && input.dataset.field==='operation_code') { const preset=presets[code(input.value)]; if(preset && !row.operation_name) { row.operation_name=preset; tr.querySelector('[data-field="operation_name"]').value=preset; } renderMaterials(); }
             if(!isOp && input.dataset.field==='calculation_mode') { row.calculation_value=''; renderMaterials(); }
-            if(!isOp && input.dataset.field==='material_code') { clearTimeout(state.materialTimer); state.materialTimer=setTimeout(async()=>{ const rows=await catalogSuggestions(input.value); state.activeMaterialIndex=index; showMaterialSuggestions(input,index,rows); },180); }
+            if(!isOp && input.dataset.field==='material_code') { clearTimeout(state.materialTimer); const requestId=++state.materialRequest; state.activeMaterialIndex=index; state.activeMaterialInput=input; state.materialTimer=setTimeout(async()=>{ try { const typed=input.value; const rows=await catalogSuggestions(typed); if(requestId===state.materialRequest && input.value===typed) showMaterialSuggestions(input,index,rows); } catch(error) { if(requestId===state.materialRequest) document.getElementById('materialSuggestions').classList.add('d-none'); } },220); }
         }
         if(input.id==='itemCode') { clearTimeout(state.productTimer); state.productTimer=setTimeout(()=>searchProducts(input.value),220); }
     });
     document.addEventListener('click', event=>{
         const product=event.target.closest('[data-pick-product]'); if(product) { document.getElementById('productSuggestions').classList.add('d-none'); loadProfile(product.dataset.code); return; }
         const issueOrder=event.target.closest('[data-issue-order]'); if(issueOrder) { window.location.href='/client/vat-tu-san-xuat?production_order='+encodeURIComponent(issueOrder.dataset.issueOrder); return; }
-        const material=event.target.closest('[data-pick-material]'); if(material) { const index=Number(material.dataset.pickMaterial), row=state.materials[index]; row.material_code=material.dataset.code; row.material_name=material.dataset.name; row.unit=code(material.dataset.unit)||row.unit; document.getElementById('materialSuggestions').classList.add('d-none'); renderMaterials(); document.querySelector(`[data-material="${index}"] [data-field="calculation_value"]`)?.focus(); return; }
+        const material=event.target.closest('[data-pick-material]'); if(material) { const index=Number(material.dataset.pickMaterial), row=state.materials[index]; row.material_code=material.dataset.code; row.material_name=material.dataset.name; row.unit=code(material.dataset.unit)||row.unit; document.getElementById('materialSuggestions').classList.add('d-none'); renderMaterials(); document.querySelector(`[data-material="${index}"] [data-field="${row.calculation_mode==='formula'?'material_name':'calculation_value'}"]`)?.focus(); return; }
         if(!event.target.closest('#materialSuggestions') && !event.target.matches('[data-field="material_code"]')) document.getElementById('materialSuggestions').classList.add('d-none');
         const tr=event.target.closest('[data-op], [data-material]'); if(!tr) return;
         syncRows();
@@ -234,13 +267,15 @@
     document.getElementById('topSearch').addEventListener('keydown',event=>{ if(event.key==='Enter'){ document.getElementById('itemCode').value=event.target.value; loadProfile(event.target.value); } });
     document.getElementById('addOperationBtn').onclick=()=>{ syncRows(); state.operations.push(blankOperation()); renderOperations(); };
     document.getElementById('addMaterialBtn').onclick=()=>{ syncRows(); state.materials.push(blankMaterial()); renderMaterials(); };
+    document.getElementById('addFormulaBtn').onclick=()=>{ syncRows(); const number=state.materials.filter(row=>row.calculation_mode==='formula').length+1, formula=`PHA-${number}`; state.materials.push(blankMaterial({calculation_mode:'formula',formula_code:formula,formula_output_unit:'G',component_role:'PHA'}),blankMaterial({calculation_mode:'formula',formula_code:formula,formula_output_unit:'G',component_role:'PHA'})); renderMaterials(); document.querySelector(`[data-material="${state.materials.length-2}"] [data-field="material_code"]`)?.focus(); };
     document.getElementById('newBtn').onclick=reset;
     document.getElementById('saveBtn').onclick=save;
     document.getElementById('calculateBtn').onclick=calculate;
     document.getElementById('orderCode').addEventListener('keydown',event=>{ if(event.key==='Enter'){ event.preventDefault(); calculate(); } });
     document.getElementById('snapshotBtn').onclick=async()=>{ const order=code(document.getElementById('orderCode').value); loading(true,'Đang chốt BOM cho lệnh...'); try { const payload=await request('/api/dinh-muc-san-xuat/chot-lenh',{method:'POST',body:JSON.stringify({production_order:order})}); notify(payload.message); await calculate(); } catch(error){ notify(error.message,'danger'); } finally{ loading(false); } };
-    window.addEventListener('resize',()=>document.getElementById('materialSuggestions').classList.add('d-none'));
-    window.addEventListener('scroll',()=>document.getElementById('materialSuggestions').classList.add('d-none'),true);
+    document.addEventListener('keydown',event=>{ if(!event.target.matches('[data-field="material_code"]')) return; const options=Array.from(document.querySelectorAll('#materialSuggestions .bom-suggestion:not([disabled])')); if(!options.length) return; if(event.key==='ArrowDown'||event.key==='ArrowUp'){ event.preventDefault(); state.activeSuggestion=(state.activeSuggestion+(event.key==='ArrowDown'?1:-1)+options.length)%options.length; options.forEach((node,i)=>node.classList.toggle('is-active',i===state.activeSuggestion)); options[state.activeSuggestion].scrollIntoView({block:'nearest'}); } else if(event.key==='Enter'&&state.activeSuggestion>=0){ event.preventDefault(); options[state.activeSuggestion].click(); } else if(event.key==='Escape'){ document.getElementById('materialSuggestions').classList.add('d-none'); } });
+    window.addEventListener('resize',repositionMaterialSuggestions);
+    window.addEventListener('scroll',repositionMaterialSuggestions,true);
     reset();
     const requestedItemCode = new URLSearchParams(window.location.search).get('item_code');
     if (requestedItemCode) {

@@ -28,6 +28,7 @@ use App\Http\Controllers\InternalUnitConversionController;
 use App\Http\Controllers\InternalXntController;
 use App\Http\Controllers\InternalProductionMaterialController;
 use App\Http\Controllers\InternalProductBomController;
+use App\Http\Controllers\InternalProductionActivityController;
 use App\Http\Controllers\InternalWeavingController;
 use App\Http\Controllers\WeavingManagementPageController;
 use App\Http\Controllers\InternalInventoryReportController;
@@ -258,6 +259,14 @@ Route::get('/client/lenh-san-xuat-trung-tam', [InternalProductionOrderController
 Route::get('/api/lenh-san-xuat-trung-tam', [InternalProductionOrderController::class, 'workflow']);
 Route::patch('/api/lenh-san-xuat-trung-tam/cong-doan', [InternalProductionOrderController::class, 'updateOperationProgress']);
 Route::patch('/api/lenh-san-xuat-trung-tam/dong/{order}', [InternalProductionOrderController::class, 'updateStandardItemCode']);
+Route::get('/client/ghi-nhan-san-xuat', [InternalProductionActivityController::class, 'index']);
+Route::get('/client/ghi-nhan-san-xuat/qr', [InternalProductionActivityController::class, 'qr']);
+Route::get('/api/ghi-nhan-san-xuat', [InternalProductionActivityController::class, 'show']);
+Route::post('/api/ghi-nhan-san-xuat', [InternalProductionActivityController::class, 'store']);
+Route::delete('/api/ghi-nhan-san-xuat/{productionActivity}', [InternalProductionActivityController::class, 'destroy']);
+Route::get('/client/chuyen-cong-doan', function (\Illuminate\Http\Request $request) {
+    return redirect('/client/ghi-nhan-san-xuat' . ($request->getQueryString() ? '?' . $request->getQueryString() : ''));
+});
 Route::get('/client/lenh-btp', [InternalBtpProductionOrderController::class, 'index']);
 Route::get('/client/lenh-btp/tem-qr', [InternalBtpProductionOrderController::class, 'printLabels']);
 Route::get('/api/lenh-btp', [InternalBtpProductionOrderController::class, 'data']);

@@ -13,6 +13,8 @@ class InternalProductBomLine extends Model
     protected $casts = [
         'sequence' => 'integer',
         'consumption_per_unit' => 'float',
+        'formula_output_per_unit' => 'float',
+        'formula_part' => 'float',
         'yield_quantity' => 'float',
         'waste_percent' => 'float',
         'round_to_whole' => 'boolean',

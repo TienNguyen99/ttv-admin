@@ -212,6 +212,61 @@ class InternalProductBomControllerTest extends TestCase
         $this->assertEquals(10.0, $rowsByOrder['TEST-ORDER-SHEET-02']['required_quantity']);
     }
 
+    public function test_it_expands_a_mixing_formula_into_real_material_quantities(): void
+    {
+        $controller = app(InternalProductBomController::class);
+        $saved = $controller->save(Request::create('/api/dinh-muc-san-xuat/luu', 'POST', [
+            'item_code' => 'TEST-SILICONE-FG',
+            'unit' => 'PCS',
+            'operations' => [['operation_code' => 'DUC', 'operation_name' => 'Đúc']],
+            'materials' => [
+                [
+                    'material_code' => 'TEST-SY1008',
+                    'component_role' => 'PHA',
+                    'calculation_mode' => 'formula',
+                    'formula_code' => 'PHA-SILICONE',
+                    'formula_output_per_unit' => 2,
+                    'formula_output_unit' => 'G',
+                    'formula_part' => 100,
+                    'unit' => 'KG',
+                    'operation_code' => 'DUC',
+                ],
+                [
+                    'material_code' => 'TEST-TANG-BAM-6',
+                    'component_role' => 'PHA',
+                    'calculation_mode' => 'formula',
+                    'formula_code' => 'PHA-SILICONE',
+                    'formula_output_per_unit' => 2,
+                    'formula_output_unit' => 'G',
+                    'formula_part' => 10,
+                    'unit' => 'KG',
+                    'operation_code' => 'DUC',
+                ],
+            ],
+        ]))->getData(true);
+
+        $this->assertEqualsWithDelta(0.001818182, $saved['data']['lines'][0]['consumption_per_unit'], 0.000000001);
+        $this->assertEqualsWithDelta(0.000181818, $saved['data']['lines'][1]['consumption_per_unit'], 0.000000001);
+
+        InternalProductionOrder::query()->create([
+            'production_order' => 'TEST-ORDER-SILICONE',
+            'item_code' => 'TEST-SILICONE-FG',
+            'standard_item_code' => 'TEST-SILICONE-FG',
+            'description' => 'Silicone label',
+            'order_quantity' => 42000,
+            'is_active' => true,
+        ]);
+
+        $materials = $controller->orderNeeds(Request::create('/api/dinh-muc-san-xuat/nhu-cau', 'GET', [
+            'production_order' => 'TEST-ORDER-SILICONE',
+        ]))->getData(true)['data'][0]['materials'];
+
+        $this->assertSame('formula', $materials[0]['calculation_mode']);
+        $this->assertEqualsWithDelta(76.363636, $materials[0]['required_quantity'], 0.00001);
+        $this->assertEqualsWithDelta(7.636364, $materials[1]['required_quantity'], 0.00001);
+        $this->assertEqualsWithDelta(84.0, $materials[0]['required_quantity'] + $materials[1]['required_quantity'], 0.000001);
+    }
+
     public function test_central_order_exposes_lifecycle_and_updates_an_operation(): void
     {
         $bomController = app(InternalProductBomController::class);

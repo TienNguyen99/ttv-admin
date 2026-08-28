@@ -226,25 +226,6 @@
         </div>
     </div>
 
-    <div class="modal fade" id="operationModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <div><h2 class="modal-title fs-5">Tiến độ công đoạn</h2><div id="operationOrderLabel" class="muted"></div></div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="operationList" class="operation-list"></div>
-                    <div class="row g-2 mt-2">
-                        <div class="col-md-5"><label class="form-label">Người cập nhật</label><input id="operationUpdatedBy" class="form-control"></div>
-                        <div class="col-md-7"><label class="form-label">Ghi chú</label><input id="operationNote" class="form-control"></div>
-                    </div>
-                    <div id="operationStatus" class="small mt-2"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     @include('layouts.partials.catalog-image-paste-modal')
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
@@ -269,8 +250,6 @@
         let catalogRequestSequence = 0;
         let standardSourceItem = {};
         let workflowRows = [];
-        let activeOperationOrder = null;
-        const operationModal = new bootstrap.Modal(document.getElementById('operationModal'));
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
         const statuses = {
@@ -329,60 +308,6 @@
                 </div>`).join('');
             return `<div class="lifecycle">${stages}</div>
                 <div class="lifecycle-meta"><span><strong>${esc(lifecycle.current_stage || '-')}</strong></span><span>${num(lifecycle.percent)}%</span></div>`;
-        }
-
-        function openOperationEditor(orderCode) {
-            const row = workflowRows.find(item => item.production_order === orderCode);
-            if (!row) return;
-            activeOperationOrder = row;
-            document.getElementById('operationOrderLabel').textContent = `${row.production_order} · ${row.customer || '-'} · ${row.purchase_order || '-'}`;
-            const operations = row.lifecycle?.operations || [];
-            document.getElementById('operationList').innerHTML = operations.length
-                ? operations.map((operation, index) => `<div class="operation-row">
-                    <span class="operation-index">${index + 1}</span>
-                    <div><strong>${esc(operation.name)}</strong><div class="muted">${esc(operation.code)}${operation.updated_by ? ` · ${esc(operation.updated_by)}` : ''}</div></div>
-                    <select class="form-select form-select-sm" data-operation-code="${esc(operation.code)}">
-                        <option value="pending" ${operation.status === 'pending' ? 'selected' : ''}>Chờ làm</option>
-                        <option value="in_progress" ${operation.status === 'in_progress' ? 'selected' : ''}>Đang làm</option>
-                        <option value="completed" ${operation.status === 'completed' ? 'selected' : ''}>Hoàn tất</option>
-                    </select>
-                </div>`).join('')
-                : '<div class="alert alert-warning mb-0">Mã hàng chưa có tuyến công đoạn trong BOM.</div>';
-            document.getElementById('operationStatus').textContent = '';
-            operationModal.show();
-        }
-
-        async function updateOperation(select) {
-            if (!activeOperationOrder) return;
-            const statusEl = document.getElementById('operationStatus');
-            select.disabled = true;
-            statusEl.className = 'small mt-2 text-primary';
-            statusEl.textContent = 'Đang cập nhật...';
-            try {
-                const response = await fetch('/api/lenh-san-xuat-trung-tam/cong-doan', {
-                    method:'PATCH',
-                    headers:{ 'Accept':'application/json', 'Content-Type':'application/json', 'X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]').content },
-                    body:JSON.stringify({
-                        production_order:activeOperationOrder.production_order,
-                        operation_code:select.dataset.operationCode,
-                        status:select.value,
-                        updated_by:document.getElementById('operationUpdatedBy').value.trim(),
-                        note:document.getElementById('operationNote').value.trim(),
-                    }),
-                });
-                const payload = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(payload.message || 'Không cập nhật được công đoạn.');
-                statusEl.className = 'small mt-2 text-success';
-                statusEl.textContent = payload.message;
-                await load();
-                const refreshed = workflowRows.find(item => item.production_order === activeOperationOrder.production_order);
-                if (refreshed) openOperationEditor(refreshed.production_order);
-            } catch (error) {
-                statusEl.className = 'small mt-2 text-danger';
-                statusEl.textContent = error.message;
-            } finally {
-                select.disabled = false;
-            }
         }
 
         function openStandardItemEditor(button) {
@@ -603,7 +528,7 @@
                         <a class="btn btn-sm btn-outline-primary" href="/client/nhap-thanh-pham-nhanh?production_order=${encodeURIComponent(row.production_order)}">Nhập</a>
                         <a class="btn btn-sm btn-outline-primary" href="/client/xuat-vat-tu-noi-bo?production_order=${encodeURIComponent(row.production_order)}">Xuất</a>
                         <a class="btn btn-sm btn-outline-secondary" href="/client/theo-doi-san-xuat?keyword=${encodeURIComponent(row.production_order)}">Theo dõi</a>
-                        <button class="btn btn-sm btn-outline-primary" type="button" data-operation-order="${esc(row.production_order)}">Công đoạn</button>
+                        <a class="btn btn-sm btn-outline-primary" href="/client/ghi-nhan-san-xuat?production_order=${encodeURIComponent(row.production_order)}">Ghi nhận SX</a>
                     </div>
                 </td>
             </tr>`;
@@ -710,11 +635,6 @@
             load();
         });
         groupsEl.addEventListener('click', event => {
-            const operationButton = event.target.closest('[data-operation-order]');
-            if (operationButton) {
-                openOperationEditor(operationButton.dataset.operationOrder);
-                return;
-            }
             const imageButton = event.target.closest('[data-catalog-image-open]');
             if (imageButton) {
                 window.CatalogImagePaste?.open({
@@ -730,10 +650,6 @@
             }
             const button = event.target.closest('[data-edit-standard]');
             if (button) openStandardItemEditor(button);
-        });
-        document.getElementById('operationList').addEventListener('change', event => {
-            const select = event.target.closest('[data-operation-code]');
-            if (select) updateOperation(select);
         });
         document.addEventListener('catalog-image-ready', event => {
             const data = event.detail || {};

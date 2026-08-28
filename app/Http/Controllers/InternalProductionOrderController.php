@@ -932,6 +932,18 @@ class InternalProductionOrderController extends Controller
             $profile = $bomProfiles->get($itemCode);
             return $profile ? $profile->routings : collect();
         })->sortBy('sequence')->unique('operation_code')->values();
+        if ($routingRows->isEmpty() && collect($operationProgressRows)->isNotEmpty()) {
+            $routingRows = collect($operationProgressRows)
+                ->sortBy('sequence')
+                ->map(function ($progress) {
+                    return (object) [
+                        'operation_code' => $progress->operation_code,
+                        'operation_name' => $progress->operation_name,
+                        'sequence' => $progress->sequence,
+                    ];
+                })
+                ->values();
+        }
         $savedProgress = collect($operationProgressRows)->keyBy(fn ($row) => mb_strtoupper(trim((string) $row->operation_code)));
         $productionStarted = $issuedMaterial > 0 || $issuedProduction > 0;
         $operations = $routingRows->map(function ($routing, $index) use ($savedProgress, $productionStarted) {
@@ -951,13 +963,14 @@ class InternalProductionOrderController extends Controller
             ];
         })->values();
         $allOperationsDone = $operations->isNotEmpty() && $operations->every(fn ($operation) => $operation['status'] === 'completed');
+        $hasOperationActivity = $operations->contains(fn ($operation) => in_array($operation['status'], ['in_progress', 'completed'], true));
         $currentOperation = $operations->first(fn ($operation) => $operation['status'] === 'in_progress')
             ?: $operations->first(fn ($operation) => $operation['status'] === 'pending');
 
         $materialStatus = $productionStarted ? 'completed' : ($bomComplete ? 'active' : 'pending');
         $productionStatus = $allOperationsDone
             ? 'completed'
-            : ($productionStarted ? 'active' : 'pending');
+            : (($productionStarted || $hasOperationActivity) ? 'active' : 'pending');
         $receiptStatus = $receivedQuantity > 0
             ? (($plannedQuantity > 0 && $receivedQuantity >= $plannedQuantity) ? 'completed' : 'active')
             : ($allOperationsDone ? 'active' : 'pending');

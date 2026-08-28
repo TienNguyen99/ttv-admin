@@ -8,6 +8,7 @@ use App\Models\InternalProductBomProfile;
 use App\Models\InternalProductionOrder;
 use App\Models\InternalProductionOrderBomSnapshot;
 use App\Services\InternalAudit;
+use App\Services\InternalUnitConverter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -78,9 +79,13 @@ class InternalProductBomController extends Controller
             'materials.*.material_name' => 'nullable|string|max:500',
             'materials.*.component_role' => 'nullable|string|max:120',
             'materials.*.unit' => 'required|string|max:50',
-            'materials.*.calculation_mode' => 'nullable|in:consumption,yield',
+            'materials.*.calculation_mode' => 'nullable|in:consumption,yield,formula',
             'materials.*.consumption_per_unit' => 'nullable|numeric|min:0',
             'materials.*.yield_quantity' => 'nullable|numeric|min:0',
+            'materials.*.formula_code' => 'nullable|string|max:80',
+            'materials.*.formula_output_per_unit' => 'nullable|numeric|min:0',
+            'materials.*.formula_output_unit' => 'nullable|string|max:50',
+            'materials.*.formula_part' => 'nullable|numeric|min:0',
             'materials.*.waste_percent' => 'nullable|numeric|min:0|max:100',
             'materials.*.round_to_whole' => 'nullable|boolean',
             'materials.*.operation_code' => 'nullable|string|max:50',
@@ -105,19 +110,23 @@ class InternalProductBomController extends Controller
 
         $operationCodes = $operations->pluck('operation_code');
         $materials = collect($data['materials'])->map(function ($material) {
-            $calculationMode = ($material['calculation_mode'] ?? 'consumption') === 'yield'
-                ? 'yield'
+            $calculationMode = in_array(($material['calculation_mode'] ?? 'consumption'), ['yield', 'formula'], true)
+                ? $material['calculation_mode']
                 : 'consumption';
             $yieldQuantity = (float) ($material['yield_quantity'] ?? 0);
             $consumptionPerUnit = $calculationMode === 'yield'
                 ? ($yieldQuantity > 0 ? 1 / $yieldQuantity : 0)
-                : (float) ($material['consumption_per_unit'] ?? 0);
+                : ($calculationMode === 'formula' ? 0 : (float) ($material['consumption_per_unit'] ?? 0));
 
             return [
                 'material_code' => $this->code($material['material_code']),
                 'material_name' => trim((string) ($material['material_name'] ?? '')),
                 'component_role' => $this->code($material['component_role'] ?? '') ?: 'CHUNG',
                 'calculation_mode' => $calculationMode,
+                'formula_code' => $calculationMode === 'formula' ? $this->code($material['formula_code'] ?? '') : null,
+                'formula_output_per_unit' => $calculationMode === 'formula' ? (float) ($material['formula_output_per_unit'] ?? 0) : null,
+                'formula_output_unit' => $calculationMode === 'formula' ? app(InternalUnitConverter::class)->normalizeUnit($material['formula_output_unit'] ?? '') : null,
+                'formula_part' => $calculationMode === 'formula' ? (float) ($material['formula_part'] ?? 0) : null,
                 'unit' => mb_strtoupper(trim((string) $material['unit'])),
                 'consumption_per_unit' => $consumptionPerUnit,
                 'yield_quantity' => $calculationMode === 'yield' ? $yieldQuantity : null,
@@ -127,6 +136,38 @@ class InternalProductBomController extends Controller
                 'note' => trim((string) ($material['note'] ?? '')),
             ];
         })->values();
+
+        foreach ($materials->where('calculation_mode', 'formula')->groupBy('formula_code') as $formulaCode => $formulaLines) {
+            if ($formulaCode === '' || $formulaLines->count() < 2) {
+                return response()->json(['message' => 'Công thức pha cần mã nhóm và ít nhất 2 nguyên liệu.'], 422);
+            }
+
+            $outputQuantities = $formulaLines->pluck('formula_output_per_unit')->unique()->values();
+            $outputUnits = $formulaLines->pluck('formula_output_unit')->unique()->values();
+            $totalParts = (float) $formulaLines->sum('formula_part');
+            if ($outputQuantities->count() !== 1 || (float) $outputQuantities->first() <= 0 || $outputUnits->count() !== 1 || !$outputUnits->first() || $totalParts <= 0) {
+                return response()->json(['message' => 'Các dòng công thức ' . $formulaCode . ' phải cùng tổng hỗn hợp/PCS, cùng đơn vị và có tỷ lệ lớn hơn 0.'], 422);
+            }
+
+            foreach ($formulaLines as $index => $formulaLine) {
+                $factor = app(InternalUnitConverter::class)->factor(
+                    $formulaLine['material_code'],
+                    $formulaLine['formula_output_unit'],
+                    $formulaLine['unit']
+                );
+                if ($factor === null) {
+                    return response()->json([
+                        'message' => 'Chưa có quy đổi ' . $formulaLine['formula_output_unit'] . ' sang ' . $formulaLine['unit'] . ' cho ' . $formulaLine['material_code'] . '.',
+                    ], 422);
+                }
+
+                $materials[$index] = array_merge($formulaLine, [
+                    'consumption_per_unit' => (float) $formulaLine['formula_output_per_unit']
+                        * ((float) $formulaLine['formula_part'] / $totalParts)
+                        * $factor,
+                ]);
+            }
+        }
 
         $invalidRate = $materials->search(fn ($material) => $material['consumption_per_unit'] <= 0);
         if ($invalidRate !== false) {
@@ -303,6 +344,10 @@ class InternalProductBomController extends Controller
                     'component_role' => $material['component_role'],
                     'unit' => $material['unit'],
                     'calculation_mode' => $material['calculation_mode'],
+                    'formula_code' => $material['formula_code'] ?? null,
+                    'formula_output_per_unit' => $material['formula_output_per_unit'] ?? null,
+                    'formula_output_unit' => $material['formula_output_unit'] ?? null,
+                    'formula_part' => $material['formula_part'] ?? null,
                     'yield_quantity' => $material['yield_quantity'],
                     'consumption_per_unit' => $material['consumption_per_unit'],
                     'waste_percent' => $material['waste_percent'],
@@ -412,6 +457,10 @@ class InternalProductBomController extends Controller
                         'material_name' => $line->material_name,
                         'component_role' => $line->component_role,
                         'calculation_mode' => $line->calculation_mode,
+                        'formula_code' => $line->formula_code,
+                        'formula_output_per_unit' => $line->formula_output_per_unit,
+                        'formula_output_unit' => $line->formula_output_unit,
+                        'formula_part' => $line->formula_part,
                         'unit' => $line->unit,
                         'consumption_per_unit' => $line->consumption_per_unit,
                         'yield_quantity' => $line->yield_quantity,
@@ -457,6 +506,10 @@ class InternalProductBomController extends Controller
                         'material_name' => $line->material_name,
                         'component_role' => $line->component_role,
                         'calculation_mode' => $line->calculation_mode ?: 'consumption',
+                        'formula_code' => $line->formula_code,
+                        'formula_output_per_unit' => $line->formula_output_per_unit !== null ? (float) $line->formula_output_per_unit : null,
+                        'formula_output_unit' => $line->formula_output_unit,
+                        'formula_part' => $line->formula_part !== null ? (float) $line->formula_part : null,
                         'unit' => $line->unit,
                         'consumption_per_unit' => (float) $line->consumption_per_unit,
                         'yield_quantity' => $line->yield_quantity !== null ? (float) $line->yield_quantity : null,
@@ -521,6 +574,10 @@ class InternalProductBomController extends Controller
                         'material_name' => $bomLine->material_name,
                         'component_role' => $bomLine->component_role,
                         'calculation_mode' => $bomLine->calculation_mode,
+                        'formula_code' => $bomLine->formula_code,
+                        'formula_output_per_unit' => $bomLine->formula_output_per_unit,
+                        'formula_output_unit' => $bomLine->formula_output_unit,
+                        'formula_part' => $bomLine->formula_part,
                         'unit' => $bomLine->unit,
                         'consumption_per_unit' => $bomLine->consumption_per_unit,
                         'yield_quantity' => $bomLine->yield_quantity,
@@ -567,6 +624,10 @@ class InternalProductBomController extends Controller
                         'material_name' => $bomLine->material_name,
                         'component_role' => $bomLine->component_role,
                         'calculation_mode' => $bomLine->calculation_mode ?: 'consumption',
+                        'formula_code' => $bomLine->formula_code,
+                        'formula_output_per_unit' => $bomLine->formula_output_per_unit !== null ? (float) $bomLine->formula_output_per_unit : null,
+                        'formula_output_unit' => $bomLine->formula_output_unit,
+                        'formula_part' => $bomLine->formula_part !== null ? (float) $bomLine->formula_part : null,
                         'unit' => $bomLine->unit,
                         'consumption_per_unit' => (float) $bomLine->consumption_per_unit,
                         'yield_quantity' => $bomLine->yield_quantity !== null ? (float) $bomLine->yield_quantity : null,
