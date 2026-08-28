@@ -256,6 +256,7 @@ Route::get('/client/lenh-san-xuat-sheet', [InternalProductionOrderController::cl
 Route::get('/api/lenh-san-xuat-sheet', [InternalProductionOrderController::class, 'data']);
 Route::post('/api/lenh-san-xuat-sheet/dong-bo', [InternalProductionOrderController::class, 'sync']);
 Route::get('/client/lenh-san-xuat-trung-tam', [InternalProductionOrderController::class, 'workflowIndex']);
+Route::get('/api/lenh-san-xuat-trung-tam/tim-kiem', [InternalProductionOrderController::class, 'search']);
 Route::get('/api/lenh-san-xuat-trung-tam', [InternalProductionOrderController::class, 'workflow']);
 Route::patch('/api/lenh-san-xuat-trung-tam/cong-doan', [InternalProductionOrderController::class, 'updateOperationProgress']);
 Route::patch('/api/lenh-san-xuat-trung-tam/dong/{order}', [InternalProductionOrderController::class, 'updateStandardItemCode']);

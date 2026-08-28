@@ -12,6 +12,8 @@ class InternalMaterialIssue extends Model
 
     protected $fillable = [
         'source_receipt_id',
+        'idempotency_key',
+        'request_fingerprint',
         'issue_code',
         'issue_type',
         'issue_date',

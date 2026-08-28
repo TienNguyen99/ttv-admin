@@ -259,6 +259,13 @@
                     <tbody id="issueRows"></tbody>
                 </table>
             </div>
+            <div id="issuePagination" class="d-flex align-items-center justify-content-between gap-2 pt-2" hidden>
+                <span id="issuePageInfo" class="hint"></span>
+                <div class="btn-group" role="group" aria-label="Phân trang phiếu xuất">
+                    <button id="previousIssuePage" type="button" class="btn btn-sm btn-outline-secondary">Trước</button>
+                    <button id="nextIssuePage" type="button" class="btn btn-sm btn-outline-secondary">Sau</button>
+                </div>
+            </div>
         </section>
     </main>
 
@@ -327,13 +334,25 @@
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const lineRows = document.getElementById('lineRows');
         const issueRows = document.getElementById('issueRows');
+        let issuePage = 1;
+        let issueLastPage = 1;
+        const issuePerPage = 50;
         let searchTimers = {};
         let productionOrderSearchTimer = null;
         let internalCatalogSearchTimer = null;
         let internalCatalogItems = [];
         let analyzedPastedLines = [];
         let editingIssueId = null;
+        let pendingIssueRequestKey = null;
         let pasteColumnMapping = [];
+
+        function createIssueRequestKey() {
+            if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+                return window.crypto.randomUUID();
+            }
+
+            return `issue-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+        }
 
         const pasteFieldOptions = [
             ['', 'Bỏ qua'],
@@ -548,6 +567,7 @@
 
         function setEditingIssue(issue) {
             editingIssueId = issue?.id || null;
+            if (editingIssueId) pendingIssueRequestKey = null;
             document.getElementById('cancelEditBtn').classList.toggle('d-none', !editingIssueId);
             if (editingIssueId) {
                 document.getElementById('saveBtn').innerHTML = '<i data-lucide="save"></i>Cập nhật + in phiếu';
@@ -560,6 +580,7 @@
 
         function resetIssueForm() {
             editingIssueId = null;
+            pendingIssueRequestKey = null;
             lineRows.innerHTML = '';
             addLine();
             document.getElementById('receiverName').value = '';
@@ -1264,10 +1285,13 @@
             if (!lines.length) return alert('Nhập ít nhất một dòng hàng.');
             if (lines.some(line => (!line.ma_hh && !line.internal_item_code) || !Number(line.quantity))) return alert('Mỗi dòng cần mã nội bộ hoặc mã đối chiếu, và số lượng.');
 
+            if (!editingIssueId && !pendingIssueRequestKey) pendingIssueRequestKey = createIssueRequestKey();
+
             fetch(editingIssueId ? `/api/xuat-vat-tu-noi-bo/${editingIssueId}` : '/api/xuat-vat-tu-noi-bo', {
                 method: editingIssueId ? 'PUT' : 'POST',
                 headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
                 body: JSON.stringify({
+                    idempotency_key: editingIssueId ? undefined : pendingIssueRequestKey,
                     issue_type: value('issueType'),
                     issue_date: value('issueDate'),
                     warehouse_code: '',
@@ -1482,10 +1506,13 @@
               });
         }
 
-        function loadIssues() {
+        function loadIssues(resetPage = false) {
+            if (resetPage) issuePage = 1;
             const params = new URLSearchParams();
-            if (value('fromDate')) params.set('from_date', value('fromDate'));
-            if (value('toDate')) params.set('to_date', value('toDate'));
+            params.set('page', String(issuePage));
+            params.set('per_page', String(issuePerPage));
+            if (value('fromDate')) params.set('from_date', dateVnToIso(value('fromDate')));
+            if (value('toDate')) params.set('to_date', dateVnToIso(value('toDate')));
             if (value('keyword')) params.set('keyword', value('keyword'));
 
             fetch(`/api/xuat-vat-tu-noi-bo?${params.toString()}`)
@@ -1494,6 +1521,16 @@
                     document.getElementById('issueCount').textContent = num(result.summary?.total_issues || 0);
                     document.getElementById('lineCount').textContent = num(result.summary?.total_lines || 0);
                     document.getElementById('totalQuantity').textContent = num(result.summary?.total_quantity || 0);
+                    const pagination = result.pagination || {};
+                    issuePage = Number(pagination.current_page || 1);
+                    issueLastPage = Number(pagination.last_page || 1);
+                    const paginationElement = document.getElementById('issuePagination');
+                    paginationElement.hidden = Number(pagination.total || 0) <= issuePerPage;
+                    document.getElementById('issuePageInfo').textContent = pagination.total
+                        ? `Hiển thị ${num(pagination.from)}-${num(pagination.to)} / ${num(pagination.total)} phiếu`
+                        : 'Chưa có phiếu';
+                    document.getElementById('previousIssuePage').disabled = issuePage <= 1;
+                    document.getElementById('nextIssuePage').disabled = issuePage >= issueLastPage;
                     issueRows.innerHTML = (result.data || []).map(issue => {
                         const status = issue.issue_type === 'customer' || String(issue.issue_code || '').startsWith('PXTP-')
                             ? '<span class="badge text-bg-success">TP khách</span>'
@@ -1631,17 +1668,31 @@
             });
         });
         document.getElementById('reloadBtn').addEventListener('click', loadIssues);
+        document.getElementById('previousIssuePage').addEventListener('click', () => {
+            if (issuePage <= 1) return;
+            issuePage--;
+            loadIssues();
+        });
+        document.getElementById('nextIssuePage').addEventListener('click', () => {
+            if (issuePage >= issueLastPage) return;
+            issuePage++;
+            loadIssues();
+        });
         document.getElementById('clearFilterBtn').addEventListener('click', () => {
             ['fromDate','toDate','keyword'].forEach(id => document.getElementById(id).value = '');
             document.getElementById('topIssueKeyword').value = '';
-            loadIssues();
+            loadIssues(true);
         });
-        ['fromDate','toDate','keyword'].forEach(id => document.getElementById(id).addEventListener('input', loadIssues));
+        let issueFilterTimer = null;
+        ['fromDate','toDate','keyword'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+            clearTimeout(issueFilterTimer);
+            issueFilterTimer = setTimeout(() => loadIssues(true), 250);
+        }));
         let topIssueSearchTimer = null;
         document.getElementById('topIssueKeyword').addEventListener('input', event => {
             document.getElementById('keyword').value = event.target.value;
             clearTimeout(topIssueSearchTimer);
-            topIssueSearchTimer = setTimeout(loadIssues, 250);
+            topIssueSearchTimer = setTimeout(() => loadIssues(true), 250);
         });
         document.getElementById('keyword').addEventListener('input', event => {
             document.getElementById('topIssueKeyword').value = event.target.value;

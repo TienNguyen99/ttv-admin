@@ -804,6 +804,7 @@
     let activeLocationRow = null;
     let locationDraft = new Set();
     let editingIssueId = null;
+    let pendingIssueRequestKey = null;
     const suggestionTimers = new WeakMap();
     const locationTimers = new WeakMap();
     const stockLocationRequests = new Map();
@@ -811,6 +812,14 @@
     const pastedCatalogResolutions = new Map();
     const completedPickingSteps = new Set();
     let activePickingStepIndex = 0;
+
+    function createIssueRequestKey() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+
+        return `issue-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+    }
 
     function setOperationLoading(loading, title = 'Đang xử lý phiếu xuất', detail = 'Vui lòng chờ, không đóng trang.') {
         const loader = document.getElementById('operationLoader');
@@ -2316,6 +2325,8 @@
                 saveAsDraft ? 'Đang lưu phiếu chờ' : 'Đang tạo phiếu xuất',
                 saveAsDraft ? 'Phiếu chưa tác động đến tồn kho.' : 'Đang trừ tồn FIFO và ghi dữ liệu phiếu.'
             );
+            if (!editingIssueId && !pendingIssueRequestKey) pendingIssueRequestKey = createIssueRequestKey();
+
             const result = await fetch(editingIssueId ? `/api/xuat-vat-tu-noi-bo/${editingIssueId}` : '/api/xuat-vat-tu-noi-bo', {
                 method: editingIssueId ? 'PUT' : 'POST',
                 headers: {
@@ -2324,6 +2335,7 @@
                     'X-CSRF-TOKEN': csrfToken,
                 },
                 body: JSON.stringify({
+                    idempotency_key: editingIssueId ? undefined : pendingIssueRequestKey,
                     issue_type: 'customer',
                     issue_date: issueDate,
                     warehouse_code: '',
@@ -2393,6 +2405,7 @@
 
     function resetForm(clearHeader = true) {
         editingIssueId = null;
+        pendingIssueRequestKey = null;
         document.getElementById('printPickingBtn').hidden = true;
         if (clearHeader) {
             document.getElementById('customerName').value = '';
@@ -2410,7 +2423,7 @@
         const results = document.getElementById('draftSearchResults');
         results.innerHTML = '<div class="location-empty">Đang tìm phiếu chờ...</div>';
         try {
-            const params = new URLSearchParams({status: 'draft', issue_type: 'customer'});
+            const params = new URLSearchParams({status: 'draft', issue_type: 'customer', limit: '50'});
             if (keyword) params.set('keyword', keyword);
             const payload = await fetch(`/api/xuat-vat-tu-noi-bo?${params.toString()}`).then(jsonOrError);
             const issues = payload.data || [];
@@ -2441,6 +2454,7 @@
 
             resetForm(true);
             editingIssueId = Number(issue.id);
+            pendingIssueRequestKey = null;
             document.getElementById('issueDate').value = isoToDisplayDate(String(issue.issue_date || '').slice(0, 10));
             document.getElementById('receiverName').value = issue.receiver_name || '';
             document.getElementById('issueNote').value = issue.note || '';

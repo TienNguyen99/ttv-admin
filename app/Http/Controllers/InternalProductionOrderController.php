@@ -30,6 +30,91 @@ class InternalProductionOrderController extends Controller
         return view('client.production-order-workflow');
     }
 
+    public function search(Request $request)
+    {
+        $keyword = trim((string) $request->query('keyword', ''));
+        if (mb_strlen($keyword) < 2) {
+            return response()->json(['data' => []]);
+        }
+
+        $limit = min(max((int) $request->query('limit', 20), 1), 30);
+        $cacheKey = 'internal_production_order_search:' . sha1(mb_strtoupper($keyword) . '|' . $limit);
+
+        $data = Cache::remember($cacheKey, now()->addSeconds(30), function () use ($keyword, $limit) {
+            $contains = '%' . $keyword . '%';
+            $prefix = $keyword . '%';
+            $candidateLimit = $limit * 25;
+            $orderCodes = InternalProductionOrder::query()
+                ->where('is_active', true)
+                ->where(function ($query) use ($contains) {
+                    $query->where('production_order', 'like', $contains)
+                        ->orWhere('purchase_order', 'like', $contains)
+                        ->orWhere('customer', 'like', $contains)
+                        ->orWhere('item_code', 'like', $contains)
+                        ->orWhere('standard_item_code', 'like', $contains)
+                        ->orWhere('description', 'like', $contains)
+                        ->orWhere('size', 'like', $contains)
+                        ->orWhere('color', 'like', $contains);
+                })
+                ->orderByRaw(
+                    'CASE WHEN production_order LIKE ? THEN 0 WHEN item_code LIKE ? OR standard_item_code LIKE ? THEN 1 ELSE 2 END',
+                    [$prefix, $prefix, $prefix]
+                )
+                ->orderByDesc('updated_at')
+                ->limit($candidateLimit)
+                ->pluck('production_order')
+                ->map(fn ($code) => trim((string) $code))
+                ->filter()
+                ->unique()
+                ->take($limit)
+                ->values();
+
+            if ($orderCodes->isEmpty()) {
+                return [];
+            }
+
+            $position = $orderCodes->flip();
+            return InternalProductionOrder::query()
+                ->select([
+                    'production_order', 'customer', 'purchase_order', 'promised_date',
+                    'item_code', 'standard_item_code', 'description', 'size', 'color',
+                    'unit', 'order_quantity',
+                ])
+                ->where('is_active', true)
+                ->whereIn('production_order', $orderCodes->all())
+                ->orderBy('id')
+                ->get()
+                ->groupBy('production_order')
+                ->map(function ($rows, $productionOrder) {
+                    $first = $rows->first();
+                    return [
+                        'production_order' => trim((string) $productionOrder),
+                        'customer' => trim((string) $first->customer),
+                        'purchase_order' => trim((string) $first->purchase_order),
+                        'promised_date' => optional($first->promised_date)->format('Y-m-d'),
+                        'items' => $rows->map(fn ($row) => [
+                            'item_code' => trim((string) ($row->standard_item_code ?: $row->item_code)),
+                            'source_item_code' => trim((string) $row->item_code),
+                            'item_name' => trim((string) $row->description),
+                            'size' => trim((string) $row->size),
+                            'color' => trim((string) $row->color),
+                            'unit' => trim((string) $row->unit) ?: 'PCS',
+                            'order_quantity' => (float) $row->order_quantity,
+                        ])->unique(fn ($row) => implode('|', [
+                            mb_strtoupper($row['item_code']),
+                            mb_strtoupper($row['size']),
+                            mb_strtoupper($row['color']),
+                        ]))->values()->all(),
+                    ];
+                })
+                ->sortBy(fn ($row) => $position->get($row['production_order'], PHP_INT_MAX))
+                ->values()
+                ->all();
+        });
+
+        return response()->json(['data' => $data]);
+    }
+
     public function workflow(Request $request)
     {
         $keyword = mb_strtoupper(trim((string) $request->query('keyword', '')));

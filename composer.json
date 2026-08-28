@@ -5,8 +5,7 @@
     "keywords": ["framework", "laravel"],
     "license": "MIT",
     "require": {
-        "php": "^7.3|^8.0",
-        "box/spout": "^3.3",
+        "php": "^7.4|^8.0",
         "endroid/qr-code": "3.9",
         "fruitcake/laravel-cors": "^2.0",
         "google/apiclient": "2.15",
@@ -14,8 +13,7 @@
         "laravel/framework": "^8.75",
         "laravel/sanctum": "^2.11",
         "laravel/tinker": "^2.5",
-        "maatwebsite/excel": "^1.1",
-        "phpoffice/phpspreadsheet": "^1.12"
+        "phpoffice/phpspreadsheet": "^1.29.12"
     },
     "require-dev": {
         "facade/ignition": "^2.5",
@@ -38,6 +36,10 @@
         }
     },
     "scripts": {
+        "check": [
+            "@php artisan view:cache",
+            "@php artisan test"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"

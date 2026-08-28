@@ -8,6 +8,7 @@ use App\Models\InternalProductionOperationProgress;
 use App\Models\InternalProductionOrder;
 use App\Services\InternalAudit;
 use App\Services\InternalDocumentNumber;
+use App\Services\InternalProductionOperationCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
@@ -16,6 +17,13 @@ use Illuminate\Support\Facades\DB;
 class InternalProductionActivityController extends Controller
 {
     use NormalizesDateInput;
+
+    private InternalProductionOperationCatalog $operationCatalog;
+
+    public function __construct(InternalProductionOperationCatalog $operationCatalog)
+    {
+        $this->operationCatalog = $operationCatalog;
+    }
 
     public function index()
     {
@@ -166,7 +174,7 @@ class InternalProductionActivityController extends Controller
             throw new HttpResponseException(response()->json(['message' => 'Không tìm thấy lệnh sản xuất.'], 404));
         }
 
-        $operations = $this->resolveOperations($orders);
+        $operations = $this->operationCatalog->forOrders($orders);
         $activities = InternalProductionActivity::query()
             ->with('lines')
             ->where('production_order_code', $orderCode)
@@ -230,63 +238,6 @@ class InternalProductionActivityController extends Controller
             'items' => $items,
             'activities' => $activities,
             'qr_url' => url('/client/ghi-nhan-san-xuat?production_order=' . rawurlencode($orderCode)),
-        ];
-    }
-
-    private function resolveOperations(Collection $orders): Collection
-    {
-        $exactCodes = $orders->map(fn ($row) => $this->code($row->standard_item_code ?: $row->item_code))->filter()->unique();
-        $sourceCodes = $orders->map(fn ($row) => $this->code($row->item_code))->filter()->unique();
-        $profiles = DB::connection('internal')->table('internal_product_bom_profiles')
-            ->where('status', 'active')
-            ->whereIn('item_code', $exactCodes->concat($sourceCodes)->unique()->all())
-            ->get()
-            ->keyBy(fn ($row) => $this->code($row->item_code));
-        $profileIds = $exactCodes->concat($sourceCodes)
-            ->map(fn ($code) => optional($profiles->get($code))->id)
-            ->filter()
-            ->unique();
-
-        $configured = $profileIds->isEmpty()
-            ? collect()
-            : DB::connection('internal')->table('internal_product_routings')
-                ->whereIn('profile_id', $profileIds->all())
-                ->orderBy('sequence')
-                ->get()
-                ->unique(fn ($row) => $this->code($row->operation_code))
-                ->values()
-                ->map(fn ($row, $index) => [
-                'code' => $this->code($row->operation_code),
-                'name' => trim((string) $row->operation_name),
-                'sequence' => $index + 1,
-                'is_configured' => true,
-            ]);
-
-        $configuredCodes = $configured->pluck('code')->map(fn ($code) => $this->code($code));
-        $standard = collect($this->standardOperations())
-            ->reject(fn ($operation) => $configuredCodes->contains($this->code($operation['code'])))
-            ->values()
-            ->map(fn ($operation, $index) => $operation + [
-                'sequence' => $configured->count() + $index + 1,
-                'is_configured' => false,
-            ]);
-
-        return $configured->concat($standard)->values();
-    }
-
-    private function standardOperations(): array
-    {
-        return [
-            ['code' => 'PHA', 'name' => 'Pha nguyên liệu'],
-            ['code' => 'DUC', 'name' => 'Đúc'],
-            ['code' => 'IN', 'name' => 'In'],
-            ['code' => 'EP', 'name' => 'Ép'],
-            ['code' => 'DET', 'name' => 'Dệt'],
-            ['code' => 'CAT', 'name' => 'Cắt'],
-            ['code' => 'MAY', 'name' => 'May'],
-            ['code' => 'HOAN_THIEN', 'name' => 'Hoàn thiện'],
-            ['code' => 'KCS', 'name' => 'KCS'],
-            ['code' => 'DONG_GOI', 'name' => 'Đóng gói'],
         ];
     }
 

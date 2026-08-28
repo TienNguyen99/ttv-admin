@@ -371,7 +371,7 @@
     let planSearchTimer;
     document.getElementById('planOrderInput').addEventListener('input',event=>{
         clearTimeout(planSearchTimer); const keyword=event.target.value.trim(); if(keyword.length<2)return;
-        planSearchTimer=setTimeout(()=>fetch('/api/lenh-san-xuat-trung-tam?keyword='+encodeURIComponent(keyword)+'&limit=20').then(json).then(payload=>{
+        planSearchTimer=setTimeout(()=>fetch('/api/lenh-san-xuat-trung-tam/tim-kiem?keyword='+encodeURIComponent(keyword)+'&limit=20').then(json).then(payload=>{
             document.getElementById('planOrderOptions').innerHTML=(payload.data||[]).map(order=>`<option value="${esc(order.production_order)}" label="${esc([order.customer,order.purchase_order,(order.items||[]).map(item=>item.item_code).join(', ')].filter(Boolean).join(' · '))}"></option>`).join('');
         }).catch(()=>{}),180);
     });
