@@ -56,6 +56,10 @@ class SyncInternalGoogleSheets extends Command
 
     private function syncSource(string $scope, string $source, callable $callback): bool
     {
+        if (in_array($source, ['production_orders', 'catalog'], true)) {
+            return $this->syncControllerManagedSource($source, $callback);
+        }
+
         $lockSeconds = $scope === 'reference'
             ? config('internal_sync.reference_lock_seconds', 900)
             : config('internal_sync.operational_lock_seconds', 110);
@@ -118,6 +122,37 @@ class SyncInternalGoogleSheets extends Command
             return false;
         } finally {
             optional($lock)->release();
+        }
+    }
+
+    private function syncControllerManagedSource(string $source, callable $callback): bool
+    {
+        try {
+            $response = $callback();
+            $statusCode = method_exists($response, 'getStatusCode') ? $response->getStatusCode() : 500;
+            $payload = method_exists($response, 'getData') ? $response->getData(true) : [];
+            $data = (array) ($payload['data'] ?? []);
+            $success = $statusCode >= 200 && $statusCode < 300;
+            $line = sprintf(
+                '%s: mới %d, sửa %d, không đổi %d, bỏ qua %d, lỗi %d',
+                $source,
+                (int) ($data['created'] ?? 0),
+                (int) ($data['updated'] ?? 0),
+                (int) ($data['unchanged'] ?? 0),
+                (int) ($data['skipped'] ?? 0),
+                (int) ($data['failed'] ?? 0)
+            );
+
+            $success
+                ? $this->info($line)
+                : $this->error($line . ' - ' . ($payload['message'] ?? 'Lỗi đồng bộ'));
+
+            return $success;
+        } catch (Throwable $error) {
+            report($error);
+            $this->error("{$source}: {$error->getMessage()}");
+
+            return false;
         }
     }
 }

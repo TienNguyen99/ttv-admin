@@ -511,7 +511,8 @@
             }).then(response => jsonOrError(response, 'Không đồng bộ được DANH MỤC'))
               .then(result => {
                   const data = result.data || {};
-                  resultEl.textContent = `Thêm ${num(data.created)}, cập nhật ${num(data.updated)}, đang dùng ${num(data.active)} mã.`;
+                  const failed = Number(data.failed || 0);
+                  resultEl.textContent = `Lượt #${data.sync_run_id || '-'}: thêm ${num(data.created)}, cập nhật ${num(data.updated)}, không đổi ${num(data.unchanged)}, đang dùng ${num(data.active)} mã${failed ? `, lỗi ${num(failed)} dòng` : ''}.`;
                   catalogPage = 1;
                   loadCatalog();
               })

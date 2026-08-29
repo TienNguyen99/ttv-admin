@@ -37,6 +37,9 @@
         .pm-plan-actual { width:110px; text-align:right; font-weight:800; }
         .pm-plan-suggested { color:#075aa5; font-weight:850; }
         .pm-plan-complete { color:#15803d; font-weight:800; }
+        .pm-plan-stock { color:#166534; font-weight:800; }
+        .pm-plan-stock.is-short { color:#dc2626; }
+        .pm-plan-stock small { display:block; font-weight:700; white-space:nowrap; }
         .pm-flow { display:flex; flex-wrap:wrap; align-items:center; gap:7px; color:#64748b; font-size:12px; font-weight:750; }
         .pm-flow span { display:inline-flex; align-items:center; gap:5px; }
         .pm-flow span:not(:last-child)::after { content:'›'; margin-left:7px; color:#94a3b8; }
@@ -95,8 +98,8 @@
         <div id="planMessage" class="alert pm-plan-message" role="alert"></div>
         <div class="wms-table-wrap">
             <table class="wms-table pm-plan-table">
-                <thead><tr><th>Lệnh SX</th><th>Mã vật tư</th><th>Tên vật tư</th><th>Vai trò</th><th class="text-end">Nhu cầu BOM</th><th class="text-end">Đã xuất</th><th class="text-end">Đề xuất lần này</th><th class="text-end">Thực xuất</th><th>ĐVT</th><th></th></tr></thead>
-                <tbody id="planBody"><tr><td colspan="10" class="pm-empty">Chưa chọn lệnh sản xuất.</td></tr></tbody>
+                <thead><tr><th>Lệnh SX</th><th>Mã vật tư</th><th>Tên vật tư</th><th>Vai trò</th><th class="text-end">Nhu cầu BOM</th><th class="text-end">Đã xuất</th><th class="text-end">Đề xuất</th><th class="text-end">Tồn có thể cấp</th><th class="text-end">Thiếu</th><th class="text-end">Thực xuất</th><th>ĐVT</th><th></th></tr></thead>
+                <tbody id="planBody"><tr><td colspan="12" class="pm-empty">Chưa chọn lệnh sản xuất.</td></tr></tbody>
             </table>
         </div>
         <div class="wms-panel__body d-flex flex-wrap align-items-center justify-content-between gap-2">
@@ -193,8 +196,8 @@
 
     function renderPlan() {
         const body=document.getElementById('planBody');
-        if(!state.planRows.length) body.innerHTML='<tr><td colspan="10" class="pm-empty">Chưa chọn lệnh sản xuất.</td></tr>';
-        else body.innerHTML=state.planRows.map(row=>`<tr data-plan-key="${esc(planKey(row))}"><td><strong class="pm-order">${esc(row.production_order)}</strong><div class="pm-sub">${esc(row.purchase_order||'')}</div></td><td><strong>${esc(row.material_code)}</strong></td><td>${esc(row.material_name||'')}</td><td>${esc(row.component_role||'CHUNG')}</td><td class="text-end"><strong>${number(row.required_quantity)}</strong>${Math.abs(Number(row.required_quantity)-Number(row.exact_required_quantity))>0.000001?`<div class="pm-sub">Tính ra ${number(row.exact_required_quantity)}</div>`:''}</td><td class="text-end ${Number(row.issued_quantity)>0?'pm-plan-complete':''}">${number(row.issued_quantity)}</td><td class="text-end pm-plan-suggested">${number(row.suggested_quantity)}</td><td class="text-end"><input class="form-control form-control-sm pm-plan-actual" type="number" min="0" step="0.001" value="${esc(row.actual_quantity)}" aria-label="Thực xuất ${esc(row.material_code)}"></td><td>${esc(row.unit)}</td><td><button class="wms-btn wms-btn--sm text-danger" data-remove-plan="${esc(planKey(row))}" title="Bỏ dòng"><i data-lucide="x"></i></button></td></tr>`).join('');
+        if(!state.planRows.length) body.innerHTML='<tr><td colspan="12" class="pm-empty">Chưa chọn lệnh sản xuất.</td></tr>';
+        else body.innerHTML=state.planRows.map(row=>`<tr data-plan-key="${esc(planKey(row))}"><td><strong class="pm-order">${esc(row.production_order)}</strong><div class="pm-sub">${esc(row.purchase_order||'')}</div></td><td><strong>${esc(row.material_code)}</strong></td><td>${esc(row.material_name||'')}</td><td>${esc(row.component_role||'CHUNG')}</td><td class="text-end"><strong>${number(row.required_quantity)}</strong>${Math.abs(Number(row.required_quantity)-Number(row.exact_required_quantity))>0.000001?`<div class="pm-sub">Tính ra ${number(row.exact_required_quantity)}</div>`:''}</td><td class="text-end ${Number(row.issued_quantity)>0?'pm-plan-complete':''}">${number(row.issued_quantity)}</td><td class="text-end pm-plan-suggested">${number(row.suggested_quantity)}</td><td class="text-end pm-plan-stock ${row.stock_status==='short'||row.stock_status==='unit_mismatch'?'is-short':''}">${number(row.stock_allocatable_quantity)}<small>Còn ${number(row.available_quantity)}</small></td><td class="text-end pm-plan-stock ${Number(row.shortage_quantity)>0?'is-short':''}">${number(row.shortage_quantity)}${row.stock_status==='unit_mismatch'?'<small>Lệch ĐVT</small>':''}</td><td class="text-end"><input class="form-control form-control-sm pm-plan-actual" type="number" min="0" step="0.001" value="${esc(row.actual_quantity)}" aria-label="Thực xuất ${esc(row.material_code)}"></td><td>${esc(row.unit)}</td><td><button class="wms-btn wms-btn--sm text-danger" data-remove-plan="${esc(planKey(row))}" title="Bỏ dòng"><i data-lucide="x"></i></button></td></tr>`).join('');
         document.getElementById('copyXntBtn').disabled=!state.planRows.length;
         document.getElementById('openIssueBtn').disabled=!state.planRows.length;
         lucide.createIcons();
@@ -213,6 +216,8 @@
             const warnings=[];
             if((payload.missing_orders||[]).length) warnings.push('Không tìm thấy lệnh: '+payload.missing_orders.join(', '));
             if((payload.missing_items||[]).length) warnings.push('Chưa có BOM cho mã: '+payload.missing_items.join(', '));
+            const shortRows=state.planRows.filter(row=>Number(row.shortage_quantity||0)>0);
+            if(shortRows.length) warnings.push(`Thiếu tồn ${shortRows.length} dòng vật tư`);
             if(warnings.length) planNotice(warnings.join(' | '),'warning');
             else planNotice(`Đã tổng hợp ${state.planRows.length} dòng cho ${state.planOrderCodes.length} lệnh.`,'success');
             renderPlan();

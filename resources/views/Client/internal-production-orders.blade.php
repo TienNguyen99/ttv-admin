@@ -158,7 +158,8 @@
             }).then(response => jsonOrError(response, 'Không đồng bộ được Google Sheet'))
               .then(result => {
                   const data = result.data || {};
-                  resultEl.textContent = `Thêm ${num(data.created)}, cập nhật ${num(data.updated)}, đang dùng ${num(data.active)} lệnh.`;
+                  const failed = Number(data.failed || 0);
+                  resultEl.textContent = `Lượt #${data.sync_run_id || '-'}: thêm ${num(data.created)}, cập nhật ${num(data.updated)}, không đổi ${num(data.unchanged)}, đang dùng ${num(data.active_variants)} dòng${failed ? `, lỗi ${num(failed)} dòng` : ''}.`;
                   loadProductionOrders();
               })
               .catch(error => resultEl.textContent = error.message)

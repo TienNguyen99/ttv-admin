@@ -16,19 +16,23 @@
             border-bottom: 1px solid #dbe7f3; backdrop-filter: blur(10px);
         }
         .workflow-title { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0; }
-        .workflow-search { position: relative; flex: 1; max-width: 560px; }
-        .workflow-search input { height: 42px; padding-left: 42px; border-radius: 999px; border-color: #bfd0e4; background: #f8fbff; }
-        .workflow-search i { position: absolute; left: 15px; top: 11px; width: 18px; height: 18px; color: #2563eb; }
+        .workflow-search { position: relative; display: flex; flex: 1; align-items: center; max-width: 560px; min-width: 240px; }
+        .workflow-search input { width: 100%; height: 42px; padding: 0 16px 0 42px; border-radius: 999px; border-color: #bfd0e4; background: #f8fbff; }
+        .workflow-search > i,
+        .workflow-search > svg {
+            position: absolute; z-index: 1; left: 15px; top: 50%; width: 18px; height: 18px;
+            margin: 0; color: #2563eb; pointer-events: none; transform: translateY(-50%);
+        }
         .workflow-heading { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 20px; }
         .workflow-heading h1 { margin: 0; font-size: 30px; font-weight: 850; letter-spacing: 0; }
         .workflow-heading p { margin: 4px 0 0; color: #55708c; font-size: 13px; }
-        .kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 14px; margin-bottom: 18px; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); gap: 14px; margin-bottom: 18px; }
         .kpi-card { display: flex; gap: 12px; align-items: center; padding: 16px; border: 1px solid #dbe7f3; border-radius: 12px; background: #fff; box-shadow: 0 8px 24px rgba(15, 45, 80, .05); }
         .kpi-icon { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; border-radius: 10px; background: #edf5ff; color: #2563eb; }
         .kpi-label { color: #5c7895; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
         .kpi-value { font-size: 24px; line-height: 1.05; font-weight: 850; }
         .filter-panel, .workflow-panel { border: 1px solid #dbe7f3; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(15, 45, 80, .05); }
-        .filter-panel { display: grid; grid-template-columns: minmax(220px, 1fr) 220px 140px; gap: 12px; padding: 16px; margin-bottom: 18px; }
+        .filter-panel { display: grid; grid-template-columns: minmax(220px, 1fr) 220px 180px 140px; gap: 12px; padding: 16px; margin-bottom: 18px; }
         .filter-panel label { color: #39536f; font-size: 12px; font-weight: 750; margin-bottom: 6px; }
         .workflow-panel__header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid #e3edf7; }
         .workflow-panel__header h2 { margin: 0; font-size: 17px; font-weight: 850; }
@@ -78,6 +82,23 @@
         .operation-list { display:grid; gap:8px; }
         .operation-row { display:grid; grid-template-columns:36px minmax(150px,1fr) 150px; gap:10px; align-items:center; padding:10px 12px; border:1px solid #dbe7f3; border-radius:8px; }
         .operation-index { display:grid; place-items:center; width:28px; height:28px; border-radius:50%; background:#edf5ff; color:#1d4ed8; font-weight:850; }
+        .warning-stack { display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
+        .warning-chip { display:inline-flex; align-items:center; gap:4px; padding:4px 7px; border:1px solid #f3c56c; border-radius:999px; background:#fff8e7; color:#8a5700; font-size:10px; font-weight:800; }
+        .warning-chip.is-error { border-color:#f3a8ad; background:#fff0f1; color:#b4232f; }
+        .lifecycle-detail-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+        .lifecycle-detail-stat { padding:12px; border:1px solid #dbe7f3; border-radius:10px; background:#f8fbff; }
+        .lifecycle-detail-stat small { display:block; color:#66809a; }
+        .lifecycle-detail-section { margin-top:18px; }
+        .lifecycle-detail-section h3 { margin:0 0 8px; font-size:14px; font-weight:850; }
+        .lifecycle-detail-table { margin-bottom:0; font-size:12px; }
+        .lifecycle-detail-table th { white-space:nowrap; }
+        .reconcile-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+        .reconcile-summary > div { padding:12px; border:1px solid #dbe7f3; border-radius:10px; background:#f8fbff; }
+        .reconcile-summary small { display:block; color:#66809a; }
+        .reconcile-status { display:inline-flex; padding:4px 7px; border-radius:999px; font-size:10px; font-weight:850; }
+        .reconcile-matchable { background:#e7f9f1; color:#087f5b; }
+        .reconcile-ambiguous { background:#fff7e6; color:#9a5b00; }
+        .reconcile-missing_order, .reconcile-missing_item, .reconcile-missing_variant { background:#fff0f1; color:#b4232f; }
         @keyframes lifecyclePulse { 50% { transform:scale(1.06); box-shadow:0 0 0 8px rgba(59,130,246,.06); } }
         @media (prefers-reduced-motion:reduce) { .lifecycle-stage.is-active .lifecycle-icon { animation:none; } }
         .action-row { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -110,12 +131,16 @@
         .group-production_done .group-dot { background: #0ea5e9; box-shadow: 0 0 0 4px rgba(14,165,233,.14); }
         .group-shipped_customer .group-dot { background: #4f46e5; box-shadow: 0 0 0 4px rgba(79,70,229,.14); }
         @media (max-width: 1100px) {
+            .workflow-topbar { flex-wrap: wrap; padding: 10px 18px; }
+            .workflow-search { order: 3; flex-basis: 100%; max-width: none; }
             .workflow-page { padding: 18px; }
             .workflow-heading { flex-direction: column; }
             .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .filter-panel { grid-template-columns: 1fr; }
             .order-group__summary { grid-template-columns: 1fr 24px; }
             .group-stat { display: none; }
+            .lifecycle-detail-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+            .reconcile-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
         }
     </style>
 </head>
@@ -138,6 +163,7 @@
                 <p>Một lệnh là một trục quản lý: kế hoạch, nhập kho, xuất sản xuất, hoàn tất và xuất khách.</p>
             </div>
             <div class="action-row">
+                <button id="openLinkReconcile" type="button" class="btn btn-outline-danger"><i data-lucide="link-2"></i> Đối soát liên kết</button>
                 <a class="btn btn-primary" href="{{ url('/client/nhap-thanh-pham-nhanh') }}">Nhập TP nhanh</a>
                 <a class="btn btn-outline-primary" href="{{ url('/client/xuat-vat-tu-noi-bo') }}">Xuất kho</a>
                 <a class="btn btn-outline-primary" href="{{ url('/client/theo-doi-san-xuat') }}">Đang sản xuất</a>
@@ -150,6 +176,7 @@
             <article class="kpi-card"><div class="kpi-icon"><i data-lucide="send"></i></div><div><div class="kpi-label">Đang SX</div><div id="kpiProduction" class="kpi-value">0</div></div></article>
             <article class="kpi-card"><div class="kpi-icon"><i data-lucide="badge-check"></i></div><div><div class="kpi-label">SX xong</div><div id="kpiDone" class="kpi-value">0</div></div></article>
             <article class="kpi-card"><div class="kpi-icon"><i data-lucide="truck"></i></div><div><div class="kpi-label">Đã xuất khách</div><div id="kpiShipped" class="kpi-value">0</div></div></article>
+            <article class="kpi-card"><div class="kpi-icon text-danger"><i data-lucide="triangle-alert"></i></div><div><div class="kpi-label">Cần xử lý</div><div id="kpiWarnings" class="kpi-value">0</div><div id="kpiErrors" class="muted">0 lỗi nghiêm trọng</div></div></article>
         </section>
 
         <section class="filter-panel">
@@ -169,6 +196,12 @@
                 </select>
             </div>
             <div class="d-flex align-items-end">
+                <div class="form-check form-switch mb-2">
+                    <input id="exceptionsOnly" class="form-check-input" type="checkbox" role="switch">
+                    <label class="form-check-label" for="exceptionsOnly">Chỉ lệnh cần xử lý</label>
+                </div>
+            </div>
+            <div class="d-flex align-items-end">
                 <button id="clearFilter" class="btn btn-outline-secondary w-100">Xóa lọc</button>
             </div>
         </section>
@@ -183,6 +216,40 @@
             </div>
         </section>
     </main>
+
+    <div class="modal fade" id="linkReconcileModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div><h2 class="modal-title fs-5">Đối soát chứng từ với lệnh sản xuất</h2><div class="muted">Chỉ ghi database nội bộ khi một dòng khớp duy nhất theo lệnh, mã hàng và biến thể.</div></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div id="linkReconcileBody" class="modal-body"><div class="empty-row">Đang kiểm tra...</div></div>
+                <div class="modal-footer justify-content-between">
+                    <div class="form-check">
+                        <input id="confirmLinkReconcile" class="form-check-input" type="checkbox">
+                        <label class="form-check-label" for="confirmLinkReconcile">Tôi đã kiểm tra danh sách đề xuất</label>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button id="applyLinkReconcile" type="button" class="btn btn-primary" disabled>Áp dụng liên kết chắc chắn</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="lifecycleDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div><h2 id="lifecycleDetailTitle" class="modal-title fs-5">Chi tiết vòng đời</h2><div id="lifecycleDetailSubtitle" class="muted"></div></div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div id="lifecycleDetailBody" class="modal-body"><div class="empty-row">Đang tải dữ liệu...</div></div>
+            </div>
+        </div>
+    </div>
 
     <div class="modal fade" id="standardItemModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -234,6 +301,15 @@
         const keywordEl = document.getElementById('keyword');
         const topKeywordEl = document.getElementById('topKeyword');
         const statusEl = document.getElementById('status');
+        const exceptionsOnlyEl = document.getElementById('exceptionsOnly');
+        const linkReconcileModal = new bootstrap.Modal(document.getElementById('linkReconcileModal'));
+        const linkReconcileBodyEl = document.getElementById('linkReconcileBody');
+        const confirmLinkReconcileEl = document.getElementById('confirmLinkReconcile');
+        const applyLinkReconcileEl = document.getElementById('applyLinkReconcile');
+        const lifecycleDetailModal = new bootstrap.Modal(document.getElementById('lifecycleDetailModal'));
+        const lifecycleDetailTitleEl = document.getElementById('lifecycleDetailTitle');
+        const lifecycleDetailSubtitleEl = document.getElementById('lifecycleDetailSubtitle');
+        const lifecycleDetailBodyEl = document.getElementById('lifecycleDetailBody');
         let timer = null;
         let catalogTimer = null;
         const standardModal = new bootstrap.Modal(document.getElementById('standardItemModal'));
@@ -250,6 +326,7 @@
         let catalogRequestSequence = 0;
         let standardSourceItem = {};
         let workflowRows = [];
+        let linkReconcileMatchable = 0;
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
         const statuses = {
@@ -267,20 +344,23 @@
             document.getElementById('kpiProduction').textContent = num(summary.in_production_count);
             document.getElementById('kpiDone').textContent = num(summary.production_done_count);
             document.getElementById('kpiShipped').textContent = num(summary.shipped_customer_count);
+            document.getElementById('kpiWarnings').textContent = num(summary.warning_count);
+            document.getElementById('kpiErrors').textContent = `${num(summary.error_count)} lỗi nghiêm trọng`;
         }
 
         function chips(items) {
             if (!items.length) return '<span class="muted">Chưa có dòng hàng</span>';
             return `<div class="item-stack">${items.map(item => {
                 const image = imageUrl(item.image_url || '');
+                const sourceCode = item.source_item_code || item.item_code || '';
+                const variantCode = item.variant_item_code || '';
                 const imageAction = item.item_code ? `<button type="button" class="catalog-image-trigger item-chip__image" title="${image ? 'Xem hoặc thay ảnh danh mục' : 'Paste ảnh vào danh mục'}" data-catalog-image-open data-catalog-id="${esc(item.catalog_id || '')}" data-item-code="${esc(item.item_code || '')}" data-item-name="${esc(item.description || '')}" data-unit="${esc(item.unit || '')}" data-size="${esc(item.size || '')}" data-color="${esc(item.color || '')}" data-image-url="${esc(image)}">
                     ${image ? `<img loading="lazy" src="${esc(image)}" alt="${esc(item.item_code || 'Ảnh danh mục')}">` : '<i data-lucide="image-plus"></i> Ảnh'}
                 </button>` : '';
                 return `<span class="item-chip">
-                <strong>${esc(item.item_code || 'Mã trống')}</strong>
+                ${variantCode ? `<span class="item-chip__source">Mã gốc: ${esc(sourceCode || '-')}</span><strong>${esc(variantCode)}</strong>` : `<strong>${esc(sourceCode || 'Mã trống')}</strong>`}
                 <button type="button" class="item-chip__edit" title="Sửa mã chuẩn" data-edit-standard="${esc(item.id)}" data-production-order="${esc(item.production_order || '')}" data-source-code="${esc(item.source_item_code || '')}" data-standard-code="${esc(item.standard_item_code || '')}" data-standard-catalog-id="${esc(item.standard_catalog_id || '')}" data-item-name="${esc(item.description || '')}" data-unit="${esc(item.unit || '')}" data-size="${esc(item.size || '')}" data-color="${esc(item.color || '')}" data-image-url="${esc(image)}">&#9998;</button>
                 ${imageAction}
-                ${item.standard_item_code ? `<span class="item-chip__source">Gốc: ${esc(item.source_item_code || '-')}</span>` : ''}
                 ${item.size ? ` · Size ${esc(item.size)}` : ''}
                 ${item.color ? ` · ${esc(item.color)}` : ''}
                 ${item.quantity ? ` · ${num(item.quantity)} ${esc(item.unit || '')}` : ''}
@@ -308,6 +388,137 @@
                 </div>`).join('');
             return `<div class="lifecycle">${stages}</div>
                 <div class="lifecycle-meta"><span><strong>${esc(lifecycle.current_stage || '-')}</strong></span><span>${num(lifecycle.percent)}%</span></div>`;
+        }
+
+        function warningHtml(warnings) {
+            if (!warnings?.length) return '';
+            return `<div class="warning-stack">${warnings.slice(0, 3).map(warning =>
+                `<span class="warning-chip ${warning.severity === 'error' ? 'is-error' : ''}" title="${esc(warning.message || '')}"><i data-lucide="${warning.severity === 'error' ? 'circle-alert' : 'triangle-alert'}"></i>${esc(warning.message || '')}</span>`
+            ).join('')}</div>`;
+        }
+
+        function documentRows(rows, typeLabel) {
+            if (!rows?.length) return `<tr><td colspan="6" class="text-center text-muted py-3">Chưa có ${esc(typeLabel)}.</td></tr>`;
+            return rows.map(row => `<tr>
+                <td class="code">${esc(row.code || '-')}</td><td>${esc(row.date || '-')}</td>
+                <td>${esc(row.issue_type || row.source || '-')}</td><td class="text-end">${num(row.quantity)}</td>
+                <td class="text-end">${num(row.line_count)}</td><td class="text-end ${Number(row.unlinked_lines) ? 'text-warning fw-bold' : ''}">${num(row.unlinked_lines)}</td>
+            </tr>`).join('');
+        }
+
+        function renderLifecycleDetail(data) {
+            const warnings = data.warnings || [];
+            const materials = data.bom?.data || [];
+            const operations = data.operations || [];
+            lifecycleDetailTitleEl.textContent = `Vòng đời ${data.production_order || ''}`;
+            lifecycleDetailSubtitleEl.textContent = [data.customer, data.purchase_order].filter(Boolean).join(' · ');
+            lifecycleDetailBodyEl.innerHTML = `
+                ${warnings.length ? `<div class="alert ${warnings.some(row => row.severity === 'error') ? 'alert-danger' : 'alert-warning'} mb-3"><strong>${num(warnings.length)} cảnh báo</strong><ul class="mb-0 mt-1">${warnings.map(row => `<li>${esc(row.message)}</li>`).join('')}</ul></div>` : '<div class="alert alert-success mb-3">Không phát hiện ngoại lệ trong dữ liệu hiện có.</div>'}
+                <div class="lifecycle-detail-grid">
+                    <div class="lifecycle-detail-stat"><small>Kế hoạch</small><strong>${num(data.planned_quantity)}</strong></div>
+                    <div class="lifecycle-detail-stat"><small>Đã nhập thành phẩm</small><strong>${num(data.received_quantity)}</strong></div>
+                    <div class="lifecycle-detail-stat"><small>Đã xuất khách</small><strong>${num(data.customer_issue_quantity)}</strong></div>
+                    <div class="lifecycle-detail-stat"><small>Liên kết ID</small><strong>${num((data.link_integrity?.receipt?.linked || 0) + (data.link_integrity?.issue?.linked || 0))}/${num((data.link_integrity?.receipt?.total || 0) + (data.link_integrity?.issue?.total || 0))}</strong></div>
+                </div>
+                <section class="lifecycle-detail-section"><h3>BOM và vật tư</h3><div class="table-responsive"><table class="table table-sm lifecycle-detail-table"><thead><tr><th>Mã vật tư</th><th>Vai trò</th><th>ĐVT</th><th class="text-end">Cần</th><th class="text-end">Đã xuất</th><th class="text-end">Thiếu xuất</th><th class="text-end">Tồn khả dụng</th></tr></thead><tbody>${materials.length ? materials.map(row => `<tr><td class="code">${esc(row.material_code || '-')}</td><td>${esc(row.component_role || '-')}</td><td>${esc(row.unit || '-')}</td><td class="text-end">${num(row.required_quantity)}</td><td class="text-end">${num(row.issued_quantity)}</td><td class="text-end">${num(row.suggested_quantity)}</td><td class="text-end ${row.stock_status === 'short' ? 'text-danger fw-bold' : ''}">${num(row.available_quantity)}</td></tr>`).join('') : '<tr><td colspan="7" class="text-center text-muted py-3">Chưa có BOM.</td></tr>'}</tbody></table></div></section>
+                <section class="lifecycle-detail-section"><h3>Công đoạn</h3><div class="operation-list">${operations.length ? operations.map((row, index) => `<div class="operation-row"><span class="operation-index">${index + 1}</span><div><strong>${esc(row.name || row.code)}</strong><div class="muted">Đạt ${num(row.good_quantity)} · Lỗi ${num(row.defect_quantity)} · ${num(row.document_count)} lượt ghi nhận</div></div><span class="status-pill status-${row.status === 'completed' ? 'production_done' : row.status === 'in_progress' ? 'in_production' : 'planned'}">${esc(row.status || 'pending')}</span></div>`).join('') : '<div class="empty-row">Chưa thiết lập tuyến công đoạn.</div>'}</div></section>
+                <section class="lifecycle-detail-section"><h3>Phiếu nhập thành phẩm</h3><div class="table-responsive"><table class="table table-sm lifecycle-detail-table"><thead><tr><th>Số phiếu</th><th>Ngày</th><th>Nguồn</th><th class="text-end">Số lượng</th><th class="text-end">Dòng</th><th class="text-end">Chưa nối ID</th></tr></thead><tbody>${documentRows(data.receipts, 'phiếu nhập')}</tbody></table></div></section>
+                <section class="lifecycle-detail-section"><h3>Phiếu xuất liên quan</h3><div class="table-responsive"><table class="table table-sm lifecycle-detail-table"><thead><tr><th>Số phiếu</th><th>Ngày</th><th>Loại</th><th class="text-end">Số lượng</th><th class="text-end">Dòng</th><th class="text-end">Chưa nối ID</th></tr></thead><tbody>${documentRows(data.issues, 'phiếu xuất')}</tbody></table></div></section>`;
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function openLifecycleDetail(orderId) {
+            lifecycleDetailTitleEl.textContent = 'Chi tiết vòng đời';
+            lifecycleDetailSubtitleEl.textContent = '';
+            lifecycleDetailBodyEl.innerHTML = '<div class="empty-row">Đang tải dữ liệu...</div>';
+            lifecycleDetailModal.show();
+            fetch(`/api/lenh-san-xuat-trung-tam/${encodeURIComponent(orderId)}/vong-doi`, { headers: { Accept: 'application/json' } })
+                .then(async response => {
+                    const json = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(json.message || 'Không tải được chi tiết vòng đời.');
+                    return json.data || {};
+                })
+                .then(renderLifecycleDetail)
+                .catch(error => { lifecycleDetailBodyEl.innerHTML = `<div class="alert alert-danger">${esc(error.message)}</div>`; });
+        }
+
+        function reconcileStatusLabel(status) {
+            return {
+                matchable: 'Có thể liên kết',
+                ambiguous: 'Nhiều biến thể',
+                missing_order: 'Không có lệnh',
+                missing_item: 'Sai mã hàng',
+                missing_variant: 'Thiếu biến thể',
+            }[status] || status;
+        }
+
+        function renderLinkReconcile(data) {
+            const summary = data.summary || {};
+            const rows = data.rows || [];
+            linkReconcileMatchable = Number(summary.matchable || 0);
+            confirmLinkReconcileEl.checked = false;
+            applyLinkReconcileEl.disabled = true;
+            linkReconcileBodyEl.innerHTML = `
+                <div class="reconcile-summary">
+                    <div><small>Dòng cần xem</small><strong>${num(summary.total)}</strong></div>
+                    <div><small>Có thể liên kết</small><strong class="text-success">${num(summary.matchable)}</strong></div>
+                    <div><small>Nhiều biến thể</small><strong class="text-warning">${num(summary.ambiguous)}</strong></div>
+                    <div><small>Thiếu lệnh / mã / biến thể</small><strong class="text-danger">${num(Number(summary.missing_order || 0) + Number(summary.missing_item || 0) + Number(summary.missing_variant || 0))}</strong></div>
+                </div>
+                ${summary.truncated ? `<div class="alert alert-warning">Danh sách đang giới hạn ${num(summary.limit)} dòng. Hãy xử lý và tải lại theo từng đợt.</div>` : ''}
+                <div class="table-responsive"><table class="table table-sm lifecycle-detail-table align-middle"><thead><tr><th>Loại</th><th>Phiếu / ngày</th><th>Lệnh</th><th>Mã nội bộ</th><th>Size / màu</th><th class="text-end">SL</th><th>Kết quả</th></tr></thead><tbody>
+                    ${rows.length ? rows.map(row => `<tr>
+                        <td>${row.line_type === 'receipt' ? 'Nhập' : 'Xuất'}</td>
+                        <td><span class="code">${esc(row.document_code || '-')}</span><div class="muted">${esc(row.document_date || '-')}</div></td>
+                        <td><span class="code">${esc(row.production_order || '-')}</span>${row.current_order_code ? `<div class="muted">ID hiện tại: ${esc(row.current_order_code)}</div>` : ''}</td>
+                        <td><strong>${esc(row.internal_item_code || '-')}</strong>${row.source_item_code ? `<div class="muted">Mã gốc: ${esc(row.source_item_code)}</div>` : ''}${row.suggested_item_code ? `<div class="muted">Biến thể: ${esc(row.suggested_item_code)}</div>` : ''}</td>
+                        <td>${esc(row.size || '-')}<div class="muted">${esc(row.color || '-')}</div></td>
+                        <td class="text-end">${num(row.quantity)} ${esc(row.unit || '')}</td>
+                        <td><span class="reconcile-status reconcile-${esc(row.status)}">${esc(reconcileStatusLabel(row.status))}</span><div class="muted mt-1">${esc(row.reason || '')}</div></td>
+                    </tr>`).join('') : '<tr><td colspan="7" class="text-center text-success py-4">Không có liên kết bất thường.</td></tr>'}
+                </tbody></table></div>`;
+        }
+
+        function loadLinkReconcile() {
+            linkReconcileBodyEl.innerHTML = '<div class="empty-row">Đang kiểm tra liên kết...</div>';
+            confirmLinkReconcileEl.checked = false;
+            applyLinkReconcileEl.disabled = true;
+            linkReconcileModal.show();
+            return fetch('/api/lenh-san-xuat-trung-tam/doi-soat-lien-ket?limit=500', { headers: { Accept: 'application/json' } })
+                .then(async response => {
+                    const json = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(json.message || 'Không thể đối soát liên kết.');
+                    return json.data || {};
+                })
+                .then(renderLinkReconcile)
+                .catch(error => { linkReconcileBodyEl.innerHTML = `<div class="alert alert-danger">${esc(error.message)}</div>`; });
+        }
+
+        function applyLinkReconcile() {
+            if (!confirmLinkReconcileEl.checked || linkReconcileMatchable < 1) return;
+            applyLinkReconcileEl.disabled = true;
+            applyLinkReconcileEl.textContent = 'Đang cập nhật...';
+            fetch('/api/lenh-san-xuat-trung-tam/doi-soat-lien-ket', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: JSON.stringify({ confirm: true, limit: 500 }),
+            }).then(async response => {
+                const json = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(json.message || 'Không cập nhật được liên kết.');
+                return json.data || {};
+            }).then(data => {
+                renderLinkReconcile(data);
+                load();
+            }).catch(error => {
+                linkReconcileBodyEl.insertAdjacentHTML('afterbegin', `<div class="alert alert-danger">${esc(error.message)}</div>`);
+            }).finally(() => {
+                applyLinkReconcileEl.textContent = 'Áp dụng liên kết chắc chắn';
+                applyLinkReconcileEl.disabled = true;
+            });
         }
 
         function openStandardItemEditor(button) {
@@ -516,7 +727,7 @@
                 <td class="text-end">${num(row.production_issue_quantity)}<div class="muted">${num(row.production_document_count)} phiếu</div></td>
                 <td class="text-end">${num(row.customer_issue_quantity)}<div class="muted">${num(row.customer_document_count)} phiếu</div></td>
                 <td>${lifecycleHtml(row)}</td>
-                <td><span class="status-pill ${status[1]}">${status[0]}</span></td>
+                <td><span class="status-pill ${status[1]}">${status[0]}</span>${warningHtml(row.warnings)}</td>
                 <td>
                     <div class="muted">Nhập</div>${codeList(row.receipt_codes)}
                     <div class="muted mt-1">Xuất SX</div>${codeList(row.production_issue_codes)}
@@ -524,6 +735,7 @@
                 </td>
                 <td>
                     <div class="action-row">
+                        ${row.canonical_order_id ? `<button type="button" class="btn btn-sm btn-outline-dark" data-lifecycle-detail="${esc(row.canonical_order_id)}">Chi tiết</button>` : ''}
                         ${bomItemCode ? `<a class="btn btn-sm btn-outline-secondary" href="/client/dinh-muc-san-xuat?item_code=${encodeURIComponent(bomItemCode)}">BOM</a>` : ''}
                         <a class="btn btn-sm btn-outline-primary" href="/client/nhap-thanh-pham-nhanh?production_order=${encodeURIComponent(row.production_order)}">Nhập</a>
                         <a class="btn btn-sm btn-outline-primary" href="/client/xuat-vat-tu-noi-bo?production_order=${encodeURIComponent(row.production_order)}">Xuất</a>
@@ -602,6 +814,7 @@
             const params = new URLSearchParams({ limit: 100 });
             if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
             if (statusEl.value) params.set('status', statusEl.value);
+            if (exceptionsOnlyEl.checked) params.set('exceptions', '1');
             groupsEl.innerHTML = '<div class="empty-row">Đang tải dữ liệu...</div>';
             return fetch('/api/lenh-san-xuat-trung-tam?' + params.toString(), { headers: { Accept: 'application/json' } })
                 .then(async response => {
@@ -628,13 +841,25 @@
         keywordEl.addEventListener('input', () => queue(keywordEl));
         topKeywordEl.addEventListener('input', () => queue(topKeywordEl));
         statusEl.addEventListener('change', load);
+        exceptionsOnlyEl.addEventListener('change', load);
+        document.getElementById('openLinkReconcile').addEventListener('click', loadLinkReconcile);
+        confirmLinkReconcileEl.addEventListener('change', () => {
+            applyLinkReconcileEl.disabled = !confirmLinkReconcileEl.checked || linkReconcileMatchable < 1;
+        });
+        applyLinkReconcileEl.addEventListener('click', applyLinkReconcile);
         document.getElementById('clearFilter').addEventListener('click', () => {
             keywordEl.value = '';
             topKeywordEl.value = '';
             statusEl.value = '';
+            exceptionsOnlyEl.checked = false;
             load();
         });
         groupsEl.addEventListener('click', event => {
+            const lifecycleButton = event.target.closest('[data-lifecycle-detail]');
+            if (lifecycleButton) {
+                openLifecycleDetail(lifecycleButton.dataset.lifecycleDetail);
+                return;
+            }
             const imageButton = event.target.closest('[data-catalog-image-open]');
             if (imageButton) {
                 window.CatalogImagePaste?.open({

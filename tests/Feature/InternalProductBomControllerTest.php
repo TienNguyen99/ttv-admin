@@ -5,8 +5,11 @@ namespace Tests\Feature;
 use App\Http\Controllers\InternalProductBomController;
 use App\Http\Controllers\InternalProductionOrderController;
 use App\Models\InternalBtpProductionOrder;
+use App\Models\InternalItemCatalog;
 use App\Models\InternalProductionOperationProgress;
 use App\Models\InternalProductionOrder;
+use App\Models\InventoryPackage;
+use App\Models\WarehouseLocation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -265,6 +268,151 @@ class InternalProductBomControllerTest extends TestCase
         $this->assertEqualsWithDelta(76.363636, $materials[0]['required_quantity'], 0.00001);
         $this->assertEqualsWithDelta(7.636364, $materials[1]['required_quantity'], 0.00001);
         $this->assertEqualsWithDelta(84.0, $materials[0]['required_quantity'] + $materials[1]['required_quantity'], 0.000001);
+    }
+
+    public function test_snapshot_keeps_the_original_requirement_after_the_profile_changes(): void
+    {
+        $controller = app(InternalProductBomController::class);
+        $payload = [
+            'item_code' => 'TEST-SNAPSHOT-FG',
+            'unit' => 'PCS',
+            'operations' => [['operation_code' => 'IN', 'operation_name' => 'In']],
+            'materials' => [[
+                'material_code' => 'TEST-SNAPSHOT-MATERIAL',
+                'component_role' => 'CHUNG',
+                'unit' => 'KG',
+                'consumption_per_unit' => 0.01,
+                'waste_percent' => 0,
+                'operation_code' => 'IN',
+            ]],
+        ];
+        $controller->save(Request::create('/api/dinh-muc-san-xuat/luu', 'POST', $payload));
+
+        InternalProductionOrder::query()->create([
+            'production_order' => 'TEST-SNAPSHOT-ORDER',
+            'item_code' => 'TEST-SNAPSHOT-FG',
+            'standard_item_code' => 'TEST-SNAPSHOT-FG',
+            'order_quantity' => 100,
+            'is_active' => true,
+        ]);
+        $controller->snapshotOrder(Request::create('/api/dinh-muc-san-xuat/chot-lenh', 'POST', [
+            'production_order' => 'TEST-SNAPSHOT-ORDER',
+        ]));
+
+        $payload['materials'][0]['consumption_per_unit'] = 0.02;
+        $controller->save(Request::create('/api/dinh-muc-san-xuat/luu', 'POST', $payload));
+
+        $snapshotted = $controller->orderNeeds(Request::create('/api/dinh-muc-san-xuat/nhu-cau', 'GET', [
+            'production_order' => 'TEST-SNAPSHOT-ORDER',
+        ]))->getData(true)['data'][0];
+
+        $this->assertTrue($snapshotted['is_snapshot']);
+        $this->assertSame(1, $snapshotted['bom_revision']);
+        $this->assertEquals(1.0, $snapshotted['materials'][0]['required_quantity']);
+    }
+
+    public function test_aggregate_reserves_shared_stock_in_order_and_reports_the_shortage(): void
+    {
+        $controller = app(InternalProductBomController::class);
+        $controller->save(Request::create('/api/dinh-muc-san-xuat/luu', 'POST', [
+            'item_code' => 'TEST-STOCK-FG',
+            'unit' => 'PCS',
+            'operations' => [['operation_code' => 'IN', 'operation_name' => 'In']],
+            'materials' => [[
+                'material_code' => 'TEST-SHARED-STOCK',
+                'component_role' => 'CHUNG',
+                'unit' => 'KG',
+                'consumption_per_unit' => 1,
+                'waste_percent' => 0,
+                'operation_code' => 'IN',
+            ]],
+        ]));
+        InternalItemCatalog::query()->create([
+            'item_code' => 'TEST-SHARED-STOCK',
+            'item_name' => 'Shared stock',
+            'unit' => 'KG',
+            'is_active' => true,
+        ]);
+        $location = WarehouseLocation::query()->create([
+            'location_code' => 'TEST-BOM-STOCK-' . uniqid(),
+            'warehouse_code' => 'KTPHAM',
+            'status' => 'active',
+        ]);
+        InventoryPackage::query()->create([
+            'package_code' => 'TEST-BOM-PKG-' . uniqid(),
+            'warehouse_location_id' => $location->id,
+            'ma_sp' => 'TEST-SHARED-STOCK',
+            'ma_ko' => 'KTPHAM',
+            'internal_item_code' => 'TEST-SHARED-STOCK',
+            'quantity' => 10,
+            'checked_at' => '2026-08-01',
+        ]);
+        foreach (['01', '02'] as $suffix) {
+            InternalProductionOrder::query()->create([
+                'production_order' => 'TEST-STOCK-ORDER-' . $suffix,
+                'item_code' => 'TEST-STOCK-FG',
+                'standard_item_code' => 'TEST-STOCK-FG',
+                'order_quantity' => 7,
+                'is_active' => true,
+            ]);
+        }
+
+        $rows = $controller->aggregateOrderNeeds(Request::create(
+            '/api/dinh-muc-san-xuat/tong-hop-cap-vat-tu',
+            'GET',
+            ['production_orders' => ['TEST-STOCK-ORDER-01', 'TEST-STOCK-ORDER-02']]
+        ))->getData(true)['data'];
+
+        $this->assertCount(2, $rows);
+        $this->assertEquals(10.0, $rows[0]['available_quantity']);
+        $this->assertEquals(7.0, $rows[0]['stock_allocatable_quantity']);
+        $this->assertEquals(0.0, $rows[0]['shortage_quantity']);
+        $this->assertSame('enough', $rows[0]['stock_status']);
+        $this->assertEquals(3.0, $rows[1]['available_quantity']);
+        $this->assertEquals(3.0, $rows[1]['stock_allocatable_quantity']);
+        $this->assertEquals(4.0, $rows[1]['shortage_quantity']);
+        $this->assertSame('short', $rows[1]['stock_status']);
+    }
+
+    public function test_aggregate_query_count_does_not_grow_with_the_number_of_orders(): void
+    {
+        $controller = app(InternalProductBomController::class);
+        $controller->save(Request::create('/api/dinh-muc-san-xuat/luu', 'POST', [
+            'item_code' => 'TEST-BATCH-FG',
+            'unit' => 'PCS',
+            'operations' => [['operation_code' => 'IN', 'operation_name' => 'In']],
+            'materials' => [[
+                'material_code' => 'TEST-BATCH-MATERIAL',
+                'component_role' => 'CHUNG',
+                'unit' => 'KG',
+                'consumption_per_unit' => 0.1,
+                'operation_code' => 'IN',
+            ]],
+        ]));
+        $codes = [];
+        foreach (range(1, 20) as $index) {
+            $codes[] = $code = 'TEST-BATCH-ORDER-' . str_pad((string) $index, 2, '0', STR_PAD_LEFT);
+            InternalProductionOrder::query()->create([
+                'production_order' => $code,
+                'item_code' => 'TEST-BATCH-FG',
+                'standard_item_code' => 'TEST-BATCH-FG',
+                'order_quantity' => 10,
+                'is_active' => true,
+            ]);
+        }
+
+        DB::connection('internal')->flushQueryLog();
+        DB::connection('internal')->enableQueryLog();
+        $response = $controller->aggregateOrderNeeds(Request::create(
+            '/api/dinh-muc-san-xuat/tong-hop-cap-vat-tu',
+            'GET',
+            ['production_orders' => $codes]
+        ))->getData(true);
+        $queryCount = count(DB::connection('internal')->getQueryLog());
+        DB::connection('internal')->disableQueryLog();
+
+        $this->assertCount(20, $response['data']);
+        $this->assertLessThanOrEqual(12, $queryCount);
     }
 
     public function test_central_order_exposes_lifecycle_and_updates_an_operation(): void

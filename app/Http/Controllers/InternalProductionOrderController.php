@@ -2,12 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\InternalGoogleSyncBusyException;
+use App\Exceptions\InternalGoogleSyncSourceException;
 use App\Models\InternalItemCatalog;
 use App\Models\InternalProductBomProfile;
 use App\Models\InternalProductionOrder;
 use App\Models\InternalProductionOperationProgress;
 use App\Models\InternalProductionOrderBomSnapshot;
 use App\Services\InternalAudit;
+use App\Services\InternalGoogleSyncContext;
+use App\Services\InternalGoogleSyncCoordinator;
+use App\Services\InternalProductionLifecycleService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -115,8 +120,9 @@ class InternalProductionOrderController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    public function workflow(Request $request)
+    public function workflow(Request $request, ?InternalProductionLifecycleService $lifecycleService = null)
     {
+        $lifecycleService = $lifecycleService ?: app(InternalProductionLifecycleService::class);
         $keyword = mb_strtoupper(trim((string) $request->query('keyword', '')));
         $status = trim((string) $request->query('status', ''));
         $limit = min(max((int) $request->query('limit', 250), 1), 1000);
@@ -143,6 +149,7 @@ class InternalProductionOrderController extends Controller
             ->get();
 
         $orderCodes = $orders->pluck('production_order')->filter()->unique()->values();
+        $orderIds = $orders->pluck('id')->map(fn ($id) => (int) $id)->filter()->values();
         $catalogIds = $orders->pluck('standard_catalog_id')->filter()->unique()->values();
         $catalogCodes = $orders->flatMap(function ($order) {
             return [$order->standard_item_code, $order->item_code];
@@ -199,34 +206,44 @@ class InternalProductionOrderController extends Controller
 
         $receiptRows = DB::connection('internal')->table('internal_material_receipt_lines as l')
             ->join('internal_material_receipts as r', 'r.id', '=', 'l.receipt_id')
-            ->whereIn('l.production_order', $orderCodes->all())
-            ->select(
-                'l.production_order',
-                DB::raw('SUM(l.quantity) as quantity'),
-                DB::raw('COUNT(*) as line_count'),
-                DB::raw('COUNT(DISTINCT r.id) as document_count'),
-                DB::raw("GROUP_CONCAT(DISTINCT r.receipt_code ORDER BY r.receipt_date SEPARATOR ', ') as document_codes")
-            )
-            ->groupBy('l.production_order')
+            ->leftJoin('internal_production_orders as linked_order', 'linked_order.id', '=', 'l.production_order_id')
+            ->where('r.status', 'posted')
+            ->where(function ($query) {
+                $query->where('r.source', 'Phieu nhap thanh pham')
+                    ->orWhere('r.receipt_code', 'like', 'PNTP-%');
+            })
+            ->where(function ($query) use ($orderCodes, $orderIds) {
+                $query->whereIn('l.production_order', $orderCodes->all())
+                    ->orWhereIn('l.production_order_id', $orderIds->all());
+            })
+            ->selectRaw("COALESCE(linked_order.production_order, NULLIF(l.production_order, '')) as production_order")
+            ->selectRaw('SUM(l.quantity) as quantity')
+            ->selectRaw('COUNT(*) as line_count')
+            ->selectRaw('COUNT(DISTINCT r.id) as document_count')
+            ->selectRaw("GROUP_CONCAT(DISTINCT r.receipt_code ORDER BY r.receipt_date SEPARATOR ', ') as document_codes")
+            ->groupBy('production_order')
             ->get()
             ->keyBy('production_order');
 
         $issueRows = DB::connection('internal')->table('internal_material_issue_lines as l')
             ->join('internal_material_issues as i', 'i.id', '=', 'l.issue_id')
-            ->whereIn('l.production_order', $orderCodes->all())
-            ->select(
-                'l.production_order',
-                DB::raw("SUM(CASE WHEN i.issue_type = 'material' THEN l.quantity ELSE 0 END) as material_quantity"),
-                DB::raw("SUM(CASE WHEN i.issue_type = 'production' THEN l.quantity ELSE 0 END) as production_quantity"),
-                DB::raw("SUM(CASE WHEN i.issue_type = 'customer' THEN l.quantity ELSE 0 END) as customer_quantity"),
-                DB::raw("COUNT(DISTINCT CASE WHEN i.issue_type = 'material' THEN i.id END) as material_document_count"),
-                DB::raw("COUNT(DISTINCT CASE WHEN i.issue_type = 'production' THEN i.id END) as production_document_count"),
-                DB::raw("COUNT(DISTINCT CASE WHEN i.issue_type = 'customer' THEN i.id END) as customer_document_count"),
-                DB::raw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'material' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as material_issue_codes"),
-                DB::raw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'production' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as production_issue_codes"),
-                DB::raw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'customer' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as customer_issue_codes")
-            )
-            ->groupBy('l.production_order')
+            ->leftJoin('internal_production_orders as linked_order', 'linked_order.id', '=', 'l.production_order_id')
+            ->where('i.status', 'posted')
+            ->where(function ($query) use ($orderCodes, $orderIds) {
+                $query->whereIn('l.production_order', $orderCodes->all())
+                    ->orWhereIn('l.production_order_id', $orderIds->all());
+            })
+            ->selectRaw("COALESCE(linked_order.production_order, NULLIF(l.production_order, '')) as production_order")
+            ->selectRaw("SUM(CASE WHEN i.issue_type = 'material' THEN l.quantity ELSE 0 END) as material_quantity")
+            ->selectRaw("SUM(CASE WHEN i.issue_type = 'production' THEN l.quantity ELSE 0 END) as production_quantity")
+            ->selectRaw("SUM(CASE WHEN i.issue_type = 'customer' THEN l.quantity ELSE 0 END) as customer_quantity")
+            ->selectRaw("COUNT(DISTINCT CASE WHEN i.issue_type = 'material' THEN i.id END) as material_document_count")
+            ->selectRaw("COUNT(DISTINCT CASE WHEN i.issue_type = 'production' THEN i.id END) as production_document_count")
+            ->selectRaw("COUNT(DISTINCT CASE WHEN i.issue_type = 'customer' THEN i.id END) as customer_document_count")
+            ->selectRaw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'material' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as material_issue_codes")
+            ->selectRaw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'production' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as production_issue_codes")
+            ->selectRaw("GROUP_CONCAT(DISTINCT CASE WHEN i.issue_type = 'customer' THEN i.issue_code END ORDER BY i.issue_date SEPARATOR ', ') as customer_issue_codes")
+            ->groupBy('production_order')
             ->get()
             ->keyBy('production_order');
 
@@ -261,6 +278,12 @@ class InternalProductionOrderController extends Controller
                         'item_code' => trim((string) ($catalog->item_code ?? '')) ?: ($standardItemCode !== '' ? $standardItemCode : $sourceItemCode),
                         'source_item_code' => $sourceItemCode,
                         'standard_item_code' => $standardItemCode,
+                        'variant_item_code' => $standardItemCode !== '' && mb_strtoupper($standardItemCode) !== mb_strtoupper($sourceItemCode)
+                            ? $standardItemCode
+                            : null,
+                        'variant_parent_id' => $line->variant_parent_id ? (int) $line->variant_parent_id : null,
+                        'is_variant' => (bool) $line->variant_parent_id,
+                        'is_variant_parent' => (bool) $line->is_variant_parent,
                         'standard_catalog_id' => $catalog ? (int) $catalog->id : null,
                         'catalog_id' => $catalog ? (int) $catalog->id : null,
                         'image_url' => trim((string) ($catalog->image_url ?? '')),
@@ -320,15 +343,28 @@ class InternalProductionOrderController extends Controller
                     'items' => $items,
                 ];
             })
-            ->values()
+            ->values();
+
+        $rows = $lifecycleService
+            ->enrich($orders, $rows)
             ->filter(function ($row) use ($status) {
                 return $status === '' || $row['status'] === $status;
+            })
+            ->when($request->boolean('exceptions'), function ($rows) {
+                return $rows->filter(fn ($row) => (int) ($row['warning_count'] ?? 0) > 0);
             })
             ->values();
 
         return response()->json([
             'data' => $rows,
             'summary' => $this->workflowSummary($rows),
+        ]);
+    }
+
+    public function lifecycle(InternalProductionOrder $order, InternalProductionLifecycleService $lifecycleService)
+    {
+        return response()->json([
+            'data' => $lifecycleService->detail($order),
         ]);
     }
 
@@ -757,8 +793,12 @@ class InternalProductionOrderController extends Controller
         ]);
     }
 
-    public function sync()
+    public function sync(?InternalGoogleSyncCoordinator $sync = null)
     {
+        $sync = $sync ?: app(InternalGoogleSyncCoordinator::class);
+
+        try {
+            $result = $sync->run('operational', 'production_orders', function (InternalGoogleSyncContext $syncContext) {
         $url = sprintf(
             'https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=%s',
             self::SPREADSHEET_ID,
@@ -770,16 +810,18 @@ class InternalProductionOrderController extends Controller
             ->get($url);
 
         if (!$response->successful()) {
-            return response()->json([
-                'message' => 'Không đọc được Google Sheet. Kiểm tra quyền chia sẻ của file.',
-            ], 502);
+            throw new InternalGoogleSyncSourceException(
+                'Không đọc được Google Sheet. Kiểm tra quyền chia sẻ của file.',
+                502
+            );
         }
 
         $rows = $this->parseCsv($response->body());
         if (count($rows) < 2) {
-            return response()->json([
-                'message' => 'Tab LENH_SAN_XUAT không có dữ liệu hợp lệ.',
-            ], 422);
+            throw new InternalGoogleSyncSourceException(
+                'Tab LENH_SAN_XUAT không có dữ liệu hợp lệ.',
+                422
+            );
         }
 
         $headers = array_map([$this, 'normalizeHeader'], array_shift($rows));
@@ -789,19 +831,29 @@ class InternalProductionOrderController extends Controller
         $updated = 0;
         $unchanged = 0;
         $skipped = 0;
+        $existingByRowKey = InternalProductionOrder::query()
+            ->whereNotNull('row_key')
+            ->select(['id', 'row_key', 'source_hash', 'is_active', 'is_variant_parent'])
+            ->get()
+            ->keyBy('row_key');
 
-        DB::connection('internal')->transaction(function () use ($rows, $headers, $batch, &$activeKeys, &$created, &$updated, &$unchanged, &$skipped) {
+        DB::connection('internal')->transaction(function () use ($rows, $headers, $batch, $syncContext, $existingByRowKey, &$activeKeys, &$created, &$updated, &$unchanged, &$skipped) {
             foreach ($rows as $index => $values) {
+                $sourceRow = $index + 2;
+                $syncContext->checkpoint($sourceRow);
                 $row = [];
-                foreach ($headers as $column => $header) {
-                    $row[$header] = trim((string) ($values[$column] ?? ''));
-                }
+                $productionOrder = '';
 
-                $productionOrder = $this->pick($row, ['lenh sx']);
-                if ($productionOrder === '') {
-                    $skipped++;
-                    continue;
-                }
+                try {
+                    foreach ($headers as $column => $header) {
+                        $row[$header] = trim((string) ($values[$column] ?? ''));
+                    }
+
+                    $productionOrder = $this->pick($row, ['lenh sx']);
+                    if ($productionOrder === '') {
+                        $skipped++;
+                        continue;
+                    }
 
                 $itemCode = $this->pick($row, ['ma hang']);
                 $size = $this->pick($row, ['size']);
@@ -813,9 +865,8 @@ class InternalProductionOrderController extends Controller
                 $customerDate = $this->date($this->pick($row, ['ngay khach hang yeu cau giao']));
                 $targetDate = $customerDate ?: $promisedDate;
                 $status = $this->status($targetDate);
-                $existing = InternalProductionOrder::query()
-                    ->where('row_key', $rowKey)
-                    ->first();
+                $existing = $existingByRowKey->get($rowKey);
+                $wasExisting = (bool) $existing;
                 $sourceHash = hash('sha256', json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                 if ($existing && hash_equals((string) ($existing->source_hash ?? ''), $sourceHash)) {
                     if (!$existing->is_active && !$existing->is_variant_parent) {
@@ -825,9 +876,7 @@ class InternalProductionOrderController extends Controller
                     continue;
                 }
 
-                InternalProductionOrder::query()->updateOrCreate(
-                    ['row_key' => $rowKey],
-                    [
+                $attributes = [
                         'production_order' => $productionOrder,
                         'purchase_order' => $this->pick($row, ['purchase order po']),
                         'tracking_staff' => $this->pick($row, ['nhan vien theo doi']),
@@ -845,15 +894,25 @@ class InternalProductionOrderController extends Controller
                         'customer_requested_date' => $this->dateValue($this->pick($row, ['ngay khach hang yeu cau giao'])),
                         'delivery_place' => $this->pick($row, ['noi giao']),
                         'status' => $status,
-                        'source_row' => $index + 2,
+                        'source_row' => $sourceRow,
                         'raw_data' => $row,
                         'source_hash' => $sourceHash,
                         'sync_batch' => $batch,
                         'is_active' => !($existing && $existing->is_variant_parent),
-                    ]
-                );
+                    ];
 
-                $existing ? $updated++ : $created++;
+                if ($existing) {
+                    $existing->fill($attributes)->save();
+                } else {
+                    $existing = InternalProductionOrder::query()->create(['row_key' => $rowKey] + $attributes);
+                    $existingByRowKey->put($rowKey, $existing);
+                }
+
+                    $wasExisting ? $updated++ : $created++;
+                } catch (\Throwable $error) {
+                    $skipped++;
+                    $syncContext->recordRowError($sourceRow, $productionOrder, $error, $row);
+                }
             }
 
             $archiveQuery = InternalProductionOrder::query()
@@ -864,23 +923,39 @@ class InternalProductionOrderController extends Controller
             }
             $archiveQuery->update(['is_active' => false]);
         });
-        $relinkedDocumentLines = $this->reconcileDocumentProductionOrderLinks();
+        // Linking historical documents is an explicit reviewed action in the central-order screen.
+        $relinkedDocumentLines = 0;
         $customerSync = app(\App\Services\InternalCustomerCatalogSync::class)->syncFromProductionOrders();
         Cache::forget('internal_catalog_customer_map_v1');
 
-        return response()->json([
-            'message' => 'Đã đồng bộ lệnh sản xuất từ Google Sheet.',
-            'data' => [
+        return [
                 'created' => $created,
                 'updated' => $updated,
                 'unchanged' => $unchanged,
                 'skipped' => $skipped,
+                'processed' => count($rows),
                 'active_variants' => count(array_unique($activeKeys)),
                 'relinked_document_lines' => $relinkedDocumentLines,
                 'customers' => $customerSync,
                 'sheet' => self::SHEET_NAME,
-            ],
-        ]);
+            ];
+            }, (int) config('internal_sync.operational_lock_seconds', 110));
+
+            return response()->json([
+                'message' => ($result['failed'] ?? 0) > 0
+                    ? 'Đã đồng bộ một phần lệnh sản xuất; có dòng cần kiểm tra.'
+                    : 'Đã đồng bộ lệnh sản xuất từ Google Sheet.',
+                'data' => $result,
+            ]);
+        } catch (InternalGoogleSyncBusyException $error) {
+            return response()->json(['message' => $error->getMessage()], 409);
+        } catch (InternalGoogleSyncSourceException $error) {
+            return response()->json(['message' => $error->getMessage()], $error->statusCode());
+        } catch (\Throwable $error) {
+            report($error);
+
+            return response()->json(['message' => 'Đồng bộ lệnh sản xuất thất bại: ' . $error->getMessage()], 500);
+        }
     }
 
     private function reconcileDocumentProductionOrderLinks(): int
@@ -1126,6 +1201,8 @@ class InternalProductionOrderController extends Controller
             'in_production_count' => $rows->where('status', 'in_production')->count(),
             'production_done_count' => $rows->where('status', 'production_done')->count(),
             'shipped_customer_count' => $rows->where('status', 'shipped_customer')->count(),
+            'warning_count' => $rows->filter(fn ($row) => (int) ($row['warning_count'] ?? 0) > 0)->count(),
+            'error_count' => $rows->filter(fn ($row) => (bool) ($row['has_error'] ?? false))->count(),
         ];
     }
 

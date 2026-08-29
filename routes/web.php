@@ -18,10 +18,12 @@ use App\Http\Controllers\InventoryComparisonController;
 use App\Http\Controllers\WarehouseCountController;
 use App\Http\Controllers\InternalOrderTrackingController;
 use App\Http\Controllers\InternalProductionOrderController;
+use App\Http\Controllers\InternalProductionOrderLinkController;
 use App\Http\Controllers\InternalBtpProductionOrderController;
 use App\Http\Controllers\InternalFinishedGoodsReceiptController;
 use App\Http\Controllers\InternalMaterialIssueController;
 use App\Http\Controllers\InternalItemCatalogController;
+use App\Http\Controllers\InternalGoogleSyncController;
 use App\Http\Controllers\InternalStocktakeController;
 use App\Http\Controllers\InternalColorMappingController;
 use App\Http\Controllers\InternalUnitConversionController;
@@ -260,6 +262,10 @@ Route::get('/api/lenh-san-xuat-trung-tam/tim-kiem', [InternalProductionOrderCont
 Route::get('/api/lenh-san-xuat-trung-tam', [InternalProductionOrderController::class, 'workflow']);
 Route::patch('/api/lenh-san-xuat-trung-tam/cong-doan', [InternalProductionOrderController::class, 'updateOperationProgress']);
 Route::patch('/api/lenh-san-xuat-trung-tam/dong/{order}', [InternalProductionOrderController::class, 'updateStandardItemCode']);
+Route::get('/api/lenh-san-xuat-trung-tam/{order}/vong-doi', [InternalProductionOrderController::class, 'lifecycle'])
+    ->where('order', '[0-9]+');
+Route::get('/api/lenh-san-xuat-trung-tam/doi-soat-lien-ket', [InternalProductionOrderLinkController::class, 'index']);
+Route::post('/api/lenh-san-xuat-trung-tam/doi-soat-lien-ket', [InternalProductionOrderLinkController::class, 'store']);
 Route::get('/client/ghi-nhan-san-xuat', [InternalProductionActivityController::class, 'index']);
 Route::get('/client/ghi-nhan-san-xuat/qr', [InternalProductionActivityController::class, 'qr']);
 Route::get('/api/ghi-nhan-san-xuat', [InternalProductionActivityController::class, 'show']);
@@ -296,6 +302,8 @@ Route::get('/api/danh-muc-noi-bo', [InternalItemCatalogController::class, 'data'
 Route::post('/api/danh-muc-noi-bo/nhap-ke-hang-loat', [InternalItemCatalogController::class, 'bulkShelfIntake']);
 Route::get('/api/danh-muc-noi-bo/loi-ma-phieu', [InternalItemCatalogController::class, 'invalidDocumentCodes']);
 Route::post('/api/danh-muc-noi-bo/dong-bo', [InternalItemCatalogController::class, 'sync']);
+Route::get('/api/dong-bo-google/lich-su', [InternalGoogleSyncController::class, 'index']);
+Route::get('/api/dong-bo-google/lich-su/{run}', [InternalGoogleSyncController::class, 'show']);
 Route::post('/api/danh-muc-noi-bo/tu-dong-dong-bo', [InternalItemCatalogController::class, 'autoSync']);
 Route::post('/api/danh-muc-noi-bo/dong-bo-vi-tri', [InternalItemCatalogController::class, 'syncShelvesToLocations']);
 Route::post('/api/danh-muc-noi-bo/tach-ma-trung', [InternalItemCatalogController::class, 'splitDuplicateCodes']);

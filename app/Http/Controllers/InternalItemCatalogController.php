@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\InternalGoogleSyncBusyException;
+use App\Exceptions\InternalGoogleSyncSourceException;
 use App\Models\InternalItemCatalog;
 use App\Models\InternalProductionOrder;
 use App\Models\WarehouseLocation;
 use App\Services\GoogleSheetCatalogWriter;
+use App\Services\InternalGoogleSyncContext;
+use App\Services\InternalGoogleSyncCoordinator;
 use App\Services\InternalItemGroupResolver;
 use App\Services\PantoneColorMatcher;
 use Illuminate\Http\Request;
@@ -641,8 +645,12 @@ class InternalItemCatalogController extends Controller
         ]);
     }
 
-    public function sync()
+    public function sync(?InternalGoogleSyncCoordinator $sync = null)
     {
+        $sync = $sync ?: app(InternalGoogleSyncCoordinator::class);
+
+        try {
+            $result = $sync->run('reference', 'catalog', function (InternalGoogleSyncContext $syncContext) {
         $url = sprintf(
             'https://docs.google.com/spreadsheets/d/%s/export?format=csv&gid=%s&cache_bust=%s',
             self::SPREADSHEET_ID,
@@ -652,14 +660,18 @@ class InternalItemCatalogController extends Controller
         $response = Http::timeout(90)->withOptions(['verify' => false])->get($url);
 
         if (!$response->successful()) {
-            return response()->json([
-                'message' => 'Không đọc được tab DANH MỤC từ Google Sheet.',
-            ], 502);
+            throw new InternalGoogleSyncSourceException(
+                'Không đọc được tab DANH MỤC từ Google Sheet.',
+                502
+            );
         }
 
         $rows = $this->parseCsv($response->body());
         if (count($rows) < 2) {
-            return response()->json(['message' => 'Tab DANH MỤC không có dữ liệu hợp lệ.'], 422);
+            throw new InternalGoogleSyncSourceException(
+                'Tab DANH MỤC không có dữ liệu hợp lệ.',
+                422
+            );
         }
 
         $headers = array_map([$this, 'normalizeHeader'], array_shift($rows));
@@ -678,6 +690,10 @@ class InternalItemCatalogController extends Controller
         $catalogsWithImages = InternalItemCatalog::query()
             ->whereNotNull('image_url')
             ->where('image_url', '<>', '')
+            ->select([
+                'id', 'item_code', 'item_name', 'image_url', 'image_public_id',
+                'image_source', 'image_uploaded_at', 'updated_at',
+            ])
             ->orderByDesc('image_uploaded_at')
             ->orderByDesc('updated_at')
             ->get();
@@ -692,6 +708,11 @@ class InternalItemCatalogController extends Controller
                 return $imageUrls->count() === 1 ? $catalogs->first() : null;
             })
             ->filter();
+        $existingBySourceRow = InternalItemCatalog::query()
+            ->whereNotNull('source_row')
+            ->select(['id', 'source_row', 'source_hash', 'weight_per_unit_grams', 'is_active'])
+            ->get()
+            ->keyBy(fn ($catalog) => (int) $catalog->source_row);
 
         DB::connection('internal')->transaction(function () use (
             $rows,
@@ -700,6 +721,8 @@ class InternalItemCatalogController extends Controller
             $catalogIdentity,
             $catalogImagesByIdentity,
             $catalogImagesByUniqueCode,
+            $existingBySourceRow,
+            $syncContext,
             &$created,
             &$updated,
             &$unchanged,
@@ -707,21 +730,25 @@ class InternalItemCatalogController extends Controller
             &$skipped
         ) {
             foreach ($rows as $index => $values) {
-                $row = [];
-                foreach ($headers as $column => $header) {
-                    $row[$header] = trim((string) ($values[$column] ?? ''));
-                }
-
-                $name = $this->pick($row, ['ten hang']);
-                if ($name === '') {
-                    $skipped++;
-                    continue;
-                }
-
                 $sourceRow = $index + 2;
-                $activeSourceRows[] = $sourceRow;
-                $code = trim($this->pick($row, ['ma hang', 'mahang']));
-                $existingCatalog = InternalItemCatalog::query()->where('source_row', $sourceRow)->first();
+                $syncContext->checkpoint($sourceRow);
+                $row = [];
+                $code = '';
+
+                try {
+                    foreach ($headers as $column => $header) {
+                        $row[$header] = trim((string) ($values[$column] ?? ''));
+                    }
+
+                    $name = $this->pick($row, ['ten hang']);
+                    if ($name === '') {
+                        $skipped++;
+                        continue;
+                    }
+
+                    $activeSourceRows[] = $sourceRow;
+                    $code = trim($this->pick($row, ['ma hang', 'mahang']));
+                $existingCatalog = $existingBySourceRow->get($sourceRow);
                 $existing = (bool) $existingCatalog;
                 $sheetImage = $this->pick($row, ['anh']);
                 $identityImage = $catalogImagesByIdentity->get($catalogIdentity($code, $name))
@@ -743,9 +770,7 @@ class InternalItemCatalogController extends Controller
                     continue;
                 }
 
-                InternalItemCatalog::query()->updateOrCreate(
-                    ['source_row' => $sourceRow],
-                    [
+                $attributes = [
                         'item_code' => $code !== '' ? $code : null,
                         'item_name' => $name,
                         'unit' => $this->pick($row, ['dvt']),
@@ -766,10 +791,21 @@ class InternalItemCatalogController extends Controller
                         'source_hash' => $sourceHash,
                         'sync_batch' => $batch,
                         'is_active' => true,
-                    ]
-                );
+                    ];
 
-                $existing ? $updated++ : $created++;
+                if ($existingCatalog) {
+                    $existingCatalog->fill($attributes)->save();
+                } else {
+                    $existingCatalog = InternalItemCatalog::query()->create(['source_row' => $sourceRow] + $attributes);
+                    $existingBySourceRow->put($sourceRow, $existingCatalog);
+                }
+
+                    $existing ? $updated++ : $created++;
+                } catch (\Throwable $error) {
+                    $activeSourceRows[] = $sourceRow;
+                    $skipped++;
+                    $syncContext->recordRowError($sourceRow, $code, $error, $row);
+                }
             }
 
             $archiveQuery = InternalItemCatalog::query()->where('is_active', true);
@@ -782,18 +818,33 @@ class InternalItemCatalogController extends Controller
         Cache::forget('internal_catalog_customer_map_v1');
         Cache::forever('internal_catalog_version', (string) Str::uuid());
 
-        return response()->json([
-            'message' => 'Đã đồng bộ DANH MỤC vào database nội bộ.',
-            'data' => [
+        return [
                 'created' => $created,
                 'updated' => $updated,
                 'unchanged' => $unchanged,
                 'skipped' => $skipped,
+                'processed' => count($rows),
                 'active' => InternalItemCatalog::query()->where('is_active', true)->count(),
                 'relinked_orders' => $relinkedOrders,
                 'sheet' => self::SHEET_NAME,
-            ],
-        ]);
+            ];
+            }, (int) config('internal_sync.reference_lock_seconds', 900));
+
+            return response()->json([
+                'message' => ($result['failed'] ?? 0) > 0
+                    ? 'Đã đồng bộ một phần DANH MỤC; có dòng cần kiểm tra.'
+                    : 'Đã đồng bộ DANH MỤC vào database nội bộ.',
+                'data' => $result,
+            ]);
+        } catch (InternalGoogleSyncBusyException $error) {
+            return response()->json(['message' => $error->getMessage()], 409);
+        } catch (InternalGoogleSyncSourceException $error) {
+            return response()->json(['message' => $error->getMessage()], $error->statusCode());
+        } catch (\Throwable $error) {
+            report($error);
+
+            return response()->json(['message' => 'Đồng bộ DANH MỤC thất bại: ' . $error->getMessage()], 500);
+        }
     }
 
     private function reconcileProductionOrderCatalogLinks(): int

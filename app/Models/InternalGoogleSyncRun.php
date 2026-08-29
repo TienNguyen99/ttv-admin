@@ -17,4 +17,9 @@ class InternalGoogleSyncRun extends Model
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
     ];
+
+    public function errors()
+    {
+        return $this->hasMany(InternalGoogleSyncError::class, 'sync_run_id');
+    }
 }
