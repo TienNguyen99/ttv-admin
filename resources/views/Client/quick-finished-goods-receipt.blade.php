@@ -768,6 +768,7 @@
         let pendingVariantInputs = [];
         let pendingCrossOrderVariants = [];
         let pendingVariantNeedsLink = false;
+        let pendingCatalogOnlyVariants = [];
         let variantCheckPromise = Promise.resolve();
         let variantCheckError = null;
         let receiptRequestPending = false;
@@ -1510,6 +1511,12 @@
 
         function updateVariantApplyButtonLabel() {
             const button = document.getElementById('applyVariantsBtn');
+            if (pendingCatalogOnlyVariants.length) {
+                const missingCount = pendingCatalogOnlyVariants.filter(plan => !plan.existing).length;
+                button.innerHTML = `<i data-lucide="list-plus"></i>${missingCount ? `Append ${missingCount} mã size` : `Dùng ${pendingCatalogOnlyVariants.length} mã size`}`;
+                if (window.lucide) lucide.createIcons();
+                return;
+            }
             const missingCount = pendingVariantPlans.filter(plan => !plan.exists).length;
             if (missingCount > 0) {
                 button.innerHTML = `<i data-lucide="list-plus"></i>Tạo ${missingCount} mã + liên kết`;
@@ -1520,6 +1527,9 @@
         }
 
         async function applyProductionVariants() {
+            if (pendingCatalogOnlyVariants.length) {
+                return applyCatalogOnlyVariants();
+            }
             if (!pendingVariantOrder) return;
             const button = document.getElementById('applyVariantsBtn');
             const missingCount = pendingVariantPlans.filter(plan => !plan.exists).length;
@@ -1571,6 +1581,65 @@
                 pendingVariantNeedsLink = false;
                 document.getElementById('variantDialog').close();
                 setStatus(`Đã tạo ${created} mã mới và liên kết ${linked} biến thể của lệnh. Nhập số lượng theo từng size.`, 'ok');
+            } catch (error) {
+                setStatus(error.message, 'error');
+            } finally {
+                button.disabled = false;
+                updateVariantApplyButtonLabel();
+            }
+        }
+
+        async function applyCatalogOnlyVariants() {
+            const button = document.getElementById('applyVariantsBtn');
+            const plans = pendingCatalogOnlyVariants;
+            const codes = Array.from(document.querySelectorAll('#variantPreviewRows tr')).map((row, index) => {
+                const input = row.querySelector('.variant-code-input');
+                return input ? input.value.trim().toUpperCase() : (plans[index].existing?.code || plans[index].proposed_code);
+            });
+            if (codes.some(code => !code)) {
+                setStatus('Mã biến thể không được để trống.', 'error');
+                return;
+            }
+
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>Đang append danh mục...';
+            try {
+                for (let index = 0; index < plans.length; index++) {
+                    const plan = plans[index];
+                    const requestedCode = codes[index];
+                    let item = plan.existing;
+                    if (!item || catalogKey(item.code) !== catalogKey(requestedCode)) {
+                        const response = await fetch('/api/danh-muc-noi-bo/tao-tu-lenh', {
+                            method:'POST',
+                            headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                            body:JSON.stringify({
+                                item_code:requestedCode,
+                                source_item_code:plan.base_code,
+                                source_catalog_id:plan.source_catalog_id,
+                                item_name:catalogVariantName(plan.row.querySelector('.item-name').value.trim(), requestedCode),
+                                unit:plan.unit,
+                                size:plan.size,
+                                color:plan.color,
+                                item_group:'TP',
+                            }),
+                        });
+                        const result = await jsonOrError(response, `Không append được mã ${requestedCode}`);
+                        item = {
+                            code:result.data?.item_code || requestedCode,
+                            name:result.data?.item_name || catalogVariantName(plan.row.querySelector('.item-name').value.trim(), requestedCode),
+                            unit:plan.unit,
+                            size:plan.size,
+                            color:plan.color,
+                            image_url:result.data?.image_url || '',
+                        };
+                    }
+                    rememberCatalogItems([item]);
+                    plan.rows.forEach(row => applyCatalogItem(row.querySelector('.internal-code'), item));
+                }
+                pendingCatalogOnlyVariants = [];
+                document.getElementById('variantDialog').close();
+                renderInternalCatalogOptions();
+                setStatus(`Đã tách ${plans.length} mã theo size/màu. Bấm Lưu + in để tiếp tục.`, 'ok');
             } catch (error) {
                 setStatus(error.message, 'error');
             } finally {
@@ -1682,8 +1751,10 @@
             const row = input.closest('tr');
             input.value = item.code || item.value || input.value;
             row.querySelector('.item-name').value = item.name || row.querySelector('.item-name').value;
-            row.querySelector('.item-size').value = item.size || row.querySelector('.item-size').value;
-            row.querySelector('.item-color').value = item.color || row.querySelector('.item-color').value;
+            const sizeInput = row.querySelector('.item-size');
+            const colorInput = row.querySelector('.item-color');
+            if (!sizeInput.value.trim() && item.size) sizeInput.value = item.size;
+            if (!colorInput.value.trim() && item.color) colorInput.value = item.color;
             row.querySelector('.item-unit').value = item.unit || row.querySelector('.item-unit').value || 'Cái';
             renderRowImage(row, item.image_url || '');
             if (item.shelf && !row.querySelector('.line-note').value.trim()) {
@@ -1854,6 +1925,102 @@
                 || pendingVariantPlans.some(plan => plan.requires_split && !plan.exists);
         }
 
+        function catalogVariantToken(value) {
+            return String(value || '')
+                .trim()
+                .toUpperCase()
+                .replace(/Đ/g, 'D')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[\s/\\]+/g, '-')
+                .replace(/[^0-9A-Z._-]+/g, '')
+                .replace(/-{2,}/g, '-')
+                .replace(/^-|-$/g, '');
+        }
+
+        function catalogVariantName(baseName, variantCode) {
+            const name = String(baseName || '').trim();
+            if (!name) return variantCode;
+            return catalogKey(name).endsWith(catalogKey(variantCode)) ? name : `${name} ${variantCode}`;
+        }
+
+        async function prepareCatalogOnlyVariantSplit() {
+            if (selectedReceiptKind !== 'finished') return false;
+
+            const groups = new Map();
+            Array.from(document.querySelectorAll('#quickRows tr')).forEach(row => {
+                const quantity = num(row.querySelector('.quantity').value);
+                const order = row.querySelector('.production-order').value.trim();
+                const code = row.querySelector('.internal-code').value.trim();
+                const size = row.querySelector('.item-size').value.trim();
+                const color = row.querySelector('.item-color').value.trim();
+                if (quantity <= 0 || order || !code) return;
+                const key = catalogKey(code);
+                if (!groups.has(key)) groups.set(key, {code, rows:[]});
+                groups.get(key).rows.push({row, size, color});
+            });
+
+            const group = Array.from(groups.values()).find(item => {
+                return new Set(item.rows.map(entry => `${catalogKey(entry.size)}|${catalogKey(entry.color)}`)).size > 1;
+            });
+            if (!group) return false;
+
+            const bySignature = new Map();
+            group.rows.forEach(entry => {
+                const signature = `${catalogKey(entry.size)}|${catalogKey(entry.color)}`;
+                if (!bySignature.has(signature)) bySignature.set(signature, {...entry, signature, rows:[]});
+                bySignature.get(signature).rows.push(entry.row);
+            });
+            const sizeCounts = new Map();
+            bySignature.forEach(plan => {
+                const sizeKey = catalogKey(plan.size);
+                if (sizeKey) sizeCounts.set(sizeKey, (sizeCounts.get(sizeKey) || 0) + 1);
+            });
+
+            const sourceCatalog = await fetchCatalogExact(group.code);
+            const plans = await Promise.all(Array.from(bySignature.values()).map(async plan => {
+                const sizeToken = catalogVariantToken(plan.size);
+                const colorToken = catalogVariantToken(plan.color);
+                const suffix = [sizeToken, (sizeCounts.get(catalogKey(plan.size)) || 0) > 1 ? colorToken : '']
+                    .filter(Boolean).join('-') || colorToken;
+                if (!suffix) throw new Error(`Mã ${group.code} có nhiều biến thể nhưng dòng chưa có size hoặc màu.`);
+                const proposedCode = `${group.code}-${suffix}`.replace(/-{2,}/g, '-');
+                const existing = await fetchCatalogExact(proposedCode);
+                return {
+                    ...plan,
+                    base_code:group.code,
+                    proposed_code:proposedCode,
+                    item_name:catalogVariantName(plan.row.querySelector('.item-name').value.trim(), proposedCode),
+                    unit:plan.row.querySelector('.item-unit').value.trim() || 'Cái',
+                    source_catalog_id:sourceCatalog?.id || null,
+                    existing,
+                };
+            }));
+
+            pendingCatalogOnlyVariants = plans;
+            pendingVariantOrder = '';
+            pendingVariantPlans = [];
+            pendingVariantNeedsLink = false;
+            document.getElementById('variantDialogSummary').textContent = `${group.code} · ${plans.length} size/màu · không cần lệnh sản xuất`;
+            document.getElementById('variantSizeEntry').classList.add('d-none');
+            document.getElementById('variantPreviewRows').innerHTML = plans.map((plan, index) => `
+                <tr data-catalog-variant-index="${index}">
+                    <td><strong>${esc(plan.size || '-')}</strong></td>
+                    <td>${esc(plan.color || '-')}</td>
+                    <td>${plan.existing
+                        ? `<span class="font-monospace fw-bold">${esc(plan.existing.code || plan.proposed_code)}</span>`
+                        : `<input class="form-control variant-code-input" value="${esc(plan.proposed_code)}" maxlength="200">`}</td>
+                    <td>${plan.existing
+                        ? '<span class="variant-existing">Đã có</span>'
+                        : '<span class="variant-missing">Sẽ append</span>'}</td>
+                </tr>`).join('');
+            document.getElementById('variantDialogNote').textContent = 'Mỗi size/màu được lưu thành một mã danh mục riêng. Tên hàng được tạo theo Tên hàng + Mã.';
+            document.getElementById('applyVariantsBtn').disabled = false;
+            updateVariantApplyButtonLabel();
+            document.getElementById('variantDialog').showModal();
+            return true;
+        }
+
         function updateSummary() {
             const lines = validLines();
             document.getElementById('lineCount').textContent = fmt(lines.length);
@@ -1896,6 +2063,7 @@
                 });
                 const orderInput = row.querySelector('.production-order');
                 const itemName = row.querySelector('.item-name').value.trim() || originalCode;
+                const catalogItemName = catalogVariantName(itemName, originalCode);
                 const unit = row.querySelector('.item-unit').value.trim() || 'Cái';
                 const size = row.querySelector('.item-size').value.trim();
                 const color = row.querySelector('.item-color').value.trim();
@@ -1906,7 +2074,7 @@
                         item_code: originalCode,
                         source_item_code: orderInput.dataset.sourceItemCode || originalCode,
                         production_order_line_id: Number(orderInput.dataset.productionOrderId || 0) || null,
-                        item_name: itemName,
+                        item_name: catalogItemName,
                         unit,
                         size,
                         color,
@@ -1918,7 +2086,7 @@
                 const catalogItem = {
                     code: savedCode,
                     value: savedCode,
-                    name: result.data?.item_name || itemName,
+                    name: result.data?.item_name || catalogItemName,
                     unit,
                     size,
                     color,
@@ -2006,6 +2174,7 @@
                 return;
             }
             try {
+                if (await prepareCatalogOnlyVariantSplit()) return;
                 await prepareFormVariantSplit();
             } catch (error) {
                 setStatus(`Không kiểm tra được size/màu trên phiếu: ${error.message}`, 'error');
@@ -2159,6 +2328,7 @@
             pendingVariantInputs = [];
             pendingCrossOrderVariants = [];
             pendingVariantNeedsLink = false;
+            pendingCatalogOnlyVariants = [];
             variantCheckPromise = Promise.resolve();
             variantCheckError = null;
             document.getElementById('variantSizeInput').value = '';
@@ -2196,6 +2366,7 @@
             pendingVariantInputs = [];
             pendingCrossOrderVariants = [];
             pendingVariantNeedsLink = false;
+            pendingCatalogOnlyVariants = [];
             variantCheckPromise = Promise.resolve();
             variantCheckError = null;
             document.getElementById('variantSizeInput').value = '';

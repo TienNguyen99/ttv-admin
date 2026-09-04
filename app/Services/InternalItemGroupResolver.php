@@ -19,6 +19,7 @@ class InternalItemGroupResolver
             'MUC' => 'Mực',
             'MỰC' => 'Mực',
             'NPLBK' => 'Nguyên phụ liệu khác',
+            'NPL-SOI' => 'Sợi',
             'NPLKEO' => 'Keo',
             'NPL-TPU' => 'TPU',
             'QT' => 'Quy trình',
@@ -68,7 +69,7 @@ class InternalItemGroupResolver
             'Thành phẩm thun su' => 'TP-THUNSU',
             'Thành phẩm' => 'TP-KHAC',
             'Bán thành phẩm' => 'BTP',
-            'Sợi' => 'NVL-SOI',
+            'Sợi' => 'NPL-SOI',
             'Nguyên phụ liệu khác' => 'NVL-KHAC',
             'Vật tư' => 'NVL-VATTU',
             'Hóa chất' => 'NVL-HOACHAT',
@@ -105,7 +106,7 @@ class InternalItemGroupResolver
         if ($code === 'BTP') {
             return 'Bán thành phẩm';
         }
-        if (strpos($code, 'NVL-') === 0) {
+        if (strpos($code, 'NVL-') === 0 || strpos($code, 'NPL-') === 0) {
             return 'Nguyên vật liệu';
         }
         if ($code === 'CCDC') {

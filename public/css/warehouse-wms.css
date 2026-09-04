@@ -1142,3 +1142,62 @@ textarea.form-control {
         max-width: none;
     }
 }
+
+/* Shared responsive guardrails for dense warehouse screens. */
+.wms-page,
+.wms-topbar,
+.wms-heading,
+.wms-actions,
+.wms-kpis,
+.wms-kpi,
+.wms-panel,
+.wms-panel__header,
+.wms-panel__body,
+.wms-filterbar,
+.wms-dashboard-grid,
+.wms-heading > *,
+.wms-panel__header > *,
+.wms-kpi > *,
+.wms-filterbar > *,
+.wms-topbar > * {
+    min-width: 0;
+}
+
+.wms-heading h1,
+.wms-heading p,
+.wms-panel__header h2,
+.wms-panel__header .small,
+.wms-kpi__label,
+.wms-kpi__meta,
+.wms-kpi__value,
+.wms-table th,
+.wms-table td {
+    overflow-wrap: anywhere;
+}
+
+.wms-btn {
+    max-width: 100%;
+    line-height: 1.3;
+    white-space: normal;
+}
+
+@media (max-width: 1100px) {
+    .wms-heading,
+    .wms-panel__header {
+        flex-wrap: wrap;
+        gap: 14px;
+    }
+}
+
+@media (max-width: 760px) {
+    .wms-heading {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .wms-heading > .wms-actions,
+    .wms-heading > .wms-btn {
+        width: 100%;
+    }
+}

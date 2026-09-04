@@ -10,6 +10,7 @@ use App\Models\WarehouseLocation;
 use App\Services\GoogleSheetCatalogWriter;
 use App\Services\InternalGoogleSyncContext;
 use App\Services\InternalGoogleSyncCoordinator;
+use App\Services\InternalAudit;
 use App\Services\InternalItemGroupResolver;
 use App\Services\PantoneColorMatcher;
 use Illuminate\Http\Request;
@@ -40,24 +41,24 @@ class InternalItemCatalogController extends Controller
             'note' => 'nullable|string|max:500',
             'lines' => 'required|array|min:1|max:500',
             'lines.*.item_code' => 'required|string|max:100',
-            'lines.*.item_name' => 'required|string|max:500',
+            'lines.*.item_name' => 'nullable|string|max:500',
             'lines.*.quantity' => 'required|numeric|min:0.001|max:999999999999999',
-            'lines.*.unit' => 'required|string|max:50',
+            'lines.*.unit' => 'nullable|string|max:50',
             'lines.*.shelf_code' => 'required|string|max:100',
             'lines.*.size' => 'nullable|string|max:100',
             'lines.*.color' => 'nullable|string|max:100',
         ]);
 
-        $group = trim((string) ($data['item_group'] ?? '')) ?: 'SỢI';
+        $group = trim((string) ($data['item_group'] ?? '')) ?: 'NPL-SOI';
         $normalized = collect($data['lines'])->map(function ($line) {
             return [
                 'item_code' => mb_strtoupper(trim((string) $line['item_code'])),
-                'item_name' => trim((string) $line['item_name']),
+                'item_name' => trim((string) ($line['item_name'] ?? '')),
                 'quantity' => (float) $line['quantity'],
-                'unit' => mb_strtoupper(trim((string) $line['unit'])),
+                'unit' => mb_strtoupper(trim((string) ($line['unit'] ?? ''))),
                 'shelf_code' => mb_strtoupper(trim((string) $line['shelf_code'])),
                 'size' => trim((string) ($line['size'] ?? '')),
-                'color' => trim((string) ($line['color'] ?? '')) ?: trim((string) $line['item_name']),
+                  'color' => trim((string) ($line['color'] ?? '')) ?: trim((string) ($line['item_name'] ?? '')),
             ];
         });
 
@@ -113,7 +114,7 @@ class InternalItemCatalogController extends Controller
         }
         $existing = $catalogGroups->map(fn ($rows) => $rows->first());
 
-        $preview = $lines->map(function ($line) use ($existing) {
+          $preview = $lines->map(function ($line) use ($existing) {
             $catalog = $existing->get($line['item_code']);
             if ($catalog) {
                 $line['item_name'] = trim((string) $catalog->item_name) ?: $line['item_name'];
@@ -127,8 +128,22 @@ class InternalItemCatalogController extends Controller
             $line['shelf_changed'] = $catalog
                 && mb_strtoupper(trim((string) $catalog->shelf_code)) !== $line['shelf_code'];
             $line['current_shelf'] = $catalog ? trim((string) $catalog->shelf_code) : '';
-            return $line;
-        })->values();
+              return $line;
+          })->values();
+
+          $missingDetails = $preview->filter(function ($line) {
+              return trim((string) $line['item_name']) === '' || trim((string) $line['unit']) === '';
+          })->values();
+          if ($missingDetails->isNotEmpty()) {
+              return response()->json([
+                  'message' => 'Mã mới phải có tên hàng và đơn vị tính.',
+                  'errors' => [
+                      'lines' => $missingDetails
+                          ->map(fn ($line) => "Mã {$line['item_code']}: nhập thêm tên hàng và ĐVT.")
+                          ->all(),
+                  ],
+              ], 422);
+          }
 
         $summary = [
             'input_rows' => count($data['lines']),
@@ -219,6 +234,7 @@ class InternalItemCatalogController extends Controller
                     'fields' => [
                         'KỆ' => $line['shelf_code'],
                         'TỒN ĐẦU' => $line['quantity'],
+                        'LOẠI' => $group,
                     ],
                 ];
             })
@@ -257,7 +273,7 @@ class InternalItemCatalogController extends Controller
                     'mau' => $line['color'],
                     'ke' => $line['shelf_code'],
                     'ton dau' => $line['quantity'],
-                    'loai' => $raw['loai'] ?? $group,
+                    'loai' => $group,
                 ]);
 
                 $attributes = [
@@ -541,6 +557,96 @@ class InternalItemCatalogController extends Controller
                 'total' => $allRows->count(),
                 'total_pages' => $isPaged ? (int) ceil($allRows->count() / $perPage) : 1,
                 'has_more' => $isPaged ? ($page * $perPage < $allRows->count()) : ($rows->count() < $allRows->count()),
+            ],
+        ]);
+    }
+
+    public function replaceInvalidDocumentCode(Request $request)
+    {
+        $data = $request->validate([
+            'old_code' => 'required|string|max:100',
+            'new_code' => 'required|string|max:100|different:old_code',
+            'apply' => 'nullable|boolean',
+        ]);
+
+        $oldCode = mb_strtoupper(trim((string) $data['old_code']));
+        $newCode = mb_strtoupper(trim((string) $data['new_code']));
+        if ($oldCode === $newCode) {
+            return response()->json(['message' => 'Mã mới phải khác mã đang sai.'], 422);
+        }
+
+        $catalogRows = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereRaw("UPPER(TRIM(COALESCE(item_code, ''))) = ?", [$newCode])
+            ->get();
+        if ($catalogRows->isEmpty()) {
+            return response()->json(['message' => "Mã {$newCode} chưa tồn tại trong DANH MỤC."], 422);
+        }
+        if ($catalogRows->count() > 1) {
+            return response()->json(['message' => "Mã {$newCode} đang bị trùng trong DANH MỤC."], 409);
+        }
+
+        $connection = DB::connection('internal');
+        $matching = function ($query) use ($oldCode) {
+            return $query->whereRaw("UPPER(TRIM(COALESCE(internal_item_code, ''))) = ?", [$oldCode]);
+        };
+        $counts = [
+            'receipt_lines' => $matching($connection->table('internal_material_receipt_lines'))->count(),
+            'issue_lines' => $matching($connection->table('internal_material_issue_lines'))->count(),
+            'issue_allocations' => $matching($connection->table('internal_material_issue_allocations'))->count(),
+            'inventory_packages' => $matching($connection->table('inventory_packages'))->count(),
+        ];
+        $counts['document_lines'] = $counts['receipt_lines'] + $counts['issue_lines'];
+
+        if ($counts['document_lines'] === 0) {
+            return response()->json(['message' => "Không còn dòng phiếu nào sử dụng mã {$oldCode}."], 404);
+        }
+
+        if (!$request->boolean('apply')) {
+            return response()->json([
+                'data' => [
+                    'old_code' => $oldCode,
+                    'new_code' => $newCode,
+                    'catalog_name' => (string) $catalogRows->first()->item_name,
+                    'counts' => $counts,
+                ],
+            ]);
+        }
+
+        $now = now();
+        $connection->transaction(function () use ($connection, $matching, $newCode, $now) {
+            foreach ([
+                'internal_material_receipt_lines',
+                'internal_material_issue_lines',
+                'internal_material_issue_allocations',
+                'inventory_packages',
+            ] as $table) {
+                $matching($connection->table($table))->update([
+                    'internal_item_code' => $newCode,
+                    'updated_at' => $now,
+                ]);
+            }
+        });
+
+        app(InternalAudit::class)->record(
+            'catalog.invalid_document_code_replaced',
+            'InternalItemCode',
+            null,
+            $newCode,
+            [
+                'old_code' => $oldCode,
+                'new_code' => $newCode,
+                'counts' => $counts,
+            ],
+            $request
+        );
+
+        return response()->json([
+            'message' => "Đã đổi {$oldCode} thành {$newCode} trên {$counts['document_lines']} dòng phiếu.",
+            'data' => [
+                'old_code' => $oldCode,
+                'new_code' => $newCode,
+                'counts' => $counts,
             ],
         ]);
     }

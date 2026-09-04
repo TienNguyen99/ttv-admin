@@ -618,19 +618,23 @@
         </details>
 
         <div class="summary-sidebar__divider">Kho nội bộ</div>
-        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/kho-noi-bo', 'client/ton-kho-noi-bo*', 'client/canh-bao-kho*', 'client/nhap-thanh-pham-nhanh*', 'client/xuat-thanh-pham-nhanh*', 'client/kiem-ton-kho*', 'client/dot-kiem-ke*', 'client/mat-ke-kho*', 'client/xuat-vat-tu-noi-bo*', 'client/xuat-chi-lenh-sx*', 'client/view-nx-data') ? 'open' : '' }}>
+        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/kho/phieu-nhap*', 'client/kho/phieu-xuat*', 'client/kho/vi-tri*', 'client/mat-ke-kho*') ? 'open' : '' }}>
             <summary class="summary-sidebar__summary"><i data-lucide="warehouse"></i>Quản lý kho</summary>
-            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/kho-noi-bo') ? 'is-active' : '' }}" href="{{ url('/client/kho-noi-bo') }}"><i data-lucide="layout-dashboard"></i>Tổng quan kho</a>
-            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/nhap-thanh-pham-nhanh*') ? 'is-active' : '' }}" href="{{ url('/client/nhap-thanh-pham-nhanh') }}"><i data-lucide="package-plus"></i>Nhập thành phẩm</a>
-            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/xuat-thanh-pham-nhanh*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-thanh-pham-nhanh') }}"><i data-lucide="truck"></i>Xuất thành phẩm</a>
-            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/kiem-ton-kho*') ? 'is-active' : '' }}" href="{{ url('/client/kiem-ton-kho') }}"><i data-lucide="map-pinned"></i>Phiếu kho & vị trí</a>
-            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/dot-kiem-ke*') ? 'is-active' : '' }}" href="{{ url('/client/dot-kiem-ke') }}"><i data-lucide="clipboard-check"></i>Đợt kiểm kê</a>
-            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/ton-kho-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/ton-kho-noi-bo') }}"><i data-lucide="archive"></i>Tồn kho</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/kho/phieu-nhap*') ? 'is-active' : '' }}" href="{{ route('warehouse.receipts') }}"><i data-lucide="files"></i>Danh sách phiếu nhập</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/kho/phieu-xuat*') ? 'is-active' : '' }}" href="{{ route('warehouse.issues') }}"><i data-lucide="file-output"></i>Danh sách phiếu xuất</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/mat-ke-kho*') ? 'is-active' : '' }}" href="{{ url('/client/mat-ke-kho') }}"><i data-lucide="panel-top"></i>Mặt kệ kho</a>
-            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/xuat-vat-tu-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-vat-tu-noi-bo') }}"><i data-lucide="package-minus"></i>Phiếu xuất kho</a>
-            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/xuat-chi-lenh-sx*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-chi-lenh-sx') }}"><i data-lucide="file-spreadsheet"></i>Xuất chỉ theo XNT</a>
-            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/canh-bao-kho*') ? 'is-active' : '' }}" href="{{ url('/client/canh-bao-kho') }}"><i data-lucide="triangle-alert"></i>Cảnh báo kho</a>
-            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/view-nx-data') ? 'is-active' : '' }}" href="{{ url('/client/view-nx-data') }}"><i data-lucide="chart-column"></i>Phân tích nhập xuất</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/kho/vi-tri*') ? 'is-active' : '' }}" href="{{ route('warehouse.locations') }}"><i data-lucide="map-pinned"></i>Vị trí kho</a>
+        </details>
+
+        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/nhap-thanh-pham-nhanh*', 'client/xuat-thanh-pham-nhanh*') ? 'open' : '' }}>
+            <summary class="summary-sidebar__summary"><i data-lucide="keyboard"></i>Quản lý nhập liệu</summary>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/nhap-thanh-pham-nhanh*') ? 'is-active' : '' }}" href="{{ url('/client/nhap-thanh-pham-nhanh') }}"><i data-lucide="package-plus"></i>Nhập thành phẩm nhanh</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/xuat-thanh-pham-nhanh*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-thanh-pham-nhanh') }}"><i data-lucide="truck"></i>Xuất thành phẩm nhanh</a>
+        </details>
+
+        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/nhu-cau-mua-vat-tu*') ? 'open' : '' }}>
+            <summary class="summary-sidebar__summary"><i data-lucide="chart-no-axes-combined"></i>Báo cáo kho</summary>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/nhu-cau-mua-vat-tu*') ? 'is-active' : '' }}" href="{{ route('warehouse.material-demand') }}"><i data-lucide="shopping-cart"></i>Nhu cầu mua vật tư</a>
         </details>
 
         <div class="summary-sidebar__divider">Đối chiếu</div>

@@ -60,6 +60,13 @@ class InternalMaterialIssueController extends Controller
         return view('client.internal-material-issue');
     }
 
+    public function listIndex()
+    {
+        return view('client.internal-material-issue', [
+            'listOnly' => true,
+        ]);
+    }
+
     public function productionTrackingIndex()
     {
         return view('client.production-wip');

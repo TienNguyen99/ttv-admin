@@ -1,11 +1,12 @@
 <!DOCTYPE html>
+@php($listOnly = (bool) ($listOnly ?? false))
 <html lang="vi">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Xuất kho nội bộ</title>
+    <title>{{ $listOnly ? 'Danh sách phiếu xuất' : 'Xuất kho nội bộ' }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
     <style>
@@ -176,25 +177,25 @@
     <main class="wms-page">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
             <div>
-                <h1 id="pageTitle" class="page-title mb-1">Phiếu xuất kho nội bộ</h1>
-                <div id="pageHint" class="hint">TSoft kế toán chỉ đọc danh mục, không ghi dữ liệu.</div>
+                <h1 id="pageTitle" class="page-title mb-1">{{ $listOnly ? 'Danh sách phiếu xuất' : 'Phiếu xuất kho nội bộ' }}</h1>
+                <div id="pageHint" class="hint">{{ $listOnly ? 'Tra cứu, in và kiểm tra các phiếu xuất kho nội bộ.' : 'TSoft kế toán chỉ đọc danh mục, không ghi dữ liệu.' }}</div>
             </div>
             <div class="d-flex gap-2">
                 <button id="cancelEditBtn" type="button" class="wms-btn d-none"><i data-lucide="x"></i>Hủy sửa</button>
                 <button id="reloadBtn" type="button" class="wms-btn"><i data-lucide="refresh-cw"></i>Tải lại</button>
-                <button id="createBtpAndIssueBtn" type="button" class="wms-btn"><i data-lucide="git-branch-plus"></i>Tạo lệnh BTP + xuất</button>
-                <button id="saveBtn" type="button" class="wms-btn wms-btn--primary"><i data-lucide="printer"></i>Xuất và in phiếu</button>
+                <button id="createBtpAndIssueBtn" type="button" class="wms-btn {{ $listOnly ? 'd-none' : '' }}"><i data-lucide="git-branch-plus"></i>Tạo lệnh BTP + xuất</button>
+                <button id="saveBtn" type="button" class="wms-btn wms-btn--primary {{ $listOnly ? 'd-none' : '' }}"><i data-lucide="printer"></i>Xuất và in phiếu</button>
             </div>
         </div>
 
-        <section class="wms-kpis">
+        <section class="wms-kpis {{ $listOnly ? 'd-none' : '' }}">
             <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="clipboard-list"></i></div><div><div class="wms-kpi__label">Phiếu trong danh sách</div><div id="issueCount" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Theo bộ lọc</div></div></article>
             <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="list-ordered"></i></div><div><div class="wms-kpi__label">Dòng hàng</div><div id="lineCount" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Chi tiết các phiếu</div></div></article>
             <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="package-minus"></i></div><div><div class="wms-kpi__label">Tổng số lượng</div><div id="totalQuantity" class="wms-kpi__value">0</div><div class="wms-kpi__meta">Đã xuất nội bộ</div></div></article>
             <article class="wms-kpi"><div class="wms-kpi__icon"><i data-lucide="factory"></i></div><div><div class="wms-kpi__label">Luồng xuất</div><div id="issueTypeMetric" class="wms-kpi__value" style="font-size:18px">BTP sản xuất</div><div class="wms-kpi__meta">Chọn tại thông tin phiếu</div></div></article>
         </section>
 
-        <section class="panel mb-3">
+        <section id="issueEntryPanel" class="panel mb-3 {{ $listOnly ? 'd-none' : '' }}">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h2 class="section-title">Thông tin phiếu</h2>
@@ -331,6 +332,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        const listOnly = @json($listOnly);
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const lineRows = document.getElementById('lineRows');
         const issueRows = document.getElementById('issueRows');
@@ -570,10 +572,18 @@
             if (editingIssueId) pendingIssueRequestKey = null;
             document.getElementById('cancelEditBtn').classList.toggle('d-none', !editingIssueId);
             if (editingIssueId) {
+                document.getElementById('issueEntryPanel').classList.remove('d-none');
+                document.getElementById('saveBtn').classList.remove('d-none');
                 document.getElementById('saveBtn').innerHTML = '<i data-lucide="save"></i>Cập nhật + in phiếu';
                 document.getElementById('pageHint').textContent = `Đang sửa ${issue.issue_code}. Lưu sẽ hoàn tồn cũ và trừ lại theo dòng mới.`;
             } else {
                 applyIssueType(value('issueType'));
+                if (listOnly) {
+                    document.getElementById('issueEntryPanel').classList.add('d-none');
+                    document.getElementById('saveBtn').classList.add('d-none');
+                    document.getElementById('pageTitle').textContent = 'Danh sách phiếu xuất';
+                    document.getElementById('pageHint').textContent = 'Tra cứu, in và kiểm tra các phiếu xuất kho nội bộ.';
+                }
             }
             if (window.lucide) window.lucide.createIcons();
         }
@@ -817,16 +827,18 @@
             const isProduction = type === 'production';
             const isCustomer = type === 'customer';
             const isMaterial = type === 'material';
-            document.getElementById('createBtpAndIssueBtn').classList.toggle('d-none', !isProduction || Boolean(editingIssueId));
+            document.getElementById('createBtpAndIssueBtn').classList.toggle('d-none', listOnly || !isProduction || Boolean(editingIssueId));
             document.getElementById('openPasteImportBtn').classList.toggle('d-none',isMaterial);
             updatePasteDialogMode();
             document.getElementById('issueTypeMetric').textContent = isMaterial ? 'Vật tư SX' : (isProduction ? 'BTP sản xuất' : 'TP khách hàng');
-            document.getElementById('pageTitle').textContent = isMaterial ? 'Xuất vật tư theo lệnh' : (isProduction ? 'Xuất bán thành phẩm đi sản xuất' : 'Xuất thành phẩm cho khách');
-            document.getElementById('pageHint').textContent = isMaterial
-                ? 'Số thực xuất được gắn riêng theo từng lệnh sản xuất; BOM chỉ dùng để tham chiếu định mức.'
-                : (isProduction
-                    ? 'Xuất BTP khỏi kho nội bộ để giao sản xuất. Khi hoàn thành, nhập lại bằng Phiếu nhập thành phẩm.'
-                    : 'Xuất thành phẩm cho khách hàng và trừ tồn kho nội bộ theo mã, size, màu và mặt.');
+            if (!listOnly || editingIssueId) {
+                document.getElementById('pageTitle').textContent = isMaterial ? 'Xuất vật tư theo lệnh' : (isProduction ? 'Xuất bán thành phẩm đi sản xuất' : 'Xuất thành phẩm cho khách');
+                document.getElementById('pageHint').textContent = isMaterial
+                    ? 'Số thực xuất được gắn riêng theo từng lệnh sản xuất; BOM chỉ dùng để tham chiếu định mức.'
+                    : (isProduction
+                        ? 'Xuất BTP khỏi kho nội bộ để giao sản xuất. Khi hoàn thành, nhập lại bằng Phiếu nhập thành phẩm.'
+                        : 'Xuất thành phẩm cho khách hàng và trừ tồn kho nội bộ theo mã, size, màu và mặt.');
+            }
             if (!editingIssueId) {
                 document.getElementById('saveBtn').textContent = isMaterial ? 'Xuất vật tư + in phiếu' : (isProduction ? 'Xuất BTP + in phiếu' : 'Xuất TP + in phiếu');
             }

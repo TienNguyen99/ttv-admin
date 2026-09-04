@@ -61,7 +61,20 @@ class InternalItemGroupResolverTest extends TestCase
         ];
 
         $this->assertSame('Sợi', $resolver->resolve($catalog));
-        $this->assertSame('NVL-SOI', $resolver->code($catalog));
+        $this->assertSame('NPL-SOI', $resolver->code($catalog));
+        $this->assertSame('Nguyên vật liệu', $resolver->family($catalog));
+    }
+
+    public function test_canonical_yarn_source_type_uses_the_existing_npl_group(): void
+    {
+        $resolver = new InternalItemGroupResolver();
+        $catalog = (object) [
+            'item_name' => '75D 807-C',
+            'raw_data' => ['loai' => 'NPL-SOI'],
+        ];
+
+        $this->assertSame('Sợi', $resolver->resolve($catalog));
+        $this->assertSame('NPL-SOI', $resolver->code($catalog));
         $this->assertSame('Nguyên vật liệu', $resolver->family($catalog));
     }
 

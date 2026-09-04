@@ -1,11 +1,15 @@
 ﻿<!DOCTYPE html>
 @php($shelfMapOnly = (bool) ($shelfMapOnly ?? false))
+@php($workspaceView = $workspaceView ?? null)
+@php($workspaceOnly = in_array($workspaceView, ['receipts', 'overview'], true))
+@php($pageHeading = $workspaceView === 'receipts' ? 'Danh sách phiếu nhập' : ($workspaceView === 'overview' ? 'Vị trí kho' : ($shelfMapOnly ? 'Mặt kệ kho' : 'Quản lý nhập kho & vị trí')))
+@php($pageDescription = $workspaceView === 'receipts' ? 'Tra cứu, in và kiểm tra các phiếu nhập kho nội bộ.' : ($workspaceView === 'overview' ? 'Xem vị trí và hàng hóa hiện có tại từng kệ.' : ($shelfMapOnly ? 'Xem kệ theo line, tầng và ô vị trí. Click ô kệ để quản lý hàng trong vị trí.' : 'Nhập thành phẩm, bố trí vị trí, in tem QR và theo dõi kiện nội bộ.')))
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $shelfMapOnly ? 'Mặt kệ kho' : 'Kiểm tồn kho' }}</title>
+    <title>{{ $pageHeading }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root { --line: #e2e8f0; --muted: #64748b; --ink: #0f172a; --accent: #2563eb; }
@@ -333,7 +337,7 @@
         .table thead th { background: var(--wms-navy); color: #fff; }
     </style>
 </head>
-<body class="{{ $shelfMapOnly ? 'shelf-map-only' : '' }}">
+<body class="{{ $shelfMapOnly ? 'shelf-map-only' : '' }} {{ $workspaceOnly ? 'workspace-only' : '' }}">
     @include('layouts.partials.sidebar')
     <div id="warehouseToastStack" class="warehouse-toast-stack" aria-live="polite"></div>
 
@@ -352,36 +356,36 @@
     <main class="page-shell">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
             <div>
-                <h1 class="page-title mb-1">{{ $shelfMapOnly ? 'Mặt kệ kho' : 'Quản lý nhập kho & vị trí' }}</h1>
-                <div class="page-subtitle">{{ $shelfMapOnly ? 'Xem kệ theo line, tầng và ô vị trí. Click ô kệ để quản lý hàng trong vị trí.' : 'Nhập thành phẩm, bố trí vị trí, in tem QR và theo dõi kiện nội bộ.' }}</div>
+                <h1 class="page-title mb-1">{{ $pageHeading }}</h1>
+                <div class="page-subtitle">{{ $pageDescription }}</div>
             </div>
-            <div class="d-flex gap-2 align-items-center">
+            <div class="d-flex gap-2 align-items-center {{ $workspaceView === 'receipts' ? 'd-none' : '' }}">
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="openBulkLocationModal()"><i data-lucide="grid-2x2-plus"></i>Tạo nhanh vị trí</button>
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="openBulkPrintLocationModal()"><i data-lucide="printer"></i>In tem vị trí</button>
                 <button type="button" class="btn btn-outline-primary btn-icon" onclick="openLocationModal()"><i data-lucide="map-pin-plus"></i>Thêm vị trí</button>
-                <select id="warehouseFlowTop" class="form-select shelf-map-hide" style="width:180px" onchange="handleWarehouseFlow(this.value)">
+                <select id="warehouseFlowTop" class="form-select shelf-map-hide {{ $workspaceOnly ? 'd-none' : '' }}" style="width:180px" onchange="handleWarehouseFlow(this.value)">
                     <option value="receipt">Nhập thành phẩm</option>
                     <option value="production">Xuất BTP sản xuất</option>
                 </select>
-                <button type="button" class="btn btn-primary btn-icon shelf-map-hide" onclick="handleWarehouseFlow(document.getElementById('warehouseFlowTop').value)"><i data-lucide="file-plus-2"></i>Mở phiếu</button>
+                <button type="button" class="btn btn-primary btn-icon shelf-map-hide {{ $workspaceOnly ? 'd-none' : '' }}" onclick="handleWarehouseFlow(document.getElementById('warehouseFlowTop').value)"><i data-lucide="file-plus-2"></i>Mở phiếu</button>
             </div>
         </div>
 
-        <section class="panel voice-assistant mb-3 shelf-map-hide" aria-label="Trợ lý ging nói kho">
+        <section class="panel voice-assistant mb-3 shelf-map-hide {{ $workspaceOnly ? 'd-none' : '' }}" aria-label="Trợ lý giọng nói kho">
             <button id="voiceLookupBtn" type="button" class="btn btn-outline-primary btn-icon voice-button" title="Nói mã hàng cần tìm"><i data-lucide="mic"></i></button>
             <input id="voiceLookupInput" class="form-control" placeholder="Nói hoặc nhập mã hàng, mã nội bộ">
             <button id="voiceSearchBtn" type="button" class="btn btn-outline-primary btn-icon"><i data-lucide="search"></i>Tìm</button>
             <div id="voiceLookupResult" class="voice-result">Bấm micro và nói: “Tìm mã BTPDAYHAIRB1-1.</div>
         </section>
 
-        <section class="kpi-grid shelf-map-hide">
+        <section class="kpi-grid shelf-map-hide {{ $workspaceOnly ? 'd-none' : '' }}">
             <div class="kpi-item"><div class="kpi-icon"><i data-lucide="map-pinned"></i></div><div><div id="kpiLocations" class="kpi-value">0</div><div class="kpi-label">Vị trí kho</div></div></div>
             <div class="kpi-item"><div class="kpi-icon"><i data-lucide="scan-line"></i></div><div><div id="kpiCountingLocations" class="kpi-value">0</div><div class="kpi-label">Vị trí đang kiểm</div></div></div>
             <div class="kpi-item"><div class="kpi-icon"><i data-lucide="package-check"></i></div><div><div id="kpiPackages" class="kpi-value">0</div><div class="kpi-label">Kiện trong ngày</div></div></div>
             <div class="kpi-item"><div class="kpi-icon"><i data-lucide="boxes"></i></div><div><div id="kpiQuantity" class="kpi-value">0</div><div class="kpi-label">Số lượng trong ngày</div></div></div>
         </section>
 
-        <section class="panel context-bar mb-3">
+        <section class="panel context-bar mb-3 {{ $workspaceOnly ? 'd-none' : '' }}">
             <div class="row g-2 align-items-end">
                 <input id="checkedAt" type="hidden" value="{{ now()->format('d/m/Y') }}">
                 <div class="col-lg-7"><label class="form-label">V&#7883; tr&#237; &#273;ang ki&#7875;m</label><input id="locationCode" list="locationOptions" class="form-control" placeholder="&#272;&#7875; tr&#7889;ng n&#7871;u ch&#432;a x&#7871;p v&#7883; tr&#237;"></div>
@@ -390,7 +394,7 @@
             <datalist id="locationOptions"></datalist>
         </section>
 
-        <nav class="view-tabs shelf-map-hide" aria-label="Khu vực quản lý kho">
+        <nav class="view-tabs shelf-map-hide {{ $workspaceOnly ? 'd-none' : '' }}" aria-label="Khu vực quản lý kho">
             <button type="button" class="view-tab is-active" data-workspace-view="entry" onclick="switchWorkspace('entry')"><i data-lucide="package-plus"></i>Nhập kho</button>
             <button type="button" class="view-tab" data-workspace-view="receipts" onclick="switchWorkspace('receipts')"><i data-lucide="files"></i>Danh sách phiếu</button>
             <button type="button" class="view-tab" data-workspace-view="overview" onclick="switchWorkspace('overview')"><i data-lucide="layout-dashboard"></i>Vị trí & hàng hóa</button>
@@ -432,6 +436,7 @@
                     <div class="layout-help mt-1">Mỗi line gồm 5 tầng: line 1 A-E, line 2 F-J, tiếp tục qua Z đến AA... Kéo ngang để xem các kệ phía sau.</div>
                 </div>
                 <div class="d-flex gap-2 align-items-center">
+                    <button id="openRackBulkIntakeBtn" type="button" class="btn btn-primary btn-icon"><i data-lucide="clipboard-paste"></i>Nhập danh sách</button>
                     <button type="button" class="btn btn-outline-primary btn-icon" onclick="renderWarehouse3D()"><i data-lucide="refresh-cw"></i>Tải lại</button>
                 </div>
             </div>
@@ -719,6 +724,22 @@
                         <span class="rack-crud-location"><i data-lucide="map-pin"></i><span id="rackCrudLocationLabel">-</span></span>
                         <span id="rackCrudStatus" class="small text-muted"></span>
                     </div>
+                    <div class="alert alert-primary d-flex align-items-center justify-content-between gap-2 flex-wrap py-2 px-3 mb-3">
+                        <div>
+                            <strong>Danh sách chờ: <span id="rackBatchCount">0</span>/100 dòng</strong>
+                            <div class="small">Lưu nhiều kệ tại máy này, sau đó ghi Google Sheet một lần.</div>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button id="rackBatchToggleBtn" type="button" class="btn btn-sm btn-outline-primary">Xem danh sách</button>
+                            <button id="rackBatchSyncBtn" type="button" class="btn btn-sm btn-primary btn-icon" disabled><i data-lucide="cloud-upload"></i>Đồng bộ DANH MỤC</button>
+                        </div>
+                    </div>
+                    <div id="rackBatchPanel" class="rack-crud-table mb-3 d-none">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Kệ</th><th>Mã hàng</th><th>Tên hàng</th><th class="text-end">Số lượng</th><th>ĐVT</th><th class="text-end">Thao tác</th></tr></thead>
+                            <tbody id="rackBatchRows"></tbody>
+                        </table>
+                    </div>
                     <div class="rack-crud-table mb-3">
                         <table class="table table-sm align-middle">
                             <thead>
@@ -770,10 +791,48 @@
                             <div id="rackCrudCatalogState" class="small text-muted">Gõ mã để kiểm tra DANH MỤC.</div>
                             <div class="d-flex gap-2">
                             <button type="button" class="btn btn-outline-secondary" onclick="resetRackCrudForm()">Hủy sửa</button>
-                            <button id="rackCrudSaveBtn" type="submit" class="btn btn-primary btn-icon"><i data-lucide="save"></i>Lưu hàng</button>
+                            <button id="rackCrudSaveBtn" type="submit" class="btn btn-primary btn-icon"><i data-lucide="list-plus"></i>Thêm vào danh sách</button>
                             </div>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="rackBulkIntakeModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title">Nhập hàng loạt theo vị trí</h5>
+                        <div class="text-muted small">Dán dữ liệu Excel, kiểm tra rồi đưa tối đa 100 dòng vào danh sách chờ.</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light border py-2 px-3 small mb-3">
+                        Thứ tự cột: <strong>Kệ | Mã vật tư | Tên hàng | Số lượng | ĐVT | Size | Màu</strong>.
+                        Mã đã có trong danh mục chỉ cần <strong>Kệ | Mã vật tư | Số lượng</strong>.
+                    </div>
+                    <label for="rackBulkPasteInput" class="form-label">Dữ liệu từ Excel</label>
+                    <textarea id="rackBulkPasteInput" class="form-control font-monospace" rows="7" placeholder="A1&#9;807-C&#9;Sợi 807-C&#9;3.5&#9;KG&#10;B1&#9;69X-NEW&#9;Sợi 69X&#9;5&#9;KG"></textarea>
+                    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mt-2">
+                        <span id="rackBulkPasteHint" class="small text-muted">Có thể dán cả hàng tiêu đề, hệ thống sẽ tự bỏ qua.</span>
+                        <button id="rackBulkPreviewBtn" type="button" class="btn btn-outline-primary btn-icon"><i data-lucide="scan-search"></i>Kiểm tra dữ liệu</button>
+                    </div>
+                    <div id="rackBulkPreviewSummary" class="d-none mt-3"></div>
+                    <div id="rackBulkPreviewTable" class="table-responsive border rounded mt-2 d-none">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Kệ</th><th>Mã vật tư</th><th>Tên hàng</th><th class="text-end">Số lượng</th><th>ĐVT</th><th>Size</th><th>Màu</th><th>Trạng thái</th></tr></thead>
+                            <tbody id="rackBulkPreviewRows"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <span class="small text-muted me-auto">Đang chờ: <strong id="rackBulkExistingQueueCount">0</strong>/100 dòng</span>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button id="rackBulkQueueBtn" type="button" class="btn btn-primary btn-icon" disabled><i data-lucide="list-plus"></i>Đưa vào danh sách chờ</button>
+                    <button id="rackBulkSyncBtn" type="button" class="btn btn-success btn-icon" disabled><i data-lucide="cloud-upload"></i>Đồng bộ DANH MỤC</button>
                 </div>
             </div>
         </div>
@@ -836,6 +895,7 @@
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const shelfMapOnly = @json($shelfMapOnly);
+        const workspaceView = @json($workspaceView);
         let locationContentsCache = [];
         function isoToDateVn(value) {
             const raw = String(value || '').slice(0, 10);
@@ -958,6 +1018,7 @@
         const bulkLocationModal = new bootstrap.Modal(document.getElementById('bulkLocationModal'));
         const bulkPrintLocationModal = new bootstrap.Modal(document.getElementById('bulkPrintLocationModal'));
         const rackInventoryModal = new bootstrap.Modal(document.getElementById('rackInventoryModal'));
+        const rackBulkIntakeModal = new bootstrap.Modal(document.getElementById('rackBulkIntakeModal'));
         const receiptLocationModal = new bootstrap.Modal(document.getElementById('receiptLocationModal'));
         const receiptIssueModal = new bootstrap.Modal(document.getElementById('receiptIssueModal'));
         let editingReceiptId = null;
@@ -973,6 +1034,11 @@
         let rackCrudItems = [];
         let rackCrudSearchTimer = null;
         let rackCrudLookupPending = false;
+        const rackCatalogLookups = new Set();
+        const rackBatchStorageKey = 'warehouseRackIntakeBatchV1';
+        const rackBatchLimit = 100;
+        let rackBatchLines = loadRackBatchLines();
+        let rackBulkPreviewLines = [];
         let rackHoverTarget = null;
         let rackProductionOrderTimer = null;
         let rackProductionOrderRequest = 0;
@@ -2774,6 +2840,261 @@
             }).then(r => jsonOrError(r, 'Không chuyển được kiện'));
         }
 
+        function loadRackBatchLines() {
+            try {
+                const rows = JSON.parse(localStorage.getItem('warehouseRackIntakeBatchV1') || '[]');
+                return Array.isArray(rows) ? rows.slice(0, 100) : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function persistRackBatchLines() {
+            localStorage.setItem(rackBatchStorageKey, JSON.stringify(rackBatchLines));
+            renderRackBatchLines();
+        }
+
+        function rackBatchSignature(line) {
+            return [line.item_code, line.shelf_code, line.size, line.color, line.unit]
+                .map(part => String(part || '').trim().toUpperCase()).join('|');
+        }
+
+        function renderRackBatchLines() {
+            const count = document.getElementById('rackBatchCount');
+            const rows = document.getElementById('rackBatchRows');
+            const syncButton = document.getElementById('rackBatchSyncBtn');
+            if (!count || !rows || !syncButton) return;
+            count.textContent = formatNumber(rackBatchLines.length);
+            syncButton.disabled = rackBatchLines.length === 0;
+            const bulkCount = document.getElementById('rackBulkExistingQueueCount');
+            const bulkSyncButton = document.getElementById('rackBulkSyncBtn');
+            if (bulkCount) bulkCount.textContent = formatNumber(rackBatchLines.length);
+            if (bulkSyncButton) bulkSyncButton.disabled = rackBatchLines.length === 0;
+            rows.innerHTML = rackBatchLines.map((line, index) => `<tr>
+                <td><strong>${escapeHtml(line.shelf_code)}</strong></td>
+                <td>${escapeHtml(line.item_code)}</td>
+                <td>${escapeHtml(line.item_name)}</td>
+                <td class="text-end fw-bold">${formatNumber(line.quantity)}</td>
+                <td>${escapeHtml(line.unit)}</td>
+                <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" data-rack-batch-remove="${index}">Xóa</button></td>
+            </tr>`).join('') || '<tr><td colspan="6" class="text-center text-muted py-3">Chưa có dòng chờ đồng bộ.</td></tr>';
+            refreshIcons();
+        }
+
+        function normalizeRackBulkHeader(valueText) {
+            return String(valueText || '').trim().toUpperCase()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/Đ/g, 'D');
+        }
+
+        function parseRackBulkQuantity(valueText) {
+            let raw = String(valueText || '').trim().replace(/\s+/g, '');
+            if (!raw) return NaN;
+            if (/^-?\d{1,3}(\.\d{3})+$/.test(raw)) raw = raw.replace(/\./g, '');
+            else if (raw.includes(',') && raw.includes('.')) {
+                raw = raw.lastIndexOf(',') > raw.lastIndexOf('.')
+                    ? raw.replace(/\./g, '').replace(',', '.')
+                    : raw.replace(/,/g, '');
+            } else if (raw.includes(',')) raw = raw.replace(',', '.');
+            return Number(raw);
+        }
+
+        function parseRackBulkPaste() {
+            const rawRows = document.getElementById('rackBulkPasteInput').value
+                .split(/\r?\n/)
+                .map(row => row.split('\t').map(cell => cell.trim()))
+                .filter(row => row.some(Boolean));
+            if (rawRows.length) {
+                const first = rawRows[0].map(normalizeRackBulkHeader);
+                if (first[0]?.includes('KE') || first[0]?.includes('VI TRI') || first[1]?.includes('MA')) rawRows.shift();
+            }
+
+            return rawRows.map((cells, index) => {
+                const compact = cells.length === 3;
+                return {
+                    source_line: index + 1,
+                    shelf_code: String(cells[0] || '').toUpperCase(),
+                    item_code: String(cells[1] || '').toUpperCase(),
+                    item_name: compact ? '' : String(cells[2] || ''),
+                    quantity: parseRackBulkQuantity(compact ? cells[2] : cells[3]),
+                    unit: compact ? '' : String(cells[4] || '').toUpperCase(),
+                    size: compact ? '' : String(cells[5] || ''),
+                    color: compact ? '' : String(cells[6] || ''),
+                };
+            });
+        }
+
+        function showRackBulkError(message) {
+            const summary = document.getElementById('rackBulkPreviewSummary');
+            summary.className = 'alert alert-danger py-2 px-3 mt-3 mb-0';
+            summary.textContent = message;
+            document.getElementById('rackBulkPreviewTable').classList.add('d-none');
+            document.getElementById('rackBulkQueueBtn').disabled = true;
+            rackBulkPreviewLines = [];
+        }
+
+        function renderRackBulkPreview(result) {
+            rackBulkPreviewLines = Array.from(result.data || []);
+            const summaryData = result.summary || {};
+            const summary = document.getElementById('rackBulkPreviewSummary');
+            summary.className = 'alert alert-success py-2 px-3 mt-3 mb-0';
+            summary.textContent = `${formatNumber(summaryData.line_count)} mã · ${formatNumber(summaryData.shelf_count)} vị trí · ${formatNumber(summaryData.total_quantity)} tổng số lượng · ${formatNumber(summaryData.new_count)} mã mới`;
+            document.getElementById('rackBulkPreviewRows').innerHTML = rackBulkPreviewLines.map(line => `<tr>
+                <td><strong>${escapeHtml(line.shelf_code)}</strong></td>
+                <td>${escapeHtml(line.item_code)}</td>
+                <td>${escapeHtml(line.item_name)}</td>
+                <td class="text-end fw-bold">${formatNumber(line.quantity)}</td>
+                <td>${escapeHtml(line.unit)}</td>
+                <td>${escapeHtml(line.size || '-')}</td>
+                <td>${escapeHtml(line.color || '-')}</td>
+                <td><span class="badge ${line.catalog_status === 'existing' ? 'text-bg-success' : 'text-bg-warning'}">${line.catalog_status === 'existing' ? 'Đã có' : 'Mã mới'}</span>${line.shelf_changed ? '<div class="small text-warning mt-1">Đổi kệ</div>' : ''}</td>
+            </tr>`).join('');
+            document.getElementById('rackBulkPreviewTable').classList.remove('d-none');
+            document.getElementById('rackBulkQueueBtn').disabled = rackBulkPreviewLines.length === 0;
+        }
+
+        async function previewRackBulkPaste() {
+            const lines = parseRackBulkPaste();
+            if (!lines.length) return showRackBulkError('Chưa có dữ liệu để kiểm tra.');
+            if (lines.length + rackBatchLines.length > rackBatchLimit) {
+                return showRackBulkError(`Tổng danh sách vượt ${rackBatchLimit} dòng. Hiện đã có ${rackBatchLines.length} dòng chờ.`);
+            }
+            const knownLocations = new Set(locations.map(location => String(location.location_code || '').toUpperCase()));
+            const invalid = lines.find(line => !line.shelf_code || !knownLocations.has(line.shelf_code) || !line.item_code || !Number.isFinite(line.quantity) || line.quantity <= 0);
+            if (invalid) {
+                const locationMessage = invalid.shelf_code && !knownLocations.has(invalid.shelf_code) ? `Kệ ${invalid.shelf_code} chưa tồn tại.` : '';
+                return showRackBulkError(`Dòng ${invalid.source_line} chưa hợp lệ. ${locationMessage || 'Kiểm tra mã và số lượng.'}`);
+            }
+
+            const button = document.getElementById('rackBulkPreviewBtn');
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>Đang kiểm tra';
+            try {
+                const response = await fetch('/api/danh-muc-noi-bo/nhap-ke-hang-loat', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                    body: JSON.stringify({
+                        apply: false,
+                        receipt_date: localIsoDate(),
+                        item_group: 'NPL-SOI',
+                        lines,
+                    }),
+                });
+                renderRackBulkPreview(await jsonOrError(response, 'Không kiểm tra được danh sách'));
+            } catch (error) {
+                showRackBulkError(error.message);
+            } finally {
+                button.disabled = false;
+                button.innerHTML = '<i data-lucide="scan-search"></i>Kiểm tra dữ liệu';
+                refreshIcons();
+            }
+        }
+
+        function addRackBulkPreviewToQueue() {
+            if (!rackBulkPreviewLines.length) return;
+            try {
+                const staged = rackBatchLines.map(line => ({...line}));
+                rackBulkPreviewLines.forEach(line => {
+                    const candidate = {
+                        item_code: line.item_code,
+                        item_name: line.item_name,
+                        quantity: Number(line.quantity),
+                        unit: line.unit,
+                        shelf_code: line.shelf_code,
+                        size: line.size || '',
+                        color: line.color || '',
+                    };
+                    const sameCode = staged.find(item => String(item.item_code).toUpperCase() === candidate.item_code);
+                    if (sameCode && rackBatchSignature(sameCode) !== rackBatchSignature(candidate)) {
+                        throw new Error(`Mã ${candidate.item_code} đã nằm trong danh sách ở kệ ${sameCode.shelf_code}.`);
+                    }
+                    const existing = staged.find(item => rackBatchSignature(item) === rackBatchSignature(candidate));
+                    if (existing) existing.quantity = Number(existing.quantity || 0) + candidate.quantity;
+                    else staged.push(candidate);
+                });
+                if (staged.length > rackBatchLimit) throw new Error(`Danh sách vượt quá ${rackBatchLimit} dòng.`);
+
+                rackBulkPreviewLines.forEach(line => queueRackBatchLine({
+                    item_code: line.item_code,
+                    item_name: line.item_name,
+                    quantity: Number(line.quantity),
+                    unit: line.unit,
+                    shelf_code: line.shelf_code,
+                    size: line.size || '',
+                    color: line.color || '',
+                }));
+                const added = rackBulkPreviewLines.length;
+                rackBulkPreviewLines = [];
+                document.getElementById('rackBulkQueueBtn').disabled = true;
+                document.getElementById('rackBulkPreviewTable').classList.add('d-none');
+                document.getElementById('rackBulkPreviewSummary').className = 'alert alert-primary py-2 px-3 mt-3 mb-0';
+                document.getElementById('rackBulkPreviewSummary').textContent = `Đã đưa ${added} dòng vào danh sách chờ. Kiểm tra xong có thể đồng bộ một lần.`;
+                document.getElementById('rackBulkPasteInput').value = '';
+            } catch (error) {
+                showRackBulkError(error.message);
+            }
+        }
+
+        function queueRackBatchLine(line) {
+            const sameCode = rackBatchLines.find(item => String(item.item_code).toUpperCase() === line.item_code);
+            if (sameCode && rackBatchSignature(sameCode) !== rackBatchSignature(line)) {
+                throw new Error(`Mã ${line.item_code} đã nằm trong danh sách ở kệ ${sameCode.shelf_code}. Một mã DANH MỤC chỉ được khai báo một kệ.`);
+            }
+            const existingIndex = rackBatchLines.findIndex(item => rackBatchSignature(item) === rackBatchSignature(line));
+            if (existingIndex >= 0) {
+                rackBatchLines[existingIndex].quantity = Number(rackBatchLines[existingIndex].quantity || 0) + Number(line.quantity || 0);
+            } else {
+                if (rackBatchLines.length >= rackBatchLimit) throw new Error('Danh sách đã đủ 100 dòng. Đồng bộ trước khi nhập tiếp.');
+                rackBatchLines.push(line);
+            }
+            persistRackBatchLines();
+        }
+
+        async function syncRackBatchLines() {
+            if (!rackBatchLines.length) return;
+            const button = document.getElementById('rackBatchSyncBtn');
+            const bulkButton = document.getElementById('rackBulkSyncBtn');
+            [button, bulkButton].filter(Boolean).forEach(item => {
+                item.disabled = true;
+                item.innerHTML = '<span class="spinner-border spinner-border-sm"></span>Đang đồng bộ';
+            });
+            try {
+                const response = await fetch('/api/danh-muc-noi-bo/nhap-ke-hang-loat', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                    body: JSON.stringify({
+                        apply: true,
+                        receipt_date: dateVnToIso(value('checkedAt')) || localIsoDate(),
+                        item_group: 'NPL-SOI',
+                        note: `Nhập hàng loạt từ mặt kệ (${rackBatchLines.length} dòng)`,
+                        lines: rackBatchLines,
+                    }),
+                });
+                const result = await jsonOrError(response, 'Không đồng bộ được DANH MỤC');
+                const syncedCount = rackBatchLines.length;
+                rackBatchLines = [];
+                persistRackBatchLines();
+                showWarehouseToast('Đồng bộ hoàn tất', `${syncedCount} dòng đã được ghi bằng một lượt.`);
+                document.getElementById('rackCrudStatus').textContent = result.message || 'Đã cập nhật DANH MỤC.';
+                loadRackInventoryRows();
+                loadPackages();
+                loadLocations();
+                loadWarehouseStats();
+                loadWarehouseMap();
+                loadLocationContents();
+            } catch (error) {
+                showWarehouseToast('Không đồng bộ được', error.message);
+                document.getElementById('rackCrudStatus').textContent = error.message;
+            } finally {
+                button.innerHTML = '<i data-lucide="cloud-upload"></i>Đồng bộ DANH MỤC';
+                button.disabled = rackBatchLines.length === 0;
+                if (bulkButton) {
+                    bulkButton.innerHTML = '<i data-lucide="cloud-upload"></i>Đồng bộ DANH MỤC';
+                    bulkButton.disabled = rackBatchLines.length === 0;
+                }
+                refreshIcons();
+            }
+        }
+
         function openRackInventoryModal(locationCode) {
             rackCrudLocationCode = String(locationCode || '').toUpperCase();
             if (!rackCrudLocationCode) return;
@@ -2785,6 +3106,7 @@
             document.getElementById('rackCrudRows').innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Đang tải...</td></tr>';
             rackInventoryModal.show();
             refreshIcons();
+            renderRackBatchLines();
             loadRackInventoryRows();
         }
 
@@ -2825,15 +3147,15 @@
             } else if (item) {
                 state.className = 'small text-success';
                 state.textContent = `Đã có trong DANH MỤC${item.shelf ? ` · Kệ khai báo ${item.shelf}` : ''}.`;
-                if (!packageId) saveButton.innerHTML = '<i data-lucide="package-plus"></i>Lưu tồn đầu';
+                if (!packageId) saveButton.innerHTML = '<i data-lucide="list-plus"></i>Thêm vào danh sách';
             } else if (value('rackCrudItemCode').trim()) {
                 state.className = 'small text-warning-emphasis';
-                state.textContent = 'Mã mới: sẽ append mã, kệ và tồn đầu vào Google Sheet DANH MỤC.';
-                if (!packageId) saveButton.innerHTML = '<i data-lucide="cloud-upload"></i>Append + lưu tồn đầu';
+                state.textContent = 'Mã mới: lưu tạm tại máy, chỉ ghi Google Sheet khi bấm Đồng bộ DANH MỤC.';
+                if (!packageId) saveButton.innerHTML = '<i data-lucide="list-plus"></i>Thêm vào danh sách';
             } else {
                 state.className = 'small text-muted';
                 state.textContent = 'Gõ mã để kiểm tra DANH MỤC.';
-                if (!packageId) saveButton.innerHTML = '<i data-lucide="save"></i>Lưu hàng';
+                if (!packageId) saveButton.innerHTML = '<i data-lucide="list-plus"></i>Thêm vào danh sách';
             }
             if (packageId) {
                 saveButton.innerHTML = '<i data-lucide="save"></i>Cập nhật';
@@ -2857,6 +3179,7 @@
                     .then(result => {
                         internalCatalogItems = [...(result.data || []), ...internalCatalogItems];
                         renderRackCatalogOptions(result.data || []);
+                        rackCatalogLookups.add(keyword.trim().toUpperCase());
                         rackCrudLookupPending = false;
                         applyRackCatalogSelection();
                     })
@@ -3039,10 +3362,12 @@
         async function resolveRackCatalogItem(code) {
             const localItem = findRackCatalogItem(code);
             if (localItem) return localItem;
+            if (rackCatalogLookups.has(String(code || '').trim().toUpperCase())) return null;
             const result = await fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(code)}&limit=50`)
                 .then(r => jsonOrError(r, 'Không kiểm tra được DANH MỤC'));
             internalCatalogItems = [...(result.data || []), ...internalCatalogItems];
             renderRackCatalogOptions(result.data || []);
+            rackCatalogLookups.add(String(code || '').trim().toUpperCase());
             return findRackCatalogItem(code) || null;
         }
 
@@ -3075,40 +3400,16 @@
                     if (!itemName || !unit) {
                         throw new Error('Cần nhập Tên hàng và ĐVT trước khi lưu tồn đầu.');
                     }
-                    const response = await fetch('/api/danh-muc-noi-bo/nhap-ke-hang-loat', {
-                        method: 'POST',
-                        headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
-                        body: JSON.stringify({
-                            apply: true,
-                            receipt_date: dateVnToIso(value('checkedAt')) || localIsoDate(),
-                            item_group: 'SỢI',
-                            note: `Nhập mã mới tại kệ ${rackCrudLocationCode}`,
-                            lines: [{
-                                item_code: code,
-                                item_name: itemName,
-                                quantity,
-                                unit,
-                                shelf_code: rackCrudLocationCode,
-                                size: value('rackCrudSize').trim(),
-                                color: value('rackCrudColor').trim() || itemName,
-                            }],
-                        }),
-                    });
-                    await jsonOrError(response, 'Không lưu được tồn đầu vào DANH MỤC');
-                    const cachedItem = item || {};
-                    Object.assign(cachedItem, {
-                        code,
-                        value: code,
-                        name: itemName,
+                    queueRackBatchLine({
+                        item_code: code,
+                        item_name: itemName,
+                        quantity,
                         unit,
-                        shelf: rackCrudLocationCode,
-                        size: value('rackCrudSize'),
+                        shelf_code: rackCrudLocationCode,
+                        size: value('rackCrudSize').trim(),
                         color: value('rackCrudColor').trim() || itemName,
-                        opening_quantity: quantity,
                     });
-                    if (!item) internalCatalogItems.unshift(cachedItem);
-                    showWarehouseToast('Đã lưu tồn đầu', `${code} · ${formatNumber(quantity)} ${unit} · kệ ${rackCrudLocationCode}`);
-                    document.getElementById('rackCrudStatus').textContent = 'Đã cập nhật TỒN ĐẦU trên Google Sheet.';
+                    showWarehouseToast('Đã thêm vào danh sách', `${code} · ${formatNumber(quantity)} ${unit} · kệ ${rackCrudLocationCode}`);
                 } else {
                     const payload = rackCrudPayload();
                     const response = await fetch(`/api/kiem-ton-kho/kien/${packageId}`, {
@@ -3121,12 +3422,17 @@
                 }
 
                 resetRackCrudForm();
-                loadRackInventoryRows();
-                loadPackages();
-                loadLocations();
-                loadWarehouseStats();
-                loadWarehouseMap();
-                loadLocationContents();
+                if (!packageId) {
+                    document.getElementById('rackCrudStatus').textContent = `Đang chờ đồng bộ ${rackBatchLines.length}/100 dòng.`;
+                }
+                if (packageId) {
+                    loadRackInventoryRows();
+                    loadPackages();
+                    loadLocations();
+                    loadWarehouseStats();
+                    loadWarehouseMap();
+                    loadLocationContents();
+                }
                 document.getElementById('rackCrudItemCode').focus();
             } catch (error) {
                 rackCrudLookupPending = false;
@@ -3687,6 +3993,30 @@
         document.getElementById('rackCrudItemCode').addEventListener('input', searchRackCatalog);
         document.getElementById('rackCrudItemCode').addEventListener('change', applyRackCatalogSelection);
         document.getElementById('rackCrudForm').addEventListener('submit', saveRackInventoryItem);
+        document.getElementById('rackBatchToggleBtn').addEventListener('click', event => {
+            const panel = document.getElementById('rackBatchPanel');
+            panel.classList.toggle('d-none');
+            event.currentTarget.textContent = panel.classList.contains('d-none') ? 'Xem danh sách' : 'Ẩn danh sách';
+        });
+        document.getElementById('rackBatchSyncBtn').addEventListener('click', syncRackBatchLines);
+        document.getElementById('openRackBulkIntakeBtn')?.addEventListener('click', () => {
+            rackBulkPreviewLines = [];
+            document.getElementById('rackBulkPreviewSummary').classList.add('d-none');
+            document.getElementById('rackBulkPreviewTable').classList.add('d-none');
+            document.getElementById('rackBulkQueueBtn').disabled = true;
+            renderRackBatchLines();
+            rackBulkIntakeModal.show();
+        });
+        document.getElementById('rackBulkPreviewBtn')?.addEventListener('click', previewRackBulkPaste);
+        document.getElementById('rackBulkQueueBtn')?.addEventListener('click', addRackBulkPreviewToQueue);
+        document.getElementById('rackBulkSyncBtn')?.addEventListener('click', syncRackBatchLines);
+        document.getElementById('rackBatchRows').addEventListener('click', event => {
+            const button = event.target.closest('[data-rack-batch-remove]');
+            if (!button) return;
+            rackBatchLines.splice(Number(button.dataset.rackBatchRemove), 1);
+            persistRackBatchLines();
+        });
+        renderRackBatchLines();
         document.getElementById('locationCode').addEventListener('change', () => {
             fillSelectedLocation();
             document.getElementById('receiptLocationCode').value = value('locationCode').toUpperCase();
@@ -3932,7 +4262,7 @@
         const requestedKeyword = pageParams.get('keyword');
         const requestedProductionOrder = pageParams.get('production_order');
         if (requestedKeyword) document.getElementById('receiptKeyword').value = requestedKeyword;
-        switchWorkspace(shelfMapOnly ? 'map3d' : (requestedView === 'map' ? 'editor' : (['entry', 'receipts', 'history', 'overview', 'editor', 'map3d'].includes(requestedView) ? requestedView : 'entry')));
+        switchWorkspace(shelfMapOnly ? 'map3d' : (workspaceView || (requestedView === 'map' ? 'editor' : (['entry', 'receipts', 'history', 'overview', 'editor', 'map3d'].includes(requestedView) ? requestedView : 'entry'))));
         const requestedLocation = pageParams.get('location_code');
         if (requestedLocation) document.getElementById('locationCode').value = requestedLocation.toUpperCase();
         loadLocations().then(() => {

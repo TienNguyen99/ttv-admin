@@ -275,7 +275,8 @@ class InternalStockLedger
                 DB::raw("COALESCE(l.color, '') as color"),
                 DB::raw("COALESCE(l.side, '') as side")
             )
-            ->whereIn('r.source', ['Phieu nhap thanh pham', 'Dieu chinh kiem ke']);
+            ->whereIn('r.source', ['Phieu nhap thanh pham', 'Dieu chinh kiem ke'])
+            ->where('r.status', 'posted');
     }
 
     private function issueQuery(): Builder
@@ -291,6 +292,7 @@ class InternalStockLedger
                 DB::raw("COALESCE(l.color, '') as color"),
                 DB::raw("COALESCE(l.side, '') as side")
             )
-            ->whereRaw("COALESCE(i.issue_type, 'material') <> 'production'");
+            ->whereRaw("COALESCE(i.issue_type, 'material') <> 'production'")
+            ->whereIn('i.status', ['posted', 'completed']);
     }
 }

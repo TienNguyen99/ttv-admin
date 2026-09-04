@@ -195,7 +195,7 @@
                 <div class="catalog-edit-grid">
                     <div><label for="editCatalogCode">Mã hàng</label><input id="editCatalogCode" class="form-control" maxlength="200"></div>
                     <div class="wide"><label for="editCatalogName">Tên hàng *</label><input id="editCatalogName" class="form-control" maxlength="500" required></div>
-                    <div><label for="editCatalogType">LOẠI trên Sheet</label><input id="editCatalogType" class="form-control" maxlength="100" list="catalogTypeOptions"><datalist id="catalogTypeOptions"><option value="TP"><option value="BTP"><option value="TPTHUN"><option value="SOI"><option value="VT"><option value="HC"><option value="KEO"><option value="MUC"><option value="SLC"><option value="TPU"></datalist></div>
+                    <div><label for="editCatalogType">LOẠI trên Sheet</label><input id="editCatalogType" class="form-control" maxlength="100" list="catalogTypeOptions"><datalist id="catalogTypeOptions"><option value="TP"><option value="BTP"><option value="TPTHUN"><option value="NPL-SOI"><option value="VT"><option value="HC"><option value="KEO"><option value="MUC"><option value="SLC"><option value="TPU"></datalist></div>
                     <div><label for="editCatalogUnit">Đơn vị tính</label><input id="editCatalogUnit" class="form-control" maxlength="50"></div>
                     <div><label for="editCatalogShelf">Kệ</label><input id="editCatalogShelf" class="form-control" maxlength="150"></div>
                     <div><label for="editCatalogOpening">Tồn đầu</label><input id="editCatalogOpening" class="form-control" type="number" step="0.001"></div>
@@ -207,6 +207,27 @@
                 <button id="saveEditCatalog" type="submit" class="wms-btn wms-btn--primary">Lưu vào Google Sheet</button>
             </div>
         </form>
+    </dialog>
+
+    <dialog id="replaceInvalidCodeDialog" class="split-dialog" style="width:min(620px, calc(100vw - 32px))">
+        <div class="split-dialog__header">
+            <div><strong>Sửa mã sai trên toàn bộ phiếu</strong><div class="sync-note">Chỉ cập nhật dữ liệu kho nội bộ, không ghi TSoft hoặc Google Sheet.</div></div>
+            <button id="closeReplaceInvalidCodeDialog" type="button" class="btn-close" aria-label="Đóng"></button>
+        </div>
+        <div class="split-dialog__body">
+            <div class="row g-3">
+                <div class="col-sm-5"><label for="replaceInvalidOldCode">Mã đang sai</label><input id="replaceInvalidOldCode" class="form-control fw-bold" readonly></div>
+                <div class="col-sm-7"><label for="replaceInvalidNewCode">Đổi thành mã chuẩn *</label><input id="replaceInvalidNewCode" class="form-control text-uppercase" list="replaceInvalidCodeOptions" autocomplete="off" placeholder="Gõ mã trong DANH MỤC"><datalist id="replaceInvalidCodeOptions"></datalist></div>
+            </div>
+            <div id="replaceInvalidCodeNotice" class="alert alert-info py-2 mt-3 mb-0">Nhập mã chuẩn rồi bấm Kiểm tra.</div>
+        </div>
+        <div class="split-dialog__footer">
+            <button id="cancelReplaceInvalidCode" type="button" class="wms-btn">Hủy</button>
+            <div class="d-flex gap-2">
+                <button id="previewReplaceInvalidCode" type="button" class="wms-btn">Kiểm tra</button>
+                <button id="applyReplaceInvalidCode" type="button" class="wms-btn wms-btn--primary" disabled>Áp dụng toàn bộ phiếu</button>
+            </div>
+        </div>
     </dialog>
 
     <script>
@@ -230,9 +251,12 @@
         const catalogImageInput = document.getElementById('catalogImageInput');
         const splitDuplicateDialog = document.getElementById('splitDuplicateDialog');
         const editCatalogDialog = document.getElementById('editCatalogDialog');
+        const replaceInvalidCodeDialog = document.getElementById('replaceInvalidCodeDialog');
         const editCatalogForm = document.getElementById('editCatalogForm');
         let splitDuplicateCode = '';
         let editingCatalogId = null;
+        let replaceInvalidPreview = null;
+        let replaceInvalidSearchTimer = null;
         let catalogRowsById = new Map();
         const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
         const num = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits:3});
@@ -415,7 +439,10 @@
                             <td class="wms-number">${num(row.quantity)}</td>
                             <td>${esc(row.location_code || '-')}</td>
                             <td class="compact-note" title="${esc(row.note || '')}">${esc(row.note || '-')}</td>
-                            <td class="text-end"><a class="wms-btn" target="_blank" href="${esc(row.edit_url)}">Mo phieu</a></td>
+                            <td class="text-end"><div class="d-flex justify-content-end gap-1">
+                                <button type="button" class="wms-btn" data-replace-invalid-code="${esc(row.internal_item_code)}">Sửa mã</button>
+                                <a class="wms-btn" target="_blank" href="${esc(row.edit_url)}">Mở phiếu</a>
+                            </div></td>
                         </tr>
                     `).join('') || '<tr><td colspan="13" class="wms-empty">Khong co ma noi bo ngoai danh muc.</td></tr>';
                 })
@@ -423,6 +450,86 @@
                     document.getElementById('invalidCodeResultLabel').textContent = 'Loi quet';
                     invalidCodeRowsEl.innerHTML = `<tr><td colspan="13" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
                 });
+        }
+
+        function openReplaceInvalidCode(code) {
+            document.getElementById('replaceInvalidOldCode').value = String(code || '').trim().toUpperCase();
+            document.getElementById('replaceInvalidNewCode').value = '';
+            document.getElementById('replaceInvalidCodeOptions').innerHTML = '';
+            const notice = document.getElementById('replaceInvalidCodeNotice');
+            notice.className = 'alert alert-info py-2 mt-3 mb-0';
+            notice.textContent = 'Nhập mã chuẩn rồi bấm Kiểm tra.';
+            document.getElementById('applyReplaceInvalidCode').disabled = true;
+            replaceInvalidPreview = null;
+            replaceInvalidCodeDialog.showModal();
+            setTimeout(() => document.getElementById('replaceInvalidNewCode').focus(), 0);
+        }
+
+        function suggestInvalidReplacement() {
+            const input = document.getElementById('replaceInvalidNewCode');
+            const keyword = input.value.trim();
+            replaceInvalidPreview = null;
+            document.getElementById('applyReplaceInvalidCode').disabled = true;
+            clearTimeout(replaceInvalidSearchTimer);
+            if (!keyword) return;
+            replaceInvalidSearchTimer = setTimeout(() => {
+                fetch(`/api/ma-noi-bo-danh-muc?keyword=${encodeURIComponent(keyword)}&limit=30`)
+                    .then(response => jsonOrError(response, 'Không tải được mã danh mục.'))
+                    .then(result => {
+                        document.getElementById('replaceInvalidCodeOptions').innerHTML = (result.data || []).map(item =>
+                            `<option value="${esc(item.code || item.value || '')}" label="${esc([item.name, item.size, item.color].filter(Boolean).join(' · '))}"></option>`
+                        ).join('');
+                    })
+                    .catch(() => {});
+            }, 180);
+        }
+
+        function submitReplaceInvalidCode(apply) {
+            const oldCode = document.getElementById('replaceInvalidOldCode').value.trim().toUpperCase();
+            const newCode = document.getElementById('replaceInvalidNewCode').value.trim().toUpperCase();
+            const notice = document.getElementById('replaceInvalidCodeNotice');
+            const previewButton = document.getElementById('previewReplaceInvalidCode');
+            const applyButton = document.getElementById('applyReplaceInvalidCode');
+            if (!newCode) {
+                notice.className = 'alert alert-danger py-2 mt-3 mb-0';
+                notice.textContent = 'Hãy chọn mã chuẩn trong DANH MỤC.';
+                return;
+            }
+            if (apply && (!replaceInvalidPreview || replaceInvalidPreview.old_code !== oldCode || replaceInvalidPreview.new_code !== newCode)) {
+                notice.className = 'alert alert-warning py-2 mt-3 mb-0';
+                notice.textContent = 'Mã đã thay đổi. Bấm Kiểm tra lại trước khi áp dụng.';
+                applyButton.disabled = true;
+                return;
+            }
+            previewButton.disabled = true;
+            applyButton.disabled = true;
+            notice.className = 'alert alert-info py-2 mt-3 mb-0';
+            notice.textContent = apply ? 'Đang cập nhật toàn bộ phiếu liên quan...' : 'Đang kiểm tra các phiếu liên quan...';
+            fetch('/api/danh-muc-noi-bo/sua-ma-phieu', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                body: JSON.stringify({old_code: oldCode, new_code: newCode, apply}),
+            }).then(response => jsonOrError(response, 'Không sửa được mã trên phiếu.'))
+              .then(result => {
+                  if (apply) {
+                      notice.className = 'alert alert-success py-2 mt-3 mb-0';
+                      notice.textContent = result.message;
+                      loadInvalidCodes();
+                      setTimeout(() => replaceInvalidCodeDialog.close(), 900);
+                      return;
+                  }
+                  replaceInvalidPreview = result.data;
+                  const counts = result.data?.counts || {};
+                  notice.className = 'alert alert-warning py-2 mt-3 mb-0';
+                  notice.textContent = `Sẽ đổi ${oldCode} thành ${newCode}: ${num(counts.receipt_lines)} dòng nhập, ${num(counts.issue_lines)} dòng xuất. Tên chuẩn: ${result.data?.catalog_name || '-'}.`;
+                  applyButton.disabled = false;
+              })
+              .catch(error => {
+                  replaceInvalidPreview = null;
+                  notice.className = 'alert alert-danger py-2 mt-3 mb-0';
+                  notice.textContent = error.message;
+              })
+              .finally(() => previewButton.disabled = false);
         }
 
         function requestSplitDuplicate(apply = false) {
@@ -657,6 +764,15 @@
             invalidCodePage = 1;
             loadInvalidCodes();
         });
+        invalidCodeRowsEl.addEventListener('click', event => {
+            const button = event.target.closest('[data-replace-invalid-code]');
+            if (button) openReplaceInvalidCode(button.dataset.replaceInvalidCode);
+        });
+        document.getElementById('replaceInvalidNewCode').addEventListener('input', suggestInvalidReplacement);
+        document.getElementById('previewReplaceInvalidCode').addEventListener('click', () => submitReplaceInvalidCode(false));
+        document.getElementById('applyReplaceInvalidCode').addEventListener('click', () => submitReplaceInvalidCode(true));
+        document.getElementById('closeReplaceInvalidCodeDialog').addEventListener('click', () => replaceInvalidCodeDialog.close());
+        document.getElementById('cancelReplaceInvalidCode').addEventListener('click', () => replaceInvalidCodeDialog.close());
         invalidCodeTypeEl.addEventListener('change', () => {
             invalidCodePage = 1;
             loadInvalidCodes();

@@ -37,6 +37,20 @@ class WarehouseCountController extends Controller
         return view('client.warehouse-count');
     }
 
+    public function receiptListIndex()
+    {
+        return view('client.warehouse-count', [
+            'workspaceView' => 'receipts',
+        ]);
+    }
+
+    public function locationIndex()
+    {
+        return view('client.warehouse-count', [
+            'workspaceView' => 'overview',
+        ]);
+    }
+
     public function shelfMapIndex()
     {
         return view('client.warehouse-count', [
@@ -2876,6 +2890,29 @@ class WarehouseCountController extends Controller
         if ($lines->isEmpty()) {
             return response()->json([
                 'message' => 'Nhập ít nhất 1 dòng có Mã nội bộ và Số lượng lớn hơn 0. Mã kế toán có thể gán sau.',
+            ], 422);
+        }
+
+        $unsplitVariants = $lines
+            ->groupBy(fn ($line) => mb_strtoupper(trim((string) $line['internal_item_code'])))
+            ->map(function ($group, $code) {
+                $variants = $group->map(function ($line) {
+                    return mb_strtoupper(trim((string) $line['size'])) . '|' . mb_strtoupper(trim((string) $line['color']));
+                })->unique()->values();
+
+                return $variants->count() > 1 ? ['code' => $code, 'variants' => $variants->all()] : null;
+            })
+            ->filter()
+            ->values();
+        if ($unsplitVariants->isNotEmpty()) {
+            return response()->json([
+                'message' => 'Một mã nội bộ đang dùng cho nhiều size/màu. Hãy tách mã biến thể trước khi lưu.',
+                'errors' => [
+                    'lines' => $unsplitVariants
+                        ->map(fn ($row) => "{$row['code']}: " . count($row['variants']) . ' biến thể')
+                        ->all(),
+                ],
+                'unsplit_variants' => $unsplitVariants->all(),
             ], 422);
         }
 
