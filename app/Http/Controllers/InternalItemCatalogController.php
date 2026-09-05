@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Exceptions\InternalGoogleSyncBusyException;
 use App\Exceptions\InternalGoogleSyncSourceException;
 use App\Models\InternalItemCatalog;
+use App\Models\InternalInventoryCount;
+use App\Models\InternalOpeningStock;
 use App\Models\InternalProductionOrder;
+use App\Models\InventoryPackage;
 use App\Models\WarehouseLocation;
 use App\Services\GoogleSheetCatalogWriter;
 use App\Services\InternalGoogleSyncContext;
@@ -13,6 +16,7 @@ use App\Services\InternalGoogleSyncCoordinator;
 use App\Services\InternalAudit;
 use App\Services\InternalItemGroupResolver;
 use App\Services\PantoneColorMatcher;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -39,7 +43,8 @@ class InternalItemCatalogController extends Controller
             'receipt_date' => 'required|date',
             'item_group' => 'nullable|string|max:100',
             'note' => 'nullable|string|max:500',
-            'lines' => 'required|array|min:1|max:500',
+            'request_key' => ['nullable', 'string', 'max:100', 'regex:/^[A-Za-z0-9._:-]+$/'],
+            'lines' => 'required|array|min:1|max:1000',
             'lines.*.item_code' => 'required|string|max:100',
             'lines.*.item_name' => 'nullable|string|max:500',
             'lines.*.quantity' => 'required|numeric|min:0.001|max:999999999999999',
@@ -58,40 +63,28 @@ class InternalItemCatalogController extends Controller
                 'unit' => mb_strtoupper(trim((string) ($line['unit'] ?? ''))),
                 'shelf_code' => mb_strtoupper(trim((string) $line['shelf_code'])),
                 'size' => trim((string) ($line['size'] ?? '')),
-                  'color' => trim((string) ($line['color'] ?? '')) ?: trim((string) ($line['item_name'] ?? '')),
+                'color' => trim((string) ($line['color'] ?? '')),
             ];
         });
 
-        $conflicts = [];
         $lines = $normalized
-            ->groupBy(fn ($line) => $line['item_code'])
-            ->map(function ($codeLines, $code) use (&$conflicts) {
-                $signatures = $codeLines->map(fn ($line) => mb_strtoupper(implode('|', [
-                    $line['item_name'],
-                    $line['unit'],
-                    $line['shelf_code'],
-                    $line['size'],
-                    $line['color'],
-                ])))->unique();
-                if ($signatures->count() > 1) {
-                    $conflicts[] = $code;
-                }
-
+            ->groupBy(fn ($line) => mb_strtoupper(implode('|', [
+                $line['item_code'],
+                $line['shelf_code'],
+                $line['unit'],
+                $line['size'],
+                $line['color'],
+            ])))
+            ->map(function ($codeLines) {
                 $line = $codeLines->first();
+                $line['item_name'] = (string) ($codeLines->pluck('item_name')->first(fn ($name) => trim((string) $name) !== '') ?? '');
                 $line['quantity'] = (float) $codeLines->sum('quantity');
                 $line['merged_rows'] = $codeLines->count();
                 return $line;
             })
             ->values();
 
-        if ($conflicts) {
-            return response()->json([
-                'message' => 'Có mã bị lặp nhưng khác tên, đơn vị, màu hoặc kệ.',
-                'errors' => ['lines' => array_map(fn ($code) => "Kiểm tra lại mã {$code}.", $conflicts)],
-            ], 422);
-        }
-
-        $codes = $lines->pluck('item_code')->all();
+        $codes = $lines->pluck('item_code')->unique()->values()->all();
         $catalogGroups = InternalItemCatalog::query()
             ->whereIn(DB::raw('UPPER(TRIM(item_code))'), $codes)
             ->orderByDesc('is_active')
@@ -125,8 +118,10 @@ class InternalItemCatalogController extends Controller
             $line['catalog_id'] = $catalog ? (int) $catalog->id : null;
             $line['source_row'] = $catalog ? (int) $catalog->source_row : null;
             $line['catalog_status'] = !$catalog || (int) $catalog->source_row < 2 ? 'new' : 'existing';
-            $line['shelf_changed'] = $catalog
-                && mb_strtoupper(trim((string) $catalog->shelf_code)) !== $line['shelf_code'];
+            $catalogShelves = $catalog
+                ? collect(preg_split('/[,;|\n\r]+/', (string) $catalog->shelf_code))->map(fn ($code) => mb_strtoupper(trim((string) $code)))->filter()
+                : collect();
+            $line['shelf_changed'] = $catalog && !$catalogShelves->contains($line['shelf_code']);
             $line['current_shelf'] = $catalog ? trim((string) $catalog->shelf_code) : '';
               return $line;
           })->values();
@@ -145,12 +140,39 @@ class InternalItemCatalogController extends Controller
               ], 422);
           }
 
+        $knownLocations = WarehouseLocation::query()
+            ->whereIn('location_code', $preview->pluck('shelf_code')->unique()->values()->all())
+            ->pluck('location_code')
+            ->map(fn ($code) => mb_strtoupper(trim((string) $code)));
+        $missingLocations = $preview->pluck('shelf_code')->unique()->diff($knownLocations)->values();
+        if ($missingLocations->isNotEmpty()) {
+            return response()->json([
+                'message' => 'Có vị trí chưa được tạo.',
+                'errors' => [
+                    'lines' => $missingLocations->map(fn ($code) => "Vị trí {$code} chưa tồn tại.")->all(),
+                ],
+            ], 422);
+        }
+
+        $catalogRows = $preview
+            ->groupBy('item_code')
+            ->map(function ($codeLines) {
+                $line = $codeLines->first();
+                $line['shelf_code'] = $codeLines->pluck('shelf_code')->filter()->unique()->sort(SORT_NATURAL | SORT_FLAG_CASE)->implode(', ');
+                $line['quantity'] = (float) $codeLines->sum('quantity');
+                $line['merged_rows'] = (int) $codeLines->sum('merged_rows');
+                $line['shelf_changed'] = $codeLines->contains(fn ($item) => (bool) $item['shelf_changed']);
+                return $line;
+            })
+            ->values();
+
         $summary = [
             'input_rows' => count($data['lines']),
             'line_count' => $preview->count(),
-            'new_count' => $preview->where('catalog_status', 'new')->count(),
-            'existing_count' => $preview->where('catalog_status', 'existing')->count(),
-            'shelf_update_count' => $preview->where('shelf_changed', true)->count(),
+            'item_count' => $catalogRows->count(),
+            'new_count' => $catalogRows->where('catalog_status', 'new')->count(),
+            'existing_count' => $catalogRows->where('catalog_status', 'existing')->count(),
+            'shelf_update_count' => $catalogRows->where('shelf_changed', true)->count(),
             'shelf_count' => $preview->pluck('shelf_code')->unique()->count(),
             'total_quantity' => (float) $preview->sum('quantity'),
             'units' => $preview->pluck('unit')->filter()->unique()->values()->all(),
@@ -164,13 +186,25 @@ class InternalItemCatalogController extends Controller
             ]);
         }
 
+        $requestKey = trim((string) ($data['request_key'] ?? ''));
+        $batch = $requestKey !== '' ? $requestKey : (string) Str::uuid();
+        $batchNote = 'Nhập tồn mặt kệ hàng loạt [' . $batch . ']';
+        if ($requestKey !== '' && InternalOpeningStock::query()->where('note', $batchNote)->exists()) {
+            return response()->json([
+                'message' => 'Lượt đồng bộ này đã được lưu trước đó, hệ thống không cộng tồn lần hai.',
+                'data' => $preview,
+                'catalog_summary' => $summary,
+                'idempotent' => true,
+            ]);
+        }
+
         if (!$writer->isConfigured()) {
             return response()->json([
                 'message' => 'Chưa cấu hình quyền ghi Google Sheet. Chưa có dữ liệu nào được lưu.',
             ], 503);
         }
 
-        $appendLines = $preview->where('catalog_status', 'new')->values();
+        $appendLines = $catalogRows->where('catalog_status', 'new')->values();
         $sheetRowsByCode = $appendLines->isEmpty()
             ? []
             : $writer->findItemRows(
@@ -227,8 +261,8 @@ class InternalItemCatalogController extends Controller
             }
         }
 
-        $openingChanges = $preview
-            ->map(function ($line) use ($sourceRowsByCode) {
+        $openingChanges = $catalogRows
+            ->map(function ($line) use ($sourceRowsByCode, $group) {
                 return [
                     'source_row' => (int) ($sourceRowsByCode[$line['item_code']] ?? 0),
                     'fields' => [
@@ -245,14 +279,16 @@ class InternalItemCatalogController extends Controller
             $writer->writeRowsFields(self::SPREADSHEET_ID, self::SHEET_NAME, $openingChanges);
         }
 
-        $batch = (string) Str::uuid();
         DB::connection('internal')->transaction(function () use (
+            $catalogRows,
             $preview,
             $sourceRowsByCode,
             $batch,
-            $group
+            $batchNote,
+            $group,
+            $data
         ) {
-            foreach ($preview as $line) {
+            foreach ($catalogRows as $line) {
                 $isNewCatalog = !$line['catalog_id'];
                 $catalog = $line['catalog_id']
                     ? InternalItemCatalog::query()->find($line['catalog_id'])
@@ -296,6 +332,65 @@ class InternalItemCatalogController extends Controller
                     ? $catalog->update($attributes)
                     : InternalItemCatalog::query()->create($attributes);
             }
+
+            $locationIds = WarehouseLocation::query()
+                ->whereIn('location_code', $preview->pluck('shelf_code')->unique()->values()->all())
+                ->lockForUpdate()
+                ->pluck('id', 'location_code');
+            $checkedAt = Carbon::parse($data['receipt_date'])->format('Y-m-d');
+            $periodMonth = Carbon::parse($checkedAt)->startOfMonth()->format('Y-m-d');
+            foreach ($preview as $line) {
+                $locationId = $locationIds->get($line['shelf_code']);
+                if (!$locationId) {
+                    throw new \RuntimeException("Vị trí {$line['shelf_code']} chưa tồn tại.");
+                }
+                $count = InternalInventoryCount::query()->firstOrCreate([
+                    'ma_sp' => '',
+                    'ma_ko' => '',
+                    'internal_item_code' => $line['item_code'],
+                    'size' => $line['size'],
+                    'color' => $line['color'],
+                    'side' => '',
+                    'checked_at' => $checkedAt,
+                ], [
+                    'counted_quantity' => 0,
+                    'note' => $batchNote,
+                ]);
+                $count->counted_quantity = (float) $count->counted_quantity + (float) $line['quantity'];
+                $count->save();
+
+                $package = InventoryPackage::query()->create([
+                    'package_code' => 'KE-' . Carbon::parse($checkedAt)->format('Ymd') . '-' . Str::upper(Str::random(12)),
+                    'warehouse_location_id' => $locationId,
+                    'inventory_count_id' => $count->id,
+                    'ma_sp' => '',
+                    'ma_ko' => '',
+                    'internal_item_code' => $line['item_code'],
+                    'size' => $line['size'],
+                    'color' => $line['color'],
+                    'side' => '',
+                    'quantity' => $line['quantity'],
+                    'checked_at' => $checkedAt,
+                    'note' => $batchNote,
+                ]);
+                InternalOpeningStock::query()->create([
+                    'inventory_package_id' => $package->id,
+                    'period_month' => $periodMonth,
+                    'warehouse_code' => '',
+                    'location_code' => $line['shelf_code'],
+                    'ma_hh' => '',
+                    'internal_item_code' => $line['item_code'],
+                    'size' => $line['size'],
+                    'color' => $line['color'],
+                    'side' => '',
+                    'quantity' => $line['quantity'],
+                    'note' => $batchNote,
+                ]);
+            }
+
+            WarehouseLocation::query()
+                ->whereIn('id', $locationIds->values()->all())
+                ->update(['status' => 'counting']);
         });
 
         Cache::forget('internal_catalog_customer_map_v1');
@@ -305,7 +400,7 @@ class InternalItemCatalogController extends Controller
         );
 
         return response()->json([
-            'message' => 'Đã cập nhật tồn đầu và vị trí vào DANH MỤC.',
+            'message' => 'Đã cập nhật danh mục và tồn đầu theo từng vị trí.',
             'data' => $preview,
             'catalog_summary' => $summary,
         ], 201);

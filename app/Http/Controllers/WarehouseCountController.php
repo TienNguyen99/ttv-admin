@@ -529,6 +529,66 @@ class WarehouseCountController extends Controller
         ]);
     }
 
+    public function ensureLocations(Request $request)
+    {
+        $data = $request->validate([
+            'location_codes' => 'required|array|min:1|max:1000',
+            'location_codes.*' => ['required', 'string', 'max:10', 'regex:/^[A-Za-z]{1,2}[1-9][0-9]{0,2}$/'],
+        ]);
+
+        $codes = collect($data['location_codes'])
+            ->map(fn ($code) => mb_strtoupper(trim((string) $code)))
+            ->unique()
+            ->values();
+        $existing = WarehouseLocation::query()
+            ->whereIn('location_code', $codes->all())
+            ->pluck('location_code')
+            ->map(fn ($code) => mb_strtoupper(trim((string) $code)))
+            ->all();
+        $missing = $codes->diff($existing)->values();
+        $rackCode = app(WarehouseRackCode::class);
+        $now = now();
+        $rows = $missing->map(function ($locationCode) use ($rackCode, $now) {
+            preg_match('/^([A-Z]{1,2})(\d+)$/', $locationCode, $matches);
+            $label = $matches[1];
+            $number = (int) $matches[2];
+            $labelIndex = max(0, $rackCode->labelToIndex($label));
+
+            return [
+                'location_code' => $locationCode,
+                'warehouse_code' => '',
+                'shelf_code' => $this->inferShelfCode($locationCode),
+                'tier' => $this->inferTierFromLocationCode($locationCode) ?: 1,
+                'bay_code' => $this->inferBayCode($locationCode) ?: (string) $number,
+                'grid_x' => ((($number - 1) % 6) * 4) + 1,
+                'grid_y' => ($labelIndex * 18) + ((int) floor(($number - 1) / 6) * 3) + 1,
+                'grid_w' => 4,
+                'grid_h' => 2,
+                'location_name' => 'Kệ ' . $locationCode,
+                'status' => 'pending',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        });
+
+        $created = 0;
+        DB::connection('internal')->transaction(function () use ($rows, &$created) {
+            foreach ($rows->chunk(500) as $chunk) {
+                $created += DB::connection('internal')->table('warehouse_locations')->insertOrIgnore($chunk->all());
+            }
+        });
+
+        return response()->json([
+            'message' => "Đã tạo {$created} vị trí còn thiếu.",
+            'data' => [
+                'requested' => $codes->count(),
+                'created' => $created,
+                'existing' => $codes->count() - $missing->count(),
+                'location_codes' => $missing,
+            ],
+        ], $created > 0 ? 201 : 200);
+    }
+
     public function stockMapData(Request $request)
     {
         $date = $this->normalizeDateInput($request->query('checked_at')) ?? now('Asia/Ho_Chi_Minh')->format('Y-m-d');

@@ -35,6 +35,92 @@ class InternalProductionOrderController extends Controller
         return view('client.production-order-workflow');
     }
 
+    public function storeSupplemental(Request $request)
+    {
+        $data = $request->validate([
+            'base_item_code' => 'required|string|max:200',
+            'order_quantity' => 'required|numeric|min:0.001|max:999999999999999',
+            'customer' => 'nullable|string|max:200',
+            'purchase_order' => 'nullable|string|max:1000',
+            'received_date' => 'required|date',
+            'unit' => 'nullable|string|max:50',
+            'description' => 'nullable|string|max:1000',
+        ]);
+
+        $baseCode = mb_strtoupper(trim((string) $data['base_item_code']));
+        $catalog = InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereRaw('UPPER(TRIM(item_code)) = ?', [$baseCode])
+            ->orderByDesc('id')
+            ->first();
+
+        $order = DB::connection('internal')->transaction(function () use ($data, $baseCode, $catalog) {
+            $year = Carbon::parse($data['received_date'])->format('Y');
+            $prefix = 'LSP-' . $year . '-';
+            $lastCode = InternalProductionOrder::query()
+                ->where('production_order', 'like', $prefix . '%')
+                ->orderByDesc('production_order')
+                ->lockForUpdate()
+                ->value('production_order');
+            $sequence = preg_match('/(\d+)$/', (string) $lastCode, $matches)
+                ? ((int) $matches[1]) + 1
+                : 1;
+            do {
+                $orderCode = $prefix . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
+                $sequence++;
+            } while (InternalProductionOrder::query()->where('production_order', $orderCode)->exists());
+
+            $rawData = [
+                '_internal_order_type' => 'supplemental',
+                '_internal_order' => [
+                    'base_item_code' => $baseCode,
+                    'total_order_quantity' => (float) $data['order_quantity'],
+                    'created_from' => 'quick_finished_goods_receipt',
+                ],
+            ];
+
+            return InternalProductionOrder::query()->create([
+                'row_key' => hash('sha256', 'SUPPLEMENTAL|' . $orderCode),
+                'production_order' => $orderCode,
+                'purchase_order' => trim((string) ($data['purchase_order'] ?? '')),
+                'customer' => trim((string) ($data['customer'] ?? '')),
+                'item_code' => $baseCode,
+                'standard_item_code' => $catalog ? $catalog->item_code : null,
+                'standard_catalog_id' => $catalog ? $catalog->id : null,
+                'is_variant_parent' => true,
+                'is_manual_variant' => false,
+                'specification' => '',
+                'description' => trim((string) ($data['description'] ?? '')) ?: ($catalog->item_name ?? $baseCode),
+                'size' => '',
+                'color' => '',
+                'unit' => mb_strtoupper(trim((string) ($data['unit'] ?? ''))) ?: ($catalog->unit ?? 'PCS'),
+                'order_quantity' => (float) $data['order_quantity'],
+                'received_date' => Carbon::parse($data['received_date'])->format('Y-m-d'),
+                'status' => 'pending',
+                'source_row' => null,
+                'raw_data' => $rawData,
+                'source_hash' => hash('sha256', json_encode($rawData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+                'sync_batch' => 'manual-supplemental',
+                'is_active' => true,
+            ]);
+        });
+
+        app(InternalAudit::class)->model('production_order.supplemental_created', $order, [
+            'production_order' => $order->production_order,
+            'base_item_code' => $baseCode,
+            'order_quantity' => (float) $order->order_quantity,
+        ], $request);
+        Cache::put(
+            'internal_production_order_search_version',
+            (int) Cache::get('internal_production_order_search_version', 1) + 1
+        );
+
+        return response()->json([
+            'message' => "Đã tạo lệnh phụ {$order->production_order}.",
+            'data' => $order,
+        ], 201);
+    }
+
     public function search(Request $request)
     {
         $keyword = trim((string) $request->query('keyword', ''));
@@ -43,7 +129,8 @@ class InternalProductionOrderController extends Controller
         }
 
         $limit = min(max((int) $request->query('limit', 20), 1), 30);
-        $cacheKey = 'internal_production_order_search:' . sha1(mb_strtoupper($keyword) . '|' . $limit);
+        $searchVersion = (int) Cache::get('internal_production_order_search_version', 1);
+        $cacheKey = 'internal_production_order_search:' . sha1($searchVersion . '|' . mb_strtoupper($keyword) . '|' . $limit);
 
         $data = Cache::remember($cacheKey, now()->addSeconds(30), function () use ($keyword, $limit) {
             $contains = '%' . $keyword . '%';
@@ -83,7 +170,7 @@ class InternalProductionOrderController extends Controller
                 ->select([
                     'production_order', 'customer', 'purchase_order', 'promised_date',
                     'item_code', 'standard_item_code', 'description', 'size', 'color',
-                    'unit', 'order_quantity',
+                    'unit', 'order_quantity', 'raw_data', 'sync_batch',
                 ])
                 ->where('is_active', true)
                 ->whereIn('production_order', $orderCodes->all())
@@ -92,8 +179,15 @@ class InternalProductionOrderController extends Controller
                 ->groupBy('production_order')
                 ->map(function ($rows, $productionOrder) {
                     $first = $rows->first();
+                    $rawData = is_array($first->raw_data) ? $first->raw_data : [];
+                    $orderType = ($rawData['_internal_order_type'] ?? '') === 'supplemental'
+                        || $first->sync_batch === 'manual-supplemental'
+                        ? 'supplemental'
+                        : 'standard';
                     return [
                         'production_order' => trim((string) $productionOrder),
+                        'order_type' => $orderType,
+                        'order_quantity' => $this->plannedQuantityForOrderLines($rows),
                         'customer' => trim((string) $first->customer),
                         'purchase_order' => trim((string) $first->purchase_order),
                         'promised_date' => optional($first->promised_date)->format('Y-m-d'),
@@ -867,7 +961,7 @@ class InternalProductionOrderController extends Controller
                 $status = $this->status($targetDate);
                 $existing = $existingByRowKey->get($rowKey);
                 $wasExisting = (bool) $existing;
-                $sourceHash = hash('sha256', json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                $sourceHash = hash('sha256', 'production-order-sync-v2|' . json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                 if ($existing && hash_equals((string) ($existing->source_hash ?? ''), $sourceHash)) {
                     if (!$existing->is_active && !$existing->is_variant_parent) {
                         $existing->update(['is_active' => true]);
@@ -887,7 +981,10 @@ class InternalProductionOrderController extends Controller
                         'size' => $size,
                         'color' => $color,
                         'unit' => $this->pick($row, ['dvt']),
-                        'order_quantity' => $this->number($this->pick($row, ['so luong dat'])),
+                        'order_quantity' => $this->quantityNumber(
+                            $this->pick($row, ['so luong dat']),
+                            $this->pick($row, ['dvt'])
+                        ),
                         'location' => $this->pick($row, ['vi tri']),
                         'received_date' => $this->dateValue($this->pick($row, ['ngay nhan', 'ngay ra lenh'])),
                         'promised_date' => $this->dateValue($this->pick($row, ['ngay hen giao'])),
@@ -917,7 +1014,11 @@ class InternalProductionOrderController extends Controller
 
             $archiveQuery = InternalProductionOrder::query()
                 ->where('is_active', true)
-                ->where('is_manual_variant', false);
+                ->where('is_manual_variant', false)
+                ->where(function ($query) {
+                    $query->whereNull('sync_batch')
+                        ->orWhere('sync_batch', '!=', 'manual-supplemental');
+                });
             if ($activeKeys) {
                 $archiveQuery->whereNotIn('row_key', array_unique($activeKeys));
             }
@@ -927,6 +1028,10 @@ class InternalProductionOrderController extends Controller
         $relinkedDocumentLines = 0;
         $customerSync = app(\App\Services\InternalCustomerCatalogSync::class)->syncFromProductionOrders();
         Cache::forget('internal_catalog_customer_map_v1');
+        Cache::put(
+            'internal_production_order_search_version',
+            (int) Cache::get('internal_production_order_search_version', 1) + 1
+        );
 
         return [
                 'created' => $created,
@@ -1269,6 +1374,26 @@ class InternalProductionOrderController extends Controller
         $value = str_replace(['.', ' '], '', $value);
         $value = str_replace(',', '.', $value);
         return is_numeric($value) ? (float) $value : 0;
+    }
+
+    private function quantityNumber($value, $unit): float
+    {
+        $raw = preg_replace('/\s+/u', '', trim((string) $value));
+        if ($raw === '') {
+            return 0;
+        }
+
+        $normalizedUnit = mb_strtoupper(Str::ascii(trim((string) $unit)));
+        $wholeNumberUnits = ['PCS', 'PC', 'CAI', 'BO', 'SET', 'CAP', 'CHIEC', 'CUON', 'THUNG'];
+
+        // Counted units cannot have a fractional item. Sheets commonly export
+        // their thousands separator as either 15,756 or 15.756.
+        if (in_array($normalizedUnit, $wholeNumberUnits, true)
+            && preg_match('/^[+-]?\d{1,3}(?:[.,]\d{3})+$/', $raw)) {
+            return (float) str_replace([',', '.'], '', $raw);
+        }
+
+        return $this->number($raw);
     }
 
     private function date($value): ?Carbon

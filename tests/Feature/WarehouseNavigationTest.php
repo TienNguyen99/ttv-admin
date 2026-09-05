@@ -35,12 +35,25 @@ class WarehouseNavigationTest extends TestCase
         $response = $this->get('/client/kho/phieu-nhap');
 
         $response->assertSee('Quản lý kho')
+            ->assertSee('Tổng quan kho')
+            ->assertSee('Tồn kho hiện tại')
             ->assertSee('Danh sách phiếu nhập')
             ->assertSee('Danh sách phiếu xuất')
             ->assertSee('Mặt kệ kho')
             ->assertSee('Vị trí kho')
+            ->assertSee('Đợt kiểm kê')
+            ->assertSee('Cảnh báo kho')
             ->assertSee('Quản lý nhập liệu')
             ->assertSee('Nhập thành phẩm nhanh')
             ->assertSee('Xuất thành phẩm nhanh');
+    }
+
+    public function test_shelf_map_supports_large_queue_and_bulk_delete_controls(): void
+    {
+        $this->get('/client/mat-ke-kho')
+            ->assertOk()
+            ->assertSee('1.000 dòng')
+            ->assertSee('Xóa đã chọn')
+            ->assertSee('Xóa toàn bộ');
     }
 }

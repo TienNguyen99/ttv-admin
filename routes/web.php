@@ -262,6 +262,7 @@ Route::post('/api/lenh-san-xuat-sheet/dong-bo', [InternalProductionOrderControll
 Route::get('/client/lenh-san-xuat-trung-tam', [InternalProductionOrderController::class, 'workflowIndex']);
 Route::get('/api/lenh-san-xuat-trung-tam/tim-kiem', [InternalProductionOrderController::class, 'search']);
 Route::get('/api/lenh-san-xuat-trung-tam', [InternalProductionOrderController::class, 'workflow']);
+Route::post('/api/lenh-san-xuat-trung-tam/lenh-phu', [InternalProductionOrderController::class, 'storeSupplemental']);
 Route::patch('/api/lenh-san-xuat-trung-tam/cong-doan', [InternalProductionOrderController::class, 'updateOperationProgress']);
 Route::patch('/api/lenh-san-xuat-trung-tam/dong/{order}', [InternalProductionOrderController::class, 'updateStandardItemCode']);
 Route::get('/api/lenh-san-xuat-trung-tam/{order}/vong-doi', [InternalProductionOrderController::class, 'lifecycle'])
@@ -270,8 +271,13 @@ Route::get('/api/lenh-san-xuat-trung-tam/doi-soat-lien-ket', [InternalProduction
 Route::post('/api/lenh-san-xuat-trung-tam/doi-soat-lien-ket', [InternalProductionOrderLinkController::class, 'store']);
 Route::get('/client/ghi-nhan-san-xuat', [InternalProductionActivityController::class, 'index']);
 Route::get('/client/ghi-nhan-san-xuat/qr', [InternalProductionActivityController::class, 'qr']);
+Route::get('/client/ghi-nhan-san-xuat/{productionActivity}/phieu-chuyen', [InternalProductionActivityController::class, 'transferPrint'])
+    ->where('productionActivity', '[0-9]+');
 Route::get('/api/ghi-nhan-san-xuat', [InternalProductionActivityController::class, 'show']);
+Route::post('/api/ghi-nhan-san-xuat/bien-the', [InternalProductionActivityController::class, 'storeVariant']);
 Route::post('/api/ghi-nhan-san-xuat', [InternalProductionActivityController::class, 'store']);
+Route::post('/api/ghi-nhan-san-xuat/{productionActivity}/phieu-chuyen', [InternalProductionActivityController::class, 'createTransfer'])
+    ->where('productionActivity', '[0-9]+');
 Route::delete('/api/ghi-nhan-san-xuat/{productionActivity}', [InternalProductionActivityController::class, 'destroy']);
 Route::get('/client/chuyen-cong-doan', function (\Illuminate\Http\Request $request) {
     return redirect('/client/ghi-nhan-san-xuat' . ($request->getQueryString() ? '?' . $request->getQueryString() : ''));
@@ -355,6 +361,7 @@ Route::get('/client/kiem-ton-kho/vi-tri/{warehouseLocation}', [WarehouseCountCon
 Route::get('/api/kiem-ton-kho/vi-tri', [WarehouseCountController::class, 'locations']);
 Route::post('/api/kiem-ton-kho/vi-tri', [WarehouseCountController::class, 'storeLocation']);
 Route::post('/api/kiem-ton-kho/vi-tri/tao-nhanh', [WarehouseCountController::class, 'bulkStoreLocations']);
+Route::post('/api/kiem-ton-kho/vi-tri/bao-dam', [WarehouseCountController::class, 'ensureLocations']);
 Route::patch('/api/kiem-ton-kho/vi-tri/{warehouseLocation}/layout', [WarehouseCountController::class, 'updateLocationLayout']);
 Route::delete('/api/kiem-ton-kho/vi-tri/{warehouseLocation}', [WarehouseCountController::class, 'destroyLocation']);
 Route::get('/api/kiem-ton-kho/so-do-ton', [WarehouseCountController::class, 'stockMapData']);

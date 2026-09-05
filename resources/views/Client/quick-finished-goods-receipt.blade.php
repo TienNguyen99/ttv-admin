@@ -268,6 +268,11 @@
             border-bottom: 1px solid #eef2f7;
         }
 
+        .supplemental-order-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            border-bottom: 0;
+        }
+
         .quick-export-panel {
             display: grid;
             grid-template-columns: minmax(230px, .7fr) minmax(220px, 1fr) 190px;
@@ -584,6 +589,7 @@
             .quick-actions { justify-content: stretch; }
             .quick-btn { flex: 1 1 auto; }
             .quick-form-row { grid-template-columns: 1fr; padding: 12px; }
+            .supplemental-order-grid { grid-template-columns: 1fr; padding: 0; }
             .quick-export-panel { grid-template-columns: 1fr; padding: 12px; }
             .quick-panel-header { align-items: flex-start; flex-direction: column; }
             .quick-toolbar { justify-content: flex-start; }
@@ -633,6 +639,7 @@
             </div>
             <div class="quick-actions">
                 <button id="changeModeBtn" class="quick-btn" type="button"><i data-lucide="arrow-left"></i>Chọn lại</button>
+                <button id="createSupplementalBtn" class="quick-btn" type="button"><i data-lucide="file-plus-2"></i>Tạo lệnh phụ</button>
                 <button id="savePrintBtn" class="quick-btn quick-btn-primary" type="button"><i data-lucide="printer"></i>Lưu + in</button>
             </div>
         </header>
@@ -730,6 +737,49 @@
             <div class="d-flex gap-2">
                 <button id="cancelVariantDialog" class="quick-btn" type="button">Để sau</button>
                 <button id="applyVariantsBtn" class="quick-btn quick-btn-primary" type="button"><i data-lucide="list-plus"></i>Tạo mã còn thiếu</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="supplementalOrderDialog" class="variant-dialog">
+        <div class="variant-dialog__head">
+            <div><h2>Tạo lệnh sản xuất phụ</h2><p>Dùng lại lệnh này cho các đợt nhập tiếp theo.</p></div>
+            <button id="closeSupplementalDialog" class="quick-btn" type="button" aria-label="Đóng"><i data-lucide="x"></i></button>
+        </div>
+        <div class="variant-dialog__body">
+            <div class="quick-form-row supplemental-order-grid p-0">
+                <div>
+                    <label for="supplementalBaseCode">Mã gốc *</label>
+                    <input id="supplementalBaseCode" class="form-control text-uppercase" autocomplete="off" placeholder="Ví dụ: 108972">
+                </div>
+                <div>
+                    <label for="supplementalTotalQuantity">Tổng đơn hàng *</label>
+                    <input id="supplementalTotalQuantity" class="form-control" type="text" inputmode="decimal" autocomplete="off" placeholder="Tổng số lượng phải sản xuất">
+                </div>
+                <div>
+                    <label for="supplementalUnit">ĐVT</label>
+                    <input id="supplementalUnit" class="form-control text-uppercase" autocomplete="off" value="PCS">
+                </div>
+                <div>
+                    <label for="supplementalCustomer">Khách hàng</label>
+                    <input id="supplementalCustomer" class="form-control" list="receiptCustomerOptions" autocomplete="off">
+                </div>
+                <div>
+                    <label for="supplementalPo">PO</label>
+                    <input id="supplementalPo" class="form-control" autocomplete="off">
+                </div>
+                <div>
+                    <label for="supplementalReceivedDate">Ngày nhận lệnh</label>
+                    <input id="supplementalReceivedDate" class="form-control" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="dd/mm/yyyy">
+                </div>
+            </div>
+            <div id="supplementalOrderStatus" class="quick-status mt-3">Mã lệnh sẽ được tạo tự động.</div>
+        </div>
+        <div class="variant-dialog__foot">
+            <span class="text-muted small">Các mã có cùng tiền tố sẽ được giữ làm biến thể của lệnh.</span>
+            <div class="d-flex gap-2">
+                <button id="cancelSupplementalDialog" class="quick-btn" type="button">Hủy</button>
+                <button id="saveSupplementalOrderBtn" class="quick-btn quick-btn-primary" type="button"><i data-lucide="save"></i>Tạo lệnh phụ</button>
             </div>
         </div>
     </dialog>
@@ -870,6 +920,87 @@
 
         function selectedReceiptDate() {
             return displayToIsoDate(document.getElementById('receiptDate').value);
+        }
+
+        function commonBaseItemCode() {
+            const codes = Array.from(document.querySelectorAll('#quickRows .internal-code'))
+                .map(input => input.value.trim().toUpperCase())
+                .filter(Boolean);
+            if (!codes.length) return '';
+            let prefix = codes[0];
+            codes.slice(1).forEach(code => {
+                while (prefix && !code.startsWith(prefix)) prefix = prefix.slice(0, -1);
+            });
+            prefix = prefix.replace(/[-_]+$/, '');
+            return prefix || codes[0];
+        }
+
+        function openSupplementalOrderDialog() {
+            const firstFilledRow = Array.from(document.querySelectorAll('#quickRows tr'))
+                .find(row => row.querySelector('.internal-code').value.trim());
+            document.getElementById('supplementalBaseCode').value = commonBaseItemCode();
+            document.getElementById('supplementalTotalQuantity').value = '';
+            document.getElementById('supplementalUnit').value = firstFilledRow?.querySelector('.item-unit').value.trim() || 'PCS';
+            document.getElementById('supplementalCustomer').value = firstFilledRow?.querySelector('.production-order').dataset.customer || '';
+            document.getElementById('supplementalPo').value = firstFilledRow?.querySelector('.production-order').dataset.purchaseOrder || '';
+            document.getElementById('supplementalReceivedDate').value = document.getElementById('receiptDate').value || isoToDisplayDate(localIsoDate());
+            document.getElementById('supplementalOrderStatus').textContent = 'Mã lệnh sẽ được tạo tự động.';
+            document.getElementById('supplementalOrderDialog').showModal();
+            window.setTimeout(() => document.getElementById('supplementalBaseCode').focus(), 0);
+        }
+
+        async function saveSupplementalOrder() {
+            const button = document.getElementById('saveSupplementalOrderBtn');
+            const baseCode = document.getElementById('supplementalBaseCode').value.trim().toUpperCase();
+            const total = num(document.getElementById('supplementalTotalQuantity').value);
+            const receivedDate = displayToIsoDate(document.getElementById('supplementalReceivedDate').value);
+            if (!baseCode || total <= 0 || !receivedDate) {
+                document.getElementById('supplementalOrderStatus').textContent = 'Nhập mã gốc, tổng đơn hàng và ngày nhận lệnh hợp lệ.';
+                return;
+            }
+            button.disabled = true;
+            setOperationLoading(true, 'Đang tạo lệnh phụ', 'Lệnh sẽ được lưu vào Lệnh SX trung tâm.');
+            try {
+                const response = await fetch('/api/lenh-san-xuat-trung-tam/lenh-phu', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                    body: JSON.stringify({
+                        base_item_code: baseCode,
+                        order_quantity: total,
+                        customer: document.getElementById('supplementalCustomer').value.trim(),
+                        purchase_order: document.getElementById('supplementalPo').value.trim(),
+                        received_date: receivedDate,
+                        unit: document.getElementById('supplementalUnit').value.trim() || 'PCS',
+                    }),
+                });
+                const result = await jsonOrError(response, 'Không tạo được lệnh phụ');
+                const order = result.data || {};
+                productionOrderSuggestionCache.set(String(order.production_order || '').toUpperCase(), {
+                    ...order,
+                    planned_quantity: Number(order.order_quantity || 0),
+                    received_quantity: 0,
+                    remaining_quantity: Number(order.order_quantity || 0),
+                    has_planned_quantity: true,
+                });
+                document.querySelectorAll('#quickRows tr').forEach(row => {
+                    const itemCode = row.querySelector('.internal-code').value.trim().toUpperCase();
+                    if (!itemCode || (itemCode !== baseCode && !itemCode.startsWith(`${baseCode}-`) && !itemCode.startsWith(`${baseCode}_`))) return;
+                    const input = row.querySelector('.production-order');
+                    input.value = order.production_order || '';
+                    input.dataset.productionOrderId = order.id || '';
+                    input.dataset.purchaseOrder = order.purchase_order || '';
+                    input.dataset.customer = order.customer || '';
+                    input.dataset.sourceItemCode = baseCode;
+                    input.dataset.appliedOrder = String(order.production_order || '').toUpperCase();
+                });
+                document.getElementById('supplementalOrderDialog').close();
+                setStatus(`${result.message} Tổng đơn hàng ${fmt(order.order_quantity)} ${order.unit || ''}.`, 'ok');
+            } catch (error) {
+                document.getElementById('supplementalOrderStatus').textContent = error.message;
+            } finally {
+                button.disabled = false;
+                setOperationLoading(false);
+            }
         }
 
         function loadCustomerSuggestions(keyword = '') {
@@ -2347,6 +2478,7 @@
             document.getElementById('exportImmediately').checked = false;
             toggleImmediateExportFields();
             document.getElementById('workspaceTitle').textContent = isBtp ? 'Nhập bán thành phẩm' : 'Nhập thành phẩm';
+            document.getElementById('createSupplementalBtn').classList.toggle('d-none', isBtp);
             document.getElementById('savePrintBtn').innerHTML = isBtp
                 ? '<i data-lucide="send"></i>Lưu + gửi sản xuất'
                 : '<i data-lucide="printer"></i>Lưu + in';
@@ -2428,6 +2560,10 @@
         }
 
         document.getElementById('savePrintBtn').addEventListener('click', saveAndPrint);
+        document.getElementById('createSupplementalBtn').addEventListener('click', openSupplementalOrderDialog);
+        document.getElementById('saveSupplementalOrderBtn').addEventListener('click', saveSupplementalOrder);
+        document.getElementById('closeSupplementalDialog').addEventListener('click', () => document.getElementById('supplementalOrderDialog').close());
+        document.getElementById('cancelSupplementalDialog').addEventListener('click', () => document.getElementById('supplementalOrderDialog').close());
         document.getElementById('applyVariantsBtn').addEventListener('click', applyProductionVariants);
         document.getElementById('previewVariantSizesBtn').addEventListener('click', previewManualVariantSizes);
         document.getElementById('closeVariantDialog').addEventListener('click', () => document.getElementById('variantDialog').close());

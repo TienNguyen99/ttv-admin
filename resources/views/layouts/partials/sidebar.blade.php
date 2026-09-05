@@ -618,12 +618,16 @@
         </details>
 
         <div class="summary-sidebar__divider">Kho nội bộ</div>
-        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/kho/phieu-nhap*', 'client/kho/phieu-xuat*', 'client/kho/vi-tri*', 'client/mat-ke-kho*') ? 'open' : '' }}>
+        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/kho-noi-bo*', 'client/ton-kho-noi-bo*', 'client/kho/phieu-nhap*', 'client/kho/phieu-xuat*', 'client/kho/vi-tri*', 'client/mat-ke-kho*', 'client/dot-kiem-ke*', 'client/canh-bao-kho*') ? 'open' : '' }}>
             <summary class="summary-sidebar__summary"><i data-lucide="warehouse"></i>Quản lý kho</summary>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/kho-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/kho-noi-bo') }}"><i data-lucide="layout-dashboard"></i>Tổng quan kho</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/ton-kho-noi-bo*') ? 'is-active' : '' }}" href="{{ url('/client/ton-kho-noi-bo') }}"><i data-lucide="boxes"></i>Tồn kho hiện tại</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/kho/phieu-nhap*') ? 'is-active' : '' }}" href="{{ route('warehouse.receipts') }}"><i data-lucide="files"></i>Danh sách phiếu nhập</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/kho/phieu-xuat*') ? 'is-active' : '' }}" href="{{ route('warehouse.issues') }}"><i data-lucide="file-output"></i>Danh sách phiếu xuất</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/mat-ke-kho*') ? 'is-active' : '' }}" href="{{ url('/client/mat-ke-kho') }}"><i data-lucide="panel-top"></i>Mặt kệ kho</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/kho/vi-tri*') ? 'is-active' : '' }}" href="{{ route('warehouse.locations') }}"><i data-lucide="map-pinned"></i>Vị trí kho</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/dot-kiem-ke*') ? 'is-active' : '' }}" href="{{ url('/client/dot-kiem-ke') }}"><i data-lucide="clipboard-check"></i>Đợt kiểm kê</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/canh-bao-kho*') ? 'is-active' : '' }}" href="{{ url('/client/canh-bao-kho') }}"><i data-lucide="triangle-alert"></i>Cảnh báo kho</a>
         </details>
 
         <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/nhap-thanh-pham-nhanh*', 'client/xuat-thanh-pham-nhanh*') ? 'open' : '' }}>

@@ -726,7 +726,7 @@
                     </div>
                     <div class="alert alert-primary d-flex align-items-center justify-content-between gap-2 flex-wrap py-2 px-3 mb-3">
                         <div>
-                            <strong>Danh sách chờ: <span id="rackBatchCount">0</span>/100 dòng</strong>
+                            <strong>Danh sách chờ: <span id="rackBatchCount">0</span>/1.000 dòng</strong>
                             <div class="small">Lưu nhiều kệ tại máy này, sau đó ghi Google Sheet một lần.</div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
@@ -735,8 +735,15 @@
                         </div>
                     </div>
                     <div id="rackBatchPanel" class="rack-crud-table mb-3 d-none">
+                        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap border-bottom p-2 bg-light">
+                            <span id="rackBatchSelectionLabel" class="small text-muted">Chưa chọn dòng</span>
+                            <div class="d-flex gap-2">
+                                <button id="rackBatchDeleteSelectedBtn" type="button" class="btn btn-sm btn-outline-danger" disabled>Xóa đã chọn</button>
+                                <button id="rackBatchClearBtn" type="button" class="btn btn-sm btn-danger" disabled>Xóa toàn bộ</button>
+                            </div>
+                        </div>
                         <table class="table table-sm align-middle mb-0">
-                            <thead><tr><th>Kệ</th><th>Mã hàng</th><th>Tên hàng</th><th class="text-end">Số lượng</th><th>ĐVT</th><th class="text-end">Thao tác</th></tr></thead>
+                            <thead><tr><th style="width:42px"><input id="rackBatchSelectAll" type="checkbox" class="form-check-input" aria-label="Chọn tất cả dòng chờ"></th><th>Kệ</th><th>Mã hàng</th><th>Tên hàng</th><th class="text-end">Số lượng</th><th>ĐVT</th><th class="text-end">Thao tác</th></tr></thead>
                             <tbody id="rackBatchRows"></tbody>
                         </table>
                     </div>
@@ -805,7 +812,7 @@
                 <div class="modal-header">
                     <div>
                         <h5 class="modal-title">Nhập hàng loạt theo vị trí</h5>
-                        <div class="text-muted small">Dán dữ liệu Excel, kiểm tra rồi đưa tối đa 100 dòng vào danh sách chờ.</div>
+                        <div class="text-muted small">Dán dữ liệu Excel, kiểm tra rồi đưa tối đa 1.000 dòng vào danh sách chờ.</div>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
                 </div>
@@ -829,7 +836,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <span class="small text-muted me-auto">Đang chờ: <strong id="rackBulkExistingQueueCount">0</strong>/100 dòng</span>
+                    <span class="small text-muted me-auto">Đang chờ: <strong id="rackBulkExistingQueueCount">0</strong>/1.000 dòng</span>
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
                     <button id="rackBulkQueueBtn" type="button" class="btn btn-primary btn-icon" disabled><i data-lucide="list-plus"></i>Đưa vào danh sách chờ</button>
                     <button id="rackBulkSyncBtn" type="button" class="btn btn-success btn-icon" disabled><i data-lucide="cloud-upload"></i>Đồng bộ DANH MỤC</button>
@@ -1036,9 +1043,12 @@
         let rackCrudLookupPending = false;
         const rackCatalogLookups = new Set();
         const rackBatchStorageKey = 'warehouseRackIntakeBatchV1';
-        const rackBatchLimit = 100;
+        const rackBatchRequestKeyStorage = 'warehouseRackIntakeRequestKeyV1';
+        const rackBatchLimit = 1000;
         let rackBatchLines = loadRackBatchLines();
+        let rackBatchRequestKey = localStorage.getItem(rackBatchRequestKeyStorage) || '';
         let rackBulkPreviewLines = [];
+        let rackBulkMissingLocations = [];
         let rackHoverTarget = null;
         let rackProductionOrderTimer = null;
         let rackProductionOrderRequest = 0;
@@ -2843,7 +2853,7 @@
         function loadRackBatchLines() {
             try {
                 const rows = JSON.parse(localStorage.getItem('warehouseRackIntakeBatchV1') || '[]');
-                return Array.isArray(rows) ? rows.slice(0, 100) : [];
+                return Array.isArray(rows) ? rows.slice(0, rackBatchLimit) : [];
             } catch (error) {
                 return [];
             }
@@ -2851,7 +2861,22 @@
 
         function persistRackBatchLines() {
             localStorage.setItem(rackBatchStorageKey, JSON.stringify(rackBatchLines));
+            if (!rackBatchLines.length) {
+                rackBatchRequestKey = '';
+                localStorage.removeItem(rackBatchRequestKeyStorage);
+            }
             renderRackBatchLines();
+        }
+
+        function ensureRackBatchRequestKey() {
+            if (!rackBatchRequestKey) {
+                const randomPart = window.crypto?.randomUUID
+                    ? window.crypto.randomUUID()
+                    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                rackBatchRequestKey = `rack-${randomPart}`;
+                localStorage.setItem(rackBatchRequestKeyStorage, rackBatchRequestKey);
+            }
+            return rackBatchRequestKey;
         }
 
         function rackBatchSignature(line) {
@@ -2868,17 +2893,62 @@
             syncButton.disabled = rackBatchLines.length === 0;
             const bulkCount = document.getElementById('rackBulkExistingQueueCount');
             const bulkSyncButton = document.getElementById('rackBulkSyncBtn');
+            const selectAll = document.getElementById('rackBatchSelectAll');
+            const clearButton = document.getElementById('rackBatchClearBtn');
             if (bulkCount) bulkCount.textContent = formatNumber(rackBatchLines.length);
             if (bulkSyncButton) bulkSyncButton.disabled = rackBatchLines.length === 0;
+            if (selectAll) {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+                selectAll.disabled = rackBatchLines.length === 0;
+            }
+            if (clearButton) clearButton.disabled = rackBatchLines.length === 0;
             rows.innerHTML = rackBatchLines.map((line, index) => `<tr>
+                <td><input type="checkbox" class="form-check-input rack-batch-select" data-rack-batch-index="${index}" aria-label="Chọn ${escapeHtml(line.item_code)} tại ${escapeHtml(line.shelf_code)}"></td>
                 <td><strong>${escapeHtml(line.shelf_code)}</strong></td>
                 <td>${escapeHtml(line.item_code)}</td>
                 <td>${escapeHtml(line.item_name)}</td>
                 <td class="text-end fw-bold">${formatNumber(line.quantity)}</td>
                 <td>${escapeHtml(line.unit)}</td>
                 <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" data-rack-batch-remove="${index}">Xóa</button></td>
-            </tr>`).join('') || '<tr><td colspan="6" class="text-center text-muted py-3">Chưa có dòng chờ đồng bộ.</td></tr>';
+            </tr>`).join('') || '<tr><td colspan="7" class="text-center text-muted py-3">Chưa có dòng chờ đồng bộ.</td></tr>';
+            updateRackBatchSelectionState();
             refreshIcons();
+        }
+
+        function selectedRackBatchIndexes() {
+            return Array.from(document.querySelectorAll('.rack-batch-select:checked'))
+                .map(input => Number(input.dataset.rackBatchIndex))
+                .filter(Number.isInteger);
+        }
+
+        function updateRackBatchSelectionState() {
+            const selectedCount = selectedRackBatchIndexes().length;
+            const label = document.getElementById('rackBatchSelectionLabel');
+            const deleteButton = document.getElementById('rackBatchDeleteSelectedBtn');
+            const selectAll = document.getElementById('rackBatchSelectAll');
+            if (label) label.textContent = selectedCount ? `Đã chọn ${formatNumber(selectedCount)} dòng` : 'Chưa chọn dòng';
+            if (deleteButton) deleteButton.disabled = selectedCount === 0;
+            if (selectAll && rackBatchLines.length) {
+                selectAll.checked = selectedCount === rackBatchLines.length;
+                selectAll.indeterminate = selectedCount > 0 && selectedCount < rackBatchLines.length;
+            }
+        }
+
+        function deleteSelectedRackBatchLines() {
+            const selected = new Set(selectedRackBatchIndexes());
+            if (!selected.size) return;
+            rackBatchLines = rackBatchLines.filter((line, index) => !selected.has(index));
+            persistRackBatchLines();
+            showWarehouseToast('Đã xóa danh sách chờ', `${selected.size} dòng đã được xóa.`);
+        }
+
+        function clearRackBatchLines() {
+            if (!rackBatchLines.length || !window.confirm(`Xóa toàn bộ ${rackBatchLines.length} dòng đang chờ?`)) return;
+            const removed = rackBatchLines.length;
+            rackBatchLines = [];
+            persistRackBatchLines();
+            showWarehouseToast('Đã xóa danh sách chờ', `${removed} dòng đã được xóa.`);
         }
 
         function normalizeRackBulkHeader(valueText) {
@@ -2932,12 +3002,45 @@
             rackBulkPreviewLines = [];
         }
 
+        function showRackBulkMissingLocations(codes) {
+            rackBulkMissingLocations = Array.from(new Set(codes));
+            const summary = document.getElementById('rackBulkPreviewSummary');
+            const sample = rackBulkMissingLocations.slice(0, 6).map(escapeHtml).join(', ');
+            summary.className = 'alert alert-warning d-flex align-items-center justify-content-between gap-2 flex-wrap py-2 px-3 mt-3 mb-0';
+            summary.innerHTML = `<span>Thiếu ${formatNumber(rackBulkMissingLocations.length)} vị trí: ${sample}${rackBulkMissingLocations.length > 6 ? '...' : ''}</span><button id="rackBulkCreateLocationsBtn" type="button" class="btn btn-sm btn-warning btn-icon"><i data-lucide="map-pin-plus"></i>Tạo vị trí còn thiếu</button>`;
+            document.getElementById('rackBulkPreviewTable').classList.add('d-none');
+            document.getElementById('rackBulkQueueBtn').disabled = true;
+            document.getElementById('rackBulkCreateLocationsBtn').addEventListener('click', ensureRackBulkLocations);
+            refreshIcons();
+        }
+
+        async function ensureRackBulkLocations() {
+            if (!rackBulkMissingLocations.length) return;
+            const button = document.getElementById('rackBulkCreateLocationsBtn');
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>Đang tạo';
+            try {
+                const response = await fetch('/api/kiem-ton-kho/vi-tri/bao-dam', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':csrfToken},
+                    body: JSON.stringify({location_codes: rackBulkMissingLocations}),
+                });
+                const result = await jsonOrError(response, 'Không tạo được vị trí');
+                await loadLocations();
+                rackBulkMissingLocations = [];
+                showWarehouseToast('Đã tạo vị trí', result.message || 'Các vị trí còn thiếu đã được tạo.');
+                await previewRackBulkPaste();
+            } catch (error) {
+                showRackBulkError(error.message);
+            }
+        }
+
         function renderRackBulkPreview(result) {
             rackBulkPreviewLines = Array.from(result.data || []);
             const summaryData = result.summary || {};
             const summary = document.getElementById('rackBulkPreviewSummary');
             summary.className = 'alert alert-success py-2 px-3 mt-3 mb-0';
-            summary.textContent = `${formatNumber(summaryData.line_count)} mã · ${formatNumber(summaryData.shelf_count)} vị trí · ${formatNumber(summaryData.total_quantity)} tổng số lượng · ${formatNumber(summaryData.new_count)} mã mới`;
+            summary.textContent = `${formatNumber(summaryData.item_count || summaryData.line_count)} mã · ${formatNumber(summaryData.line_count)} dòng vị trí · ${formatNumber(summaryData.shelf_count)} kệ · ${formatNumber(summaryData.total_quantity)} tổng số lượng · ${formatNumber(summaryData.new_count)} mã mới`;
             document.getElementById('rackBulkPreviewRows').innerHTML = rackBulkPreviewLines.map(line => `<tr>
                 <td><strong>${escapeHtml(line.shelf_code)}</strong></td>
                 <td>${escapeHtml(line.item_code)}</td>
@@ -2959,10 +3062,13 @@
                 return showRackBulkError(`Tổng danh sách vượt ${rackBatchLimit} dòng. Hiện đã có ${rackBatchLines.length} dòng chờ.`);
             }
             const knownLocations = new Set(locations.map(location => String(location.location_code || '').toUpperCase()));
-            const invalid = lines.find(line => !line.shelf_code || !knownLocations.has(line.shelf_code) || !line.item_code || !Number.isFinite(line.quantity) || line.quantity <= 0);
+            const missingLocations = lines
+                .map(line => line.shelf_code)
+                .filter(code => code && !knownLocations.has(code));
+            if (missingLocations.length) return showRackBulkMissingLocations(missingLocations);
+            const invalid = lines.find(line => !line.shelf_code || !line.item_code || !Number.isFinite(line.quantity) || line.quantity <= 0);
             if (invalid) {
-                const locationMessage = invalid.shelf_code && !knownLocations.has(invalid.shelf_code) ? `Kệ ${invalid.shelf_code} chưa tồn tại.` : '';
-                return showRackBulkError(`Dòng ${invalid.source_line} chưa hợp lệ. ${locationMessage || 'Kiểm tra mã và số lượng.'}`);
+                return showRackBulkError(`Dòng ${invalid.source_line} chưa hợp lệ. Kiểm tra mã và số lượng.`);
             }
 
             const button = document.getElementById('rackBulkPreviewBtn');
@@ -3003,10 +3109,6 @@
                         size: line.size || '',
                         color: line.color || '',
                     };
-                    const sameCode = staged.find(item => String(item.item_code).toUpperCase() === candidate.item_code);
-                    if (sameCode && rackBatchSignature(sameCode) !== rackBatchSignature(candidate)) {
-                        throw new Error(`Mã ${candidate.item_code} đã nằm trong danh sách ở kệ ${sameCode.shelf_code}.`);
-                    }
                     const existing = staged.find(item => rackBatchSignature(item) === rackBatchSignature(candidate));
                     if (existing) existing.quantity = Number(existing.quantity || 0) + candidate.quantity;
                     else staged.push(candidate);
@@ -3035,15 +3137,11 @@
         }
 
         function queueRackBatchLine(line) {
-            const sameCode = rackBatchLines.find(item => String(item.item_code).toUpperCase() === line.item_code);
-            if (sameCode && rackBatchSignature(sameCode) !== rackBatchSignature(line)) {
-                throw new Error(`Mã ${line.item_code} đã nằm trong danh sách ở kệ ${sameCode.shelf_code}. Một mã DANH MỤC chỉ được khai báo một kệ.`);
-            }
             const existingIndex = rackBatchLines.findIndex(item => rackBatchSignature(item) === rackBatchSignature(line));
             if (existingIndex >= 0) {
                 rackBatchLines[existingIndex].quantity = Number(rackBatchLines[existingIndex].quantity || 0) + Number(line.quantity || 0);
             } else {
-                if (rackBatchLines.length >= rackBatchLimit) throw new Error('Danh sách đã đủ 100 dòng. Đồng bộ trước khi nhập tiếp.');
+                if (rackBatchLines.length >= rackBatchLimit) throw new Error(`Danh sách đã đủ ${formatNumber(rackBatchLimit)} dòng. Đồng bộ trước khi nhập tiếp.`);
                 rackBatchLines.push(line);
             }
             persistRackBatchLines();
@@ -3066,6 +3164,7 @@
                         receipt_date: dateVnToIso(value('checkedAt')) || localIsoDate(),
                         item_group: 'NPL-SOI',
                         note: `Nhập hàng loạt từ mặt kệ (${rackBatchLines.length} dòng)`,
+                        request_key: ensureRackBatchRequestKey(),
                         lines: rackBatchLines,
                     }),
                 });
@@ -3423,7 +3522,7 @@
 
                 resetRackCrudForm();
                 if (!packageId) {
-                    document.getElementById('rackCrudStatus').textContent = `Đang chờ đồng bộ ${rackBatchLines.length}/100 dòng.`;
+                    document.getElementById('rackCrudStatus').textContent = `Đang chờ đồng bộ ${rackBatchLines.length}/${formatNumber(rackBatchLimit)} dòng.`;
                 }
                 if (packageId) {
                     loadRackInventoryRows();
@@ -4010,6 +4109,17 @@
         document.getElementById('rackBulkPreviewBtn')?.addEventListener('click', previewRackBulkPaste);
         document.getElementById('rackBulkQueueBtn')?.addEventListener('click', addRackBulkPreviewToQueue);
         document.getElementById('rackBulkSyncBtn')?.addEventListener('click', syncRackBatchLines);
+        document.getElementById('rackBatchSelectAll')?.addEventListener('change', event => {
+            document.querySelectorAll('.rack-batch-select').forEach(input => {
+                input.checked = event.currentTarget.checked;
+            });
+            updateRackBatchSelectionState();
+        });
+        document.getElementById('rackBatchDeleteSelectedBtn')?.addEventListener('click', deleteSelectedRackBatchLines);
+        document.getElementById('rackBatchClearBtn')?.addEventListener('click', clearRackBatchLines);
+        document.getElementById('rackBatchRows').addEventListener('change', event => {
+            if (event.target.matches('.rack-batch-select')) updateRackBatchSelectionState();
+        });
         document.getElementById('rackBatchRows').addEventListener('click', event => {
             const button = event.target.closest('[data-rack-batch-remove]');
             if (!button) return;

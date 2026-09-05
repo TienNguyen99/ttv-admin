@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\NormalizesDateInput;
 use App\Models\InternalProductionActivity;
+use App\Models\InternalItemCatalog;
 use App\Models\InternalProductionOperationProgress;
 use App\Models\InternalProductionOrder;
 use App\Services\InternalAudit;
@@ -12,6 +13,7 @@ use App\Services\InternalProductionOperationCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class InternalProductionActivityController extends Controller
@@ -46,6 +48,7 @@ class InternalProductionActivityController extends Controller
             'activity_date' => 'required|date',
             'production_order' => 'required|string|max:100',
             'operation_code' => 'required|string|max:50',
+            'next_operation_code' => 'nullable|string|max:50',
             'operator_name' => 'nullable|string|max:150',
             'note' => 'nullable|string|max:500',
             'lines' => 'required|array|min:1|max:200',
@@ -61,6 +64,12 @@ class InternalProductionActivityController extends Controller
         $operation = collect($payload['operations'])->first(fn ($row) => $this->code($row['code']) === $operationCode);
         if (!$operation) {
             return response()->json(['message' => 'Công đoạn không hợp lệ.'], 422);
+        }
+        $nextOperationCode = $this->code($data['next_operation_code'] ?? '');
+        $nextOperation = $nextOperationCode === '' ? null : collect($payload['operations'])
+            ->first(fn ($row) => $this->code($row['code']) === $nextOperationCode);
+        if ($nextOperationCode !== '' && (!$nextOperation || $nextOperationCode === $operationCode)) {
+            return response()->json(['message' => 'Công đoạn nhận không hợp lệ.'], 422);
         }
 
         $items = collect($payload['items'])->keyBy(fn ($row) => $this->code($row['internal_item_code']));
@@ -92,7 +101,7 @@ class InternalProductionActivityController extends Controller
             }
         }
 
-        $activity = DB::connection('internal')->transaction(function () use ($data, $lineInputs, $items, $orderCode, $operationCode, $operation) {
+        $activity = DB::connection('internal')->transaction(function () use ($data, $lineInputs, $items, $orderCode, $operationCode, $operation, $nextOperationCode, $nextOperation) {
             $activity = InternalProductionActivity::query()->create([
                 'activity_code' => app(InternalDocumentNumber::class)->next('NSX'),
                 'activity_date' => $data['activity_date'],
@@ -101,6 +110,10 @@ class InternalProductionActivityController extends Controller
                 'operation_name' => $operation['name'],
                 'operator_name' => trim((string) ($data['operator_name'] ?? '')) ?: null,
                 'status' => 'posted',
+                'transfer_code' => $nextOperation ? app(InternalDocumentNumber::class)->next('PCD') : null,
+                'next_operation_code' => $nextOperationCode ?: null,
+                'next_operation_name' => $nextOperation ? $nextOperation['name'] : null,
+                'transfer_status' => $nextOperation ? 'issued' : null,
                 'note' => trim((string) ($data['note'] ?? '')) ?: null,
             ]);
 
@@ -132,10 +145,140 @@ class InternalProductionActivityController extends Controller
         ], $request);
 
         return response()->json([
-            'message' => 'Đã ghi nhận công đoạn ' . $operation['name'] . '.',
+            'message' => 'Đã ghi nhận công đoạn ' . $operation['name'] . '.'
+                . ($nextOperation ? ' Đã tạo phiếu chuyển ' . $activity->transfer_code . ' sang ' . $nextOperation['name'] . '.' : ''),
             'data' => $activity,
             'order' => $this->orderPayload($orderCode),
         ], 201);
+    }
+
+    public function storeVariant(Request $request)
+    {
+        $data = $request->validate([
+            'production_order' => 'required|string|max:100',
+            'internal_item_code' => 'required|string|max:200',
+            'planned_quantity' => 'required|numeric|min:0.001|max:999999999999999',
+            'size' => 'nullable|string|max:255',
+            'color' => 'nullable|string|max:1000',
+            'unit' => 'nullable|string|max:50',
+        ]);
+
+        $orderCode = trim((string) $data['production_order']);
+        $variantCode = $this->code($data['internal_item_code']);
+        $plannedQuantity = (float) $data['planned_quantity'];
+        $created = false;
+
+        $variant = DB::connection('internal')->transaction(function () use ($data, $orderCode, $variantCode, $plannedQuantity, &$created) {
+            $rows = InternalProductionOrder::query()
+                ->where('production_order', $orderCode)
+                ->lockForUpdate()
+                ->orderBy('id')
+                ->get();
+            $parent = $rows->first(function ($row) {
+                $rawData = is_array($row->raw_data) ? $row->raw_data : [];
+                return (bool) $row->is_variant_parent
+                    && (($rawData['_internal_order_type'] ?? '') === 'supplemental'
+                        || $row->sync_batch === 'manual-supplemental');
+            });
+            if (!$parent) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Chỉ lệnh phụ mới được tạo biến thể tại màn hình ghi nhận sản xuất.',
+                ], 422));
+            }
+
+            $baseCode = $this->code($parent->item_code);
+            $validPrefix = $baseCode !== ''
+                && ($variantCode === $baseCode || str_starts_with($variantCode, $baseCode . '-') || str_starts_with($variantCode, $baseCode . '_'));
+            if (!$validPrefix || $variantCode === $baseCode) {
+                throw new HttpResponseException(response()->json([
+                    'message' => "Mã biến thể phải bắt đầu bằng {$baseCode}- hoặc {$baseCode}_ (ví dụ {$baseCode}-2AB).",
+                ], 422));
+            }
+
+            $existing = $rows->first(fn ($row) => $row->variant_parent_id
+                && $this->code($row->standard_item_code ?: $row->item_code) === $variantCode);
+            if ($existing) {
+                return $existing;
+            }
+
+            $rawData = is_array($parent->raw_data) ? $parent->raw_data : [];
+            $totalQuantity = (float) ($rawData['_internal_order']['total_order_quantity'] ?? $parent->order_quantity);
+            $allocatedQuantity = (float) $rows
+                ->filter(fn ($row) => $row->variant_parent_id && $row->is_active)
+                ->sum('order_quantity');
+            if ($totalQuantity > 0 && $allocatedQuantity + $plannedQuantity > $totalQuantity + 0.000001) {
+                $remaining = max(0, $totalQuantity - $allocatedQuantity);
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Số lượng biến thể vượt tổng đơn hàng. Còn có thể phân bổ ' . $this->formatNumber($remaining) . '.',
+                ], 422));
+            }
+
+            $catalog = InternalItemCatalog::query()
+                ->where('is_active', true)
+                ->whereRaw('UPPER(TRIM(item_code)) = ?', [$variantCode])
+                ->orderByDesc('id')
+                ->first();
+            $rawData['_internal_variant'] = [
+                'parent_id' => (int) $parent->id,
+                'variant_key' => 'PRODUCTION|CODE',
+                'variant_identity' => 'CODE|' . $variantCode,
+                'source_quantity' => $totalQuantity,
+                'created_from' => 'production_operation_entry',
+            ];
+
+            $variant = InternalProductionOrder::query()->create([
+                'row_key' => hash('sha256', 'SUPPLEMENTAL_VARIANT|' . $parent->id . '|CODE|' . $variantCode),
+                'production_order' => $parent->production_order,
+                'purchase_order' => $parent->purchase_order,
+                'tracking_staff' => $parent->tracking_staff,
+                'customer' => $parent->customer,
+                'item_code' => $baseCode,
+                'standard_item_code' => $variantCode,
+                'standard_catalog_id' => $catalog ? $catalog->id : null,
+                'variant_parent_id' => $parent->id,
+                'is_variant_parent' => false,
+                'is_manual_variant' => true,
+                'specification' => $parent->specification,
+                'description' => trim((string) ($catalog ? $catalog->item_name : ($parent->description ?: $variantCode))),
+                'size' => trim((string) ($data['size'] ?? '')) ?: trim((string) ($catalog ? $catalog->size : '')),
+                'color' => trim((string) ($data['color'] ?? '')) ?: trim((string) ($catalog ? $catalog->color : '')),
+                'unit' => mb_strtoupper(trim((string) ($data['unit'] ?? ''))) ?: mb_strtoupper(trim((string) (($catalog && $catalog->unit) ? $catalog->unit : ($parent->unit ?: 'PCS')))),
+                'order_quantity' => $plannedQuantity,
+                'location' => $parent->location,
+                'received_date' => $parent->received_date,
+                'promised_date' => $parent->promised_date,
+                'customer_requested_date' => $parent->customer_requested_date,
+                'delivery_place' => $parent->delivery_place,
+                'status' => 'pending',
+                'source_row' => null,
+                'raw_data' => $rawData,
+                'source_hash' => hash('sha256', 'SUPPLEMENTAL_VARIANT|' . $parent->id . '|' . $variantCode . '|' . $plannedQuantity),
+                'sync_batch' => 'production-variant',
+                'is_active' => true,
+            ]);
+            $parent->update(['is_active' => false]);
+            $created = true;
+
+            return $variant;
+        });
+
+        if ($created) {
+            app(InternalAudit::class)->model('production_order.variant_created', $variant, [
+                'production_order' => $orderCode,
+                'internal_item_code' => $variantCode,
+                'planned_quantity' => $plannedQuantity,
+            ], $request);
+            Cache::put(
+                'internal_production_order_search_version',
+                (int) Cache::get('internal_production_order_search_version', 1) + 1
+            );
+        }
+
+        return response()->json([
+            'message' => $created ? "Đã thêm biến thể {$variantCode} vào {$orderCode}." : "Biến thể {$variantCode} đã có trong lệnh.",
+            'data' => $variant,
+            'order' => $this->orderPayload($orderCode),
+        ], $created ? 201 : 200);
     }
 
     public function qr(Request $request)
@@ -144,6 +287,63 @@ class InternalProductionActivityController extends Controller
         $payload = $this->orderPayload($orderCode);
 
         return view('client.production-order-qr', ['order' => $payload]);
+    }
+
+    public function transferPrint(InternalProductionActivity $productionActivity)
+    {
+        if (!$productionActivity->transfer_code) {
+            abort(404);
+        }
+
+        return view('client.production-operation-transfer-print', [
+            'activity' => $productionActivity->load('lines'),
+        ]);
+    }
+
+    public function createTransfer(Request $request, InternalProductionActivity $productionActivity)
+    {
+        $data = $request->validate([
+            'next_operation_code' => 'required|string|max:50',
+        ]);
+        $nextOperationCode = $this->code($data['next_operation_code']);
+        $payload = $this->orderPayload($productionActivity->production_order_code);
+        $nextOperation = collect($payload['operations'])
+            ->first(fn ($row) => $this->code($row['code']) === $nextOperationCode);
+        if (!$nextOperation || $nextOperationCode === $this->code($productionActivity->operation_code)) {
+            return response()->json(['message' => 'Công đoạn nhận không hợp lệ.'], 422);
+        }
+
+        $created = false;
+        $activity = DB::connection('internal')->transaction(function () use ($productionActivity, $nextOperationCode, $nextOperation, &$created) {
+            $activity = InternalProductionActivity::query()->lockForUpdate()->findOrFail($productionActivity->id);
+            if ($activity->transfer_code) {
+                return $activity;
+            }
+            $activity->update([
+                'transfer_code' => app(InternalDocumentNumber::class)->next('PCD'),
+                'next_operation_code' => $nextOperationCode,
+                'next_operation_name' => $nextOperation['name'],
+                'transfer_status' => 'issued',
+            ]);
+            $created = true;
+
+            return $activity;
+        });
+
+        if ($created) {
+            app(InternalAudit::class)->model('production_activity.transfer_created', $activity, [
+                'production_order' => $activity->production_order_code,
+                'from_operation' => $activity->operation_code,
+                'to_operation' => $nextOperationCode,
+            ], $request);
+        }
+
+        return response()->json([
+            'message' => $created
+                ? 'Đã tạo phiếu chuyển ' . $activity->transfer_code . ' sang ' . $nextOperation['name'] . '.'
+                : 'Lần ghi nhận này đã có phiếu chuyển ' . $activity->transfer_code . '.',
+            'order' => $this->orderPayload($activity->production_order_code),
+        ], $created ? 201 : 200);
     }
 
     public function destroy(Request $request, InternalProductionActivity $productionActivity)
@@ -182,6 +382,11 @@ class InternalProductionActivityController extends Controller
             ->orderByDesc('activity_date')
             ->orderByDesc('id')
             ->get();
+        $activities->each(function ($activity) {
+            $activity->setAttribute('transfer_print_url', $activity->transfer_code
+                ? url('/client/ghi-nhan-san-xuat/' . $activity->id . '/phieu-chuyen')
+                : null);
+        });
 
         $items = $orders->groupBy(fn ($row) => $this->code($row->standard_item_code ?: $row->item_code))
             ->map(function ($rows, $itemCode) use ($operations, $activities) {
@@ -229,8 +434,24 @@ class InternalProductionActivityController extends Controller
             ];
         })->values();
 
+        $orderQuantity = (float) $orders->map(function ($order) {
+            $rawData = is_array($order->raw_data) ? $order->raw_data : [];
+            return (float) ($rawData['_internal_order']['total_order_quantity']
+                ?? $rawData['_internal_variant']['source_quantity']
+                ?? 0);
+        })->filter(fn ($quantity) => $quantity > 0)->max() ?: (float) $orders->sum('order_quantity');
+        $variantAllocatedQuantity = (float) $orders->filter(fn ($order) => (bool) $order->variant_parent_id)->sum('order_quantity');
+
         return [
             'production_order' => $orderCode,
+            'order_type' => $orders->contains(function ($order) {
+                $rawData = is_array($order->raw_data) ? $order->raw_data : [];
+                return ($rawData['_internal_order_type'] ?? '') === 'supplemental'
+                    || $order->sync_batch === 'manual-supplemental';
+            }) ? 'supplemental' : 'standard',
+            'order_quantity' => $orderQuantity,
+            'variant_allocated_quantity' => $variantAllocatedQuantity,
+            'variant_remaining_quantity' => max(0, $orderQuantity - $variantAllocatedQuantity),
             'customer' => trim((string) $orders->first()->customer),
             'purchase_order' => trim((string) $orders->first()->purchase_order),
             'root_item_codes' => $orders->pluck('item_code')->map(fn ($code) => $this->code($code))->filter()->unique()->values(),

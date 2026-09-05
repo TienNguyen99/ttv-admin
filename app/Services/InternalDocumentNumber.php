@@ -78,6 +78,7 @@ class InternalDocumentNumber
             'PXBTP' => ['internal_material_issues', 'issue_code'],
             'PXTP' => ['internal_material_issues', 'issue_code'],
             'PK' => ['inventory_packages', 'package_code'],
+            'PCD' => ['internal_production_activities', 'transfer_code'],
         ];
 
         if (!isset($sources[$prefix])) {
