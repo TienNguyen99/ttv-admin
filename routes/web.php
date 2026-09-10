@@ -37,6 +37,8 @@ use App\Http\Controllers\InternalInventoryReportController;
 use App\Http\Controllers\InternalMaterialDemandController;
 use App\Http\Controllers\InternalCustomerController;
 use App\Http\Controllers\LocalQrCodeController;
+use App\Http\Controllers\PanelNormalizationController;
+use App\Http\Controllers\InternalPanelReceiptController;
 use Google\Service\Dfareporting\Order;
 
 
@@ -255,7 +257,18 @@ Route::view('/tools/tinh-met-vai', 'tools.fabric-meter-calculator');
 Route::view('/client/kho-noi-bo', 'client.warehouse-dashboard');
 Route::get('/client/don-hang-noi-bo', [InternalOrderTrackingController::class, 'index']);
 Route::get('/api/don-hang-noi-bo', [InternalOrderTrackingController::class, 'data']);
+Route::post('/api/don-hang-noi-bo/dong-bo', [InternalOrderTrackingController::class, 'syncGoogle']);
 Route::post('/api/don-hang-noi-bo/import', [InternalOrderTrackingController::class, 'import']);
+Route::get('/client/hang-ve-panel', [InternalPanelReceiptController::class, 'page'])->name('panel-receipts.page');
+Route::get('/api/hang-ve-panel/tim-don', [InternalPanelReceiptController::class, 'searchOrders']);
+Route::post('/api/hang-ve-panel/import-preview', [InternalPanelReceiptController::class, 'previewImport']);
+Route::get('/api/hang-ve-panel', [InternalPanelReceiptController::class, 'history']);
+Route::post('/api/hang-ve-panel', [InternalPanelReceiptController::class, 'store']);
+Route::get('/api/hang-ve-panel/{receipt}', [InternalPanelReceiptController::class, 'show'])->where('receipt', '[0-9]+');
+Route::delete('/api/hang-ve-panel/{receipt}', [InternalPanelReceiptController::class, 'destroy'])->where('receipt', '[0-9]+');
+Route::get('/client/hang-ve-panel/{receipt}/in', [InternalPanelReceiptController::class, 'printReceipt'])
+    ->where('receipt', '[0-9]+')
+    ->name('panel-receipts.print');
 Route::get('/client/lenh-san-xuat-sheet', [InternalProductionOrderController::class, 'index']);
 Route::get('/api/lenh-san-xuat-sheet', [InternalProductionOrderController::class, 'data']);
 Route::post('/api/lenh-san-xuat-sheet/dong-bo', [InternalProductionOrderController::class, 'sync']);
@@ -323,6 +336,11 @@ Route::post('/api/danh-muc-noi-bo/{catalog}/anh', [InternalItemCatalogController
 Route::get('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'index']);
 Route::post('/api/quy-doi-don-vi', [InternalUnitConversionController::class, 'store']);
 Route::delete('/api/quy-doi-don-vi/{unitConversion}', [InternalUnitConversionController::class, 'destroy']);
+Route::get('/client/panel-chuan-hoa', [PanelNormalizationController::class, 'page'])->name('panel-normalizations.page');
+Route::get('/api/panel-chuan-hoa', [PanelNormalizationController::class, 'index']);
+Route::post('/api/panel-chuan-hoa', [PanelNormalizationController::class, 'store']);
+Route::put('/api/panel-chuan-hoa/{panelNormalization}', [PanelNormalizationController::class, 'update']);
+Route::delete('/api/panel-chuan-hoa/{panelNormalization}', [PanelNormalizationController::class, 'destroy']);
 Route::get('/client/kiem-ton-kho', [WarehouseCountController::class, 'index']);
 Route::get('/client/kho/phieu-nhap', [WarehouseCountController::class, 'receiptListIndex'])->name('warehouse.receipts');
 Route::get('/client/kho/vi-tri', [WarehouseCountController::class, 'locationIndex'])->name('warehouse.locations');

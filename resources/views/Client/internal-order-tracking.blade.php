@@ -22,6 +22,9 @@
         .order-table .wrap { min-width:160px; max-width:260px; white-space:normal; }
         .order-status-dot { width:7px; height:7px; border-radius:50%; background:currentColor; }
         .order-import-result { color:#475569; font-size:13px; }
+        .order-sync-status { min-height:18px; color:#475569; font-size:12px; text-align:right; }
+        .order-sync-btn.is-loading svg { animation:order-spin .8s linear infinite; }
+        @keyframes order-spin { to { transform:rotate(360deg); } }
         @media (max-width:760px) { .order-file-drop { align-items:stretch; flex-direction:column; } }
     </style>
 </head>
@@ -35,7 +38,9 @@
             <input id="topOrderKeyword" aria-label="Tìm đơn hàng" placeholder="Tìm mã hàng, đơn hàng, số phiếu, màu hoặc size...">
         </div>
         <div class="wms-topbar__actions">
-            <button id="toggleImportBtn" type="button" class="wms-btn wms-btn--primary"><i data-lucide="file-up"></i> Nhập Excel</button>
+            <a href="{{ route('panel-receipts.page') }}" class="wms-btn"><i data-lucide="package-check"></i> Hàng về PANEL</a>
+            <button id="syncOrdersBtn" type="button" class="wms-btn wms-btn--primary order-sync-btn"><i data-lucide="refresh-cw"></i> Đồng bộ DON_HANG_TACH</button>
+            <button id="toggleImportBtn" type="button" class="wms-btn"><i data-lucide="file-up"></i> Import Excel</button>
         </div>
     </header>
 
@@ -43,25 +48,28 @@
         <div class="wms-heading">
             <div>
                 <h1>Quản lý đơn hàng A/B</h1>
-                <p>Đồng bộ hai sheet từ file Excel. Nhập lại file để cập nhật tiến độ mới nhất.</p>
+                <p>Nguồn đơn đã tách PANEL để đối chiếu hàng về. Có thể import một hoặc hai sheet.</p>
             </div>
             <div class="wms-actions">
-                <button id="reloadOrdersBtn" type="button" class="wms-btn"><i data-lucide="refresh-cw"></i> Tải lại</button>
+                <div>
+                    <button id="reloadOrdersBtn" type="button" class="wms-btn"><i data-lucide="database"></i> Tải dữ liệu nội bộ</button>
+                    <div id="orderSyncResult" class="order-sync-status"></div>
+                </div>
             </div>
         </div>
 
         <section id="orderImportPanel" class="wms-panel order-import">
             <div class="wms-panel__header">
                 <div>
-                    <h2>Đồng bộ file Excel</h2>
-                    <div class="text-secondary small mt-1">Hai sheet đầu tiên được nhận là Sheet A và Sheet B. File mới sẽ cập nhật dòng cũ và lưu trữ dòng không còn xuất hiện.</div>
+                    <h2>Import phiếu đã tách PANEL</h2>
+                    <div class="text-secondary small mt-1">Mỗi dòng PS + PANEL được lưu riêng, kể cả khi nội dung và số lượng trùng nhau. Import lại không làm mất số đã nhận.</div>
                 </div>
             </div>
             <div class="wms-panel__body">
                 <form id="orderImportForm" class="order-file-drop">
                     <i data-lucide="sheet" style="width:28px;height:28px;color:#1769aa"></i>
                     <input id="orderExcelFile" name="file" type="file" class="form-control" accept=".xlsx,.xls,.csv" required>
-                    <button id="importOrdersBtn" type="submit" class="wms-btn wms-btn--primary"><i data-lucide="upload"></i> Đồng bộ</button>
+                    <button id="importOrdersBtn" type="submit" class="wms-btn wms-btn--primary"><i data-lucide="upload"></i> Import</button>
                     <div id="orderImportResult" class="order-import-result"></div>
                 </form>
             </div>
@@ -96,14 +104,14 @@
                 <table class="wms-table order-table">
                     <thead>
                         <tr>
-                            <th>STT</th><th>Export date</th><th>Mã hàng</th><th>PS# / SUB</th><th>Size</th>
+                            <th>STT</th><th>Export date</th><th>Mã hàng</th><th>PS# / SUB</th><th>PANEL</th><th>Size</th>
                             <th>Fabric color</th><th>Logo color</th><th>Date out panel</th><th>Số phiếu</th>
                             <th class="text-end">SL đặt</th><th class="text-end">Quantity</th><th class="text-end">Front</th><th class="text-end">Back</th>
                             <th>Delivery date</th><th class="text-end">Đạt trước</th><th class="text-end">Lỗi trước</th>
                             <th class="text-end">Đạt sau</th><th class="text-end">Lỗi sau</th><th class="text-end">Còn lại</th><th>Trạng thái</th><th>Ghi chú</th>
                         </tr>
                     </thead>
-                    <tbody id="orderRows"><tr><td colspan="21" class="wms-loading">Chưa có dữ liệu. Hãy nhập file Excel.</td></tr></tbody>
+                    <tbody id="orderRows"><tr><td colspan="22" class="wms-loading">Chưa có dữ liệu. Hãy nhập file Excel.</td></tr></tbody>
                 </table>
             </div>
         </section>
@@ -133,7 +141,7 @@
         }
 
         function loadOrders() {
-            orderRows.innerHTML = '<tr><td colspan="21" class="wms-loading">Đang tải dữ liệu...</td></tr>';
+            orderRows.innerHTML = '<tr><td colspan="22" class="wms-loading">Đang tải dữ liệu...</td></tr>';
             const params = new URLSearchParams({sheet:activeSheet, limit:1000});
             if (keywordEl.value.trim()) params.set('keyword', keywordEl.value.trim());
             if (document.getElementById('orderFromDate').value) params.set('from_date', document.getElementById('orderFromDate').value);
@@ -157,6 +165,7 @@
                         <td>${date(row.export_date)}</td>
                         <td class="wms-code">${esc(row.item_code || '-')}</td>
                         <td class="wms-code">${esc(row.order_number || '-')}</td>
+                        <td><strong>${esc(row.panel || '-')}</strong></td>
                         <td>${esc(row.size || '-')}</td>
                         <td class="wrap">${esc(row.fabric_color || '-')}</td>
                         <td class="wrap">${esc(row.logo_color || '-')}</td>
@@ -174,10 +183,10 @@
                         <td class="wms-number ${Number(row.remaining_quantity) ? 'text-danger' : ''}">${num(row.remaining_quantity)}</td>
                         <td>${statusBadge(row.status)}</td>
                         <td class="wrap">${esc(row.note || '-')}</td>
-                    </tr>`).join('') || '<tr><td colspan="21" class="wms-empty">Sheet này chưa có dữ liệu phù hợp.</td></tr>';
+                    </tr>`).join('') || '<tr><td colspan="22" class="wms-empty">Sheet này chưa có dữ liệu phù hợp.</td></tr>';
                 })
                 .catch(error => {
-                    orderRows.innerHTML = `<tr><td colspan="21" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
+                    orderRows.innerHTML = `<tr><td colspan="22" class="wms-empty text-danger">${esc(error.message)}</td></tr>`;
                 });
         }
 
@@ -187,6 +196,33 @@
             document.getElementById('orderTableTitle').textContent = `Danh sách Sheet ${activeSheet}`;
             loadOrders();
         }));
+
+        document.getElementById('syncOrdersBtn').addEventListener('click', () => {
+            const button = document.getElementById('syncOrdersBtn');
+            const resultEl = document.getElementById('orderSyncResult');
+            button.disabled = true;
+            button.classList.add('is-loading');
+            resultEl.classList.remove('text-danger');
+            resultEl.textContent = 'Đang đọc Google Sheet...';
+
+            fetch('/api/don-hang-noi-bo/dong-bo', {
+                method:'POST',
+                headers:{'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
+            }).then(response => jsonOrError(response, 'Không đồng bộ được DON_HANG_TACH'))
+              .then(result => {
+                  const data = result.data || {};
+                  resultEl.textContent = `Thêm ${num(data.created)}, cập nhật ${num(data.updated)}, lưu trữ ${num(data.archived)} dòng.`;
+                  loadOrders();
+              })
+              .catch(error => {
+                  resultEl.classList.add('text-danger');
+                  resultEl.textContent = error.message;
+              })
+              .finally(() => {
+                  button.disabled = false;
+                  button.classList.remove('is-loading');
+              });
+        });
 
         document.getElementById('toggleImportBtn').addEventListener('click', () => {
             document.getElementById('orderImportPanel').classList.toggle('is-open');

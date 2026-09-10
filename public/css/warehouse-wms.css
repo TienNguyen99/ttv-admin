@@ -823,10 +823,10 @@ body {
     --wms-warning-soft: #fff7e8;
     --wms-danger: #ef5f73;
     --wms-danger-soft: #fff0f3;
-    --radius-sm: 10px;
-    --radius-md: 14px;
-    --radius-lg: 20px;
-    --radius-xl: 28px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
     --shadow-sm: 0 8px 18px rgba(64, 111, 170, 0.07);
     --shadow-md: 0 14px 34px rgba(64, 111, 170, 0.10);
     --shadow-lg: 0 22px 48px rgba(64, 111, 170, 0.13);
@@ -886,9 +886,8 @@ body {
     box-shadow: 0 0 0 5px rgba(79, 141, 247, 0.16), 0 14px 34px rgba(64, 111, 170, 0.13) !important;
 }
 
-.wms-btn,
-.btn {
-    border-radius: 16px !important;
+.wms-btn {
+    border-radius: var(--radius-md) !important;
     transition: transform 180ms var(--wms-ease-out), box-shadow 180ms var(--wms-ease-out), border-color 180ms var(--wms-ease-out), background 180ms var(--wms-ease-out);
 }
 
@@ -921,10 +920,7 @@ body {
 }
 
 .wms-kpi,
-.wms-panel,
-.panel,
-.summary-box,
-.voice-assistant {
+.wms-panel {
     border: 1px solid rgba(198, 220, 247, 0.86) !important;
     border-radius: var(--radius-xl) !important;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 251, 255, 0.84)) !important;
@@ -996,9 +992,9 @@ body {
 }
 
 dialog,
-.modal-content {
+.wms-modal .modal-content {
     border: 1px solid rgba(198, 220, 247, 0.9) !important;
-    border-radius: 24px !important;
+    border-radius: var(--radius-xl) !important;
     box-shadow: 0 30px 80px rgba(32, 78, 130, 0.22) !important;
 }
 
@@ -1163,6 +1159,50 @@ textarea.form-control {
     min-width: 0;
 }
 
+/*
+ * Card edge safety.
+ * Several screens use `wms-panel__head` while older screens use
+ * `wms-panel__header`; both must reserve enough space inside rounded corners.
+ */
+.wms-panel__header,
+.wms-panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    min-height: 52px;
+    padding: 14px clamp(16px, 1.6vw, 22px);
+    border-bottom: 1px solid var(--wms-line);
+    background: #f8fbff;
+}
+
+.wms-panel__header > *,
+.wms-panel__head > *,
+.wms-panel__body > * {
+    min-width: 0;
+}
+
+.wms-panel__header h1,
+.wms-panel__header h2,
+.wms-panel__header h3,
+.wms-panel__head h1,
+.wms-panel__head h2,
+.wms-panel__head h3,
+.wms-panel__head > strong {
+    margin: 0;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+}
+
+.wms-panel__body {
+    padding: clamp(16px, 1.6vw, 22px);
+}
+
+.wms-kpi {
+    padding: clamp(16px, 1.5vw, 20px);
+}
+
 .wms-heading h1,
 .wms-heading p,
 .wms-panel__header h2,
@@ -1183,7 +1223,8 @@ textarea.form-control {
 
 @media (max-width: 1100px) {
     .wms-heading,
-    .wms-panel__header {
+    .wms-panel__header,
+    .wms-panel__head {
         flex-wrap: wrap;
         gap: 14px;
     }
@@ -1199,5 +1240,18 @@ textarea.form-control {
     .wms-heading > .wms-actions,
     .wms-heading > .wms-btn {
         width: 100%;
+    }
+
+    .wms-panel,
+    .wms-kpi,
+    .wms-filterbar {
+        border-radius: 10px !important;
+    }
+
+    .wms-panel__header,
+    .wms-panel__head,
+    .wms-panel__body {
+        padding-right: 14px;
+        padding-left: 14px;
     }
 }

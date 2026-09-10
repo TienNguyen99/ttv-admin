@@ -330,11 +330,18 @@ class InternalStocktakeService
             );
 
             $packageQuery = InventoryPackage::query()
-                ->where('warehouse_location_id', $location->id)
-                ->whereRaw('UPPER(TRIM(internal_item_code)) = ?', [mb_strtoupper(trim((string) $line->internal_item_code))])
-                ->where('size', (string) $line->size)
-                ->where('color', (string) $line->color)
-                ->where('side', (string) $line->side);
+                ->whereRaw('UPPER(TRIM(internal_item_code)) = ?', [mb_strtoupper(trim((string) $line->internal_item_code))]);
+
+            $hasVariant = collect([$line->size, $line->color, $line->side])
+                ->contains(fn ($value) => trim((string) $value) !== '');
+            if ($hasVariant) {
+                $packageQuery
+                    ->where('warehouse_location_id', $location->id)
+                    ->where('size', (string) $line->size)
+                    ->where('color', (string) $line->color)
+                    ->where('side', (string) $line->side);
+            }
+            // A count without variant fields is the authoritative total for the item.
             $packageQuery->update(['quantity' => 0, 'updated_at' => now()]);
 
             $count = InternalInventoryCount::query()->firstOrCreate(

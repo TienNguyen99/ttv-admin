@@ -232,7 +232,10 @@ class InternalProductionActivityControllerTest extends TestCase
         $this->get('/client/ghi-nhan-san-xuat')
             ->assertOk()
             ->assertSee('variantPanel', false)
-            ->assertSee('/api/ghi-nhan-san-xuat/bien-the', false);
+            ->assertSee('/api/ghi-nhan-san-xuat/bien-the', false)
+            ->assertSee('id="summarySidebarToggle"', false)
+            ->assertSee('wms-sidebar-collapsed', false)
+            ->assertSee('.activity-page { max-width: none; margin: 0; }', false);
     }
 
     private function createSupplementalOrder(string $orderCode, string $baseCode, float $quantity): InternalProductionOrder

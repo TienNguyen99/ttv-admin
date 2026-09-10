@@ -8,7 +8,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="{{ asset('css/warehouse-wms.css') }}?v={{ filemtime(public_path('css/warehouse-wms.css')) }}" rel="stylesheet">
     <style>
-        .activity-page { max-width: 1180px; margin: 0 auto; }
+        .activity-page { max-width: none; margin: 0; }
         .activity-search { display:grid; grid-template-columns:minmax(260px,1fr) auto; gap:10px; }
         .activity-meta { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:12px; }
         .activity-stat { padding:12px 14px; border:1px solid #d8e5f4; border-radius:8px; background:#f8fbff; }

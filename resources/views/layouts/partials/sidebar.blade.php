@@ -1,4 +1,13 @@
 <script src="{{ asset('js/vietnam-date-input.js') }}?v=20260801" defer></script>
+<script>
+    try {
+        if (window.matchMedia('(min-width: 992px)').matches && localStorage.getItem('wms-sidebar-collapsed') === '1') {
+            document.documentElement.classList.add('summary-sidebar-collapsed');
+        }
+    } catch (error) {
+        // The sidebar still works when browser storage is unavailable.
+    }
+</script>
 <style>
     :root { 
         --summary-sidebar-width: 240px; 
@@ -266,22 +275,37 @@
     }
     
     .summary-sidebar-toggle {
-        display: none;
+        display: grid;
         position: fixed;
-        top: 14px;
-        left: 14px;
+        top: 88px;
+        left: calc(var(--summary-sidebar-width) - 1px);
         z-index: 1050;
-        width: 44px;
-        height: 44px;
-        border: 1px solid #cbd5e1;
-        border-radius: 16px;
-        background: rgba(255,255,255,.9);
+        width: 32px;
+        height: 42px;
+        place-items: center;
+        border: 1px solid #bdd3ed;
+        border-left: 0;
+        border-radius: 0 8px 8px 0;
+        background: rgba(246, 251, 255, .96);
         color: #174679;
-        font-size: 22px;
         box-shadow: var(--shadow-md);
         cursor: pointer;
-        transition: var(--wms-transition-smooth);
+        transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color .2s ease, color .2s ease;
     }
+
+    .summary-sidebar-toggle svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .summary-sidebar-toggle__open,
+    .summary-sidebar-toggle__mobile { display: none; }
+
+    html.summary-sidebar-collapsed body { padding-left: 0; }
+    html.summary-sidebar-collapsed .summary-sidebar { transform: translateX(-100%); }
+    html.summary-sidebar-collapsed .summary-sidebar-toggle { left: 0; }
+    html.summary-sidebar-collapsed .summary-sidebar-toggle__close { display: none; }
+    html.summary-sidebar-collapsed .summary-sidebar-toggle__open { display: block; }
     
     .summary-sidebar-toggle:hover {
         background: #f8fafc;
@@ -291,8 +315,19 @@
     @media (max-width: 991.98px) {
         body { padding-left: 0; }
         .summary-sidebar { transform: translateX(-100%); }
-        .summary-sidebar.is-open { transform: translateX(0); }
-        .summary-sidebar-toggle { display: block; }
+        .summary-sidebar.is-open,
+        html.summary-sidebar-collapsed .summary-sidebar.is-open { transform: translateX(0); }
+        .summary-sidebar-toggle {
+            top: 14px;
+            left: 14px;
+            width: 44px;
+            height: 44px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+        }
+        .summary-sidebar-toggle__close,
+        .summary-sidebar-toggle__open { display: none !important; }
+        .summary-sidebar-toggle__mobile { display: block; }
     }
     
     @media (prefers-reduced-motion: reduce) { 
@@ -566,7 +601,11 @@
     }
 </style>
 
-<button type="button" class="summary-sidebar-toggle" id="summarySidebarToggle" aria-label="Mở menu">&#9776;</button>
+<button type="button" class="summary-sidebar-toggle" id="summarySidebarToggle" aria-label="Thu gọn menu" aria-expanded="true" title="Thu gọn menu">
+    <i class="summary-sidebar-toggle__close" data-lucide="panel-left-close"></i>
+    <i class="summary-sidebar-toggle__open" data-lucide="panel-left-open"></i>
+    <i class="summary-sidebar-toggle__mobile" data-lucide="menu"></i>
+</button>
 
 <aside class="summary-sidebar" id="summarySidebar">
     <a class="summary-sidebar__brand" href="{{ url('/client/kho-noi-bo') }}">
@@ -630,10 +669,12 @@
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/canh-bao-kho*') ? 'is-active' : '' }}" href="{{ url('/client/canh-bao-kho') }}"><i data-lucide="triangle-alert"></i>Cảnh báo kho</a>
         </details>
 
-        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/nhap-thanh-pham-nhanh*', 'client/xuat-thanh-pham-nhanh*') ? 'open' : '' }}>
+        <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/nhap-thanh-pham-nhanh*', 'client/xuat-thanh-pham-nhanh*', 'client/hang-ve-panel*', 'client/panel-chuan-hoa*') ? 'open' : '' }}>
             <summary class="summary-sidebar__summary"><i data-lucide="keyboard"></i>Quản lý nhập liệu</summary>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/nhap-thanh-pham-nhanh*') ? 'is-active' : '' }}" href="{{ url('/client/nhap-thanh-pham-nhanh') }}"><i data-lucide="package-plus"></i>Nhập thành phẩm nhanh</a>
             <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/xuat-thanh-pham-nhanh*') ? 'is-active' : '' }}" href="{{ url('/client/xuat-thanh-pham-nhanh') }}"><i data-lucide="truck"></i>Xuất thành phẩm nhanh</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/hang-ve-panel*') ? 'is-active' : '' }}" href="{{ url('/client/hang-ve-panel') }}"><i data-lucide="package-check"></i>Hàng về PANEL</a>
+            <a class="summary-sidebar__link summary-sidebar__child {{ request()->is('client/panel-chuan-hoa*') ? 'is-active' : '' }}" href="{{ route('panel-normalizations.page') }}"><i data-lucide="list-checks"></i>Quy tắc PANEL</a>
         </details>
 
         <details class="summary-sidebar__group summary-sidebar__group--section" data-sidebar-section {{ request()->is('client/nhu-cau-mua-vat-tu*') ? 'open' : '' }}>
@@ -695,9 +736,33 @@
         const sidebar = document.getElementById('summarySidebar');
         const toggle = document.getElementById('summarySidebarToggle');
         if (toggle && sidebar) {
+            const updateSidebarToggle = function () {
+                const isMobile = window.innerWidth < 992;
+                const isExpanded = isMobile
+                    ? sidebar.classList.contains('is-open')
+                    : !document.documentElement.classList.contains('summary-sidebar-collapsed');
+                const label = isExpanded ? 'Thu gọn menu' : 'Mở menu';
+                toggle.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+                toggle.setAttribute('aria-label', label);
+                toggle.setAttribute('title', label);
+            };
+
             toggle.addEventListener('click', function () {
-                sidebar.classList.toggle('is-open');
+                if (window.innerWidth < 992) {
+                    sidebar.classList.toggle('is-open');
+                } else {
+                    const isCollapsed = document.documentElement.classList.toggle('summary-sidebar-collapsed');
+                    try {
+                        localStorage.setItem('wms-sidebar-collapsed', isCollapsed ? '1' : '0');
+                    } catch (error) {
+                        // Keep the current state for this page when storage is unavailable.
+                    }
+                }
+                updateSidebarToggle();
             });
+
+            window.addEventListener('resize', updateSidebarToggle);
+            updateSidebarToggle();
 
             const sections = Array.from(sidebar.querySelectorAll('[data-sidebar-section]'));
             sections.forEach(function (section) {
@@ -711,7 +776,10 @@
 
             sidebar.querySelectorAll('a.summary-sidebar__link').forEach(function (link) {
                 link.addEventListener('click', function () {
-                    if (window.innerWidth < 992) sidebar.classList.remove('is-open');
+                    if (window.innerWidth < 992) {
+                        sidebar.classList.remove('is-open');
+                        updateSidebarToggle();
+                    }
                 });
             });
         }

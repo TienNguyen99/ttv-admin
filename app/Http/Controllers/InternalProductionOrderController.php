@@ -606,10 +606,18 @@ class InternalProductionOrderController extends Controller
             })
             ->min('receipt_date');
 
-        // Quick receipts should only suggest orders available by the selected receipt date.
+        // Keep the browse list date-safe. A targeted search must still expose an
+        // active order whose source sheet has not supplied its received date yet.
         if ($productionOrder === '' && $request->filled('order_date_to')) {
-            $query->whereNotNull('received_date')
-                ->whereDate('received_date', '<=', $request->query('order_date_to'));
+            if ($keyword === '') {
+                $query->whereNotNull('received_date')
+                    ->whereDate('received_date', '<=', $request->query('order_date_to'));
+            } else {
+                $query->where(function ($dateQuery) use ($request) {
+                    $dateQuery->whereNull('received_date')
+                        ->orWhereDate('received_date', '<=', $request->query('order_date_to'));
+                });
+            }
             // Keep the default list within the managed period, while targeted
             // item/order searches may still find older orders that need handling.
             if ($firstFinishedReceiptDate && $keyword === '') {
@@ -710,6 +718,13 @@ class InternalProductionOrderController extends Controller
         $limit = min(max((int) $request->query('limit', 500), 1), 2000);
         if ($productionOrder !== '') {
             $query->orderBy('source_row');
+        } elseif ($keyword !== '') {
+            $contains = '%' . $keyword . '%';
+            $query->orderByRaw(
+                'CASE WHEN production_order = ? THEN 0 WHEN production_order LIKE ? THEN 1 WHEN item_code LIKE ? OR standard_item_code LIKE ? THEN 2 ELSE 3 END',
+                [$keyword, $contains, $contains, $contains]
+            )
+                ->orderByDesc('updated_at');
         } else {
             $query->orderByRaw('promised_date IS NULL')
                 ->orderBy('promised_date')

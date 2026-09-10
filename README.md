@@ -21,6 +21,26 @@ Laravel is a web application framework with expressive, elegant syntax. We belie
 
 Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
+## Hàng về PANEL
+
+Module dùng database `internal`; không đọc/ghi TSoft và không thay đổi luồng đồng bộ danh mục.
+
+### Cài đặt
+
+```bash
+php artisan migrate --database=internal
+php artisan db:seed --class=PanelNormalizationSeeder
+```
+
+### Sử dụng
+
+1. Mở `/client/panel-chuan-hoa` để quản lý PANEL chuẩn và các cách viết tương đương.
+2. Mở `/client/don-hang-noi-bo`, import phiếu đã tách PANEL vào nguồn Đơn hàng A/B.
+3. Mở `/client/hang-ve-panel`, tìm PS rồi chọn đúng card PANEL và nhập số lượng thực nhận; hoặc import file có các cột PS, PANEL, SỐ LƯỢNG.
+4. Bấm **Lưu + in** để tạo một phiếu hàng về gồm toàn bộ dòng trong ngày.
+
+Các dòng trùng PS, PANEL và số lượng vẫn được giữ riêng trong phiếu. Import lại nguồn A/B không ghi đè tiến độ đã nhận. Cache quy tắc PANEL được xóa ngay sau CRUD.
+
 ## Learning Laravel
 
 Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.

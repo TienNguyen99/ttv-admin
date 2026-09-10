@@ -139,9 +139,9 @@
             gap: 14px;
             align-items: center;
             margin-bottom: 12px;
-            padding: 12px 14px;
+            padding: 14px 16px;
             border: 1px solid #dbeafe;
-            border-radius: 16px;
+            border-radius: 10px;
             background: rgba(255,255,255,.92);
             box-shadow: 0 12px 30px rgba(37, 99, 235, 0.08);
         }
@@ -169,7 +169,7 @@
             min-height: 40px;
             padding: 0 14px;
             border: 1px solid var(--quick-line);
-            border-radius: 12px;
+            border-radius: 8px;
             background: #ffffff;
             color: #0f2f63;
             font-weight: 800;
@@ -211,7 +211,7 @@
 
         .quick-panel {
             border: 1px solid #dbe3ef;
-            border-radius: 16px;
+            border-radius: 10px;
             background: #ffffff;
             box-shadow: 0 10px 24px rgba(37, 99, 235, 0.06);
             overflow: hidden;
@@ -222,7 +222,7 @@
             gap: 12px;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 14px;
+            padding: 14px 16px;
             border-bottom: 1px solid #e2e8f0;
         }
 

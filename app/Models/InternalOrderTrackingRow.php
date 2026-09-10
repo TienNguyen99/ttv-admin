@@ -29,4 +29,9 @@ class InternalOrderTrackingRow extends Model
         'extra_data' => 'array',
         'is_active' => 'boolean',
     ];
+
+    public function panelReceipts()
+    {
+        return $this->hasMany(InternalPanelReceiptLine::class, 'order_tracking_row_id');
+    }
 }

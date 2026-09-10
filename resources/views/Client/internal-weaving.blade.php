@@ -18,7 +18,7 @@
         .weaving-plan-table { min-width:840px; }
         .weaving-order-picker { display:grid; grid-template-columns:minmax(240px, 1fr); gap:10px; align-items:end; }
         .weaving-order-results { display:grid; gap:8px; margin-top:12px; }
-        .weaving-order-card { display:grid; grid-template-columns:minmax(170px,.9fr) minmax(180px,1.2fr) minmax(120px,.6fr) auto; gap:12px; align-items:center; border:1px solid #d8e8fb; background:#fff; border-radius:14px; padding:10px 12px; box-shadow:0 8px 20px rgba(64,111,170,.06); }
+        .weaving-order-card { display:grid; grid-template-columns:minmax(170px,.9fr) minmax(180px,1.2fr) minmax(120px,.6fr) auto; gap:12px; align-items:center; border:1px solid #d8e8fb; background:#fff; border-radius:8px; padding:12px 14px; box-shadow:0 8px 20px rgba(64,111,170,.06); }
         .weaving-order-card:hover { border-color:#7db5ff; background:#f8fbff; }
         .weaving-order-title { color:#123b70; font-weight:900; font-family:Menlo,Consolas,monospace; }
         .weaving-order-meta { color:#64748b; font-size:12px; margin-top:2px; }
@@ -39,7 +39,7 @@
         .weaving-plan-panel .wms-panel__header { align-items:flex-start; gap:14px; }
         .weaving-plan-header-main { min-width:260px; }
         .weaving-plan-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; }
-        .weaving-ticket { display:none; border:1px solid #cfe1f7; border-radius:14px; background:#fff; overflow:hidden; margin-bottom:12px; }
+        .weaving-ticket { display:none; border:1px solid #cfe1f7; border-radius:8px; background:#fff; overflow:hidden; margin-bottom:12px; }
         .weaving-ticket.is-visible { display:block; }
         .weaving-ticket-head { display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid #dbeafe; }
         .weaving-ticket-cell { display:flex; justify-content:space-between; gap:10px; padding:8px 10px; border-right:1px solid #dbeafe; border-bottom:1px solid #edf4ff; font-size:12px; }
@@ -61,8 +61,8 @@
         .weaving-ticket-image .catalog-image-trigger { width:100%; min-height:138px; justify-content:center; flex-direction:column; border:0; background:transparent; }
         .weaving-ticket-image .catalog-image-trigger img { width:auto; height:auto; max-width:100%; max-height:220px; }
         .weaving-source-list { display:grid; grid-template-columns:repeat(auto-fit, minmax(330px, 1fr)); gap:12px; margin-bottom:14px; }
-        .weaving-source-card { border:1px solid #d8e8fb; border-radius:16px; background:linear-gradient(180deg,#fff,#f7fbff); box-shadow:0 10px 24px rgba(64,111,170,.08); overflow:hidden; }
-        .weaving-source-head { display:flex; justify-content:space-between; gap:12px; padding:12px 14px; border-bottom:1px solid #e6f0fb; }
+        .weaving-source-card { border:1px solid #d8e8fb; border-radius:10px; background:linear-gradient(180deg,#fff,#f7fbff); box-shadow:0 10px 24px rgba(64,111,170,.08); overflow:hidden; }
+        .weaving-source-head { display:flex; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:1px solid #e6f0fb; }
         .weaving-source-code { color:#174679; font-weight:900; font-family:Menlo,Consolas,monospace; }
         .weaving-source-meta { color:#64748b; font-size:12px; margin-top:2px; }
         .weaving-material-list { display:grid; gap:0; }
