@@ -64,6 +64,41 @@ class InternalBulkShelfIntakeTest extends TestCase
             ->assertJsonPath('message', 'Mã mới phải có tên hàng và đơn vị tính.');
     }
 
+    public function test_preview_does_not_block_legacy_duplicate_catalog_rows(): void
+    {
+        $suffix = strtoupper(substr(md5((string) microtime(true)), 0, 8));
+        $code = 'BULK-DUP-' . $suffix;
+        $sourceRow = random_int(910000, 950000);
+
+        InternalItemCatalog::query()->create([
+            'source_row' => $sourceRow,
+            'item_code' => $code,
+            'item_name' => 'Older duplicate',
+            'unit' => 'KG',
+            'is_active' => true,
+        ]);
+        InternalItemCatalog::query()->create([
+            'source_row' => $sourceRow + 1,
+            'item_code' => $code,
+            'item_name' => 'Newest duplicate',
+            'unit' => 'KG',
+            'is_active' => true,
+        ]);
+
+        $this->postJson('/api/danh-muc-noi-bo/nhap-ke-hang-loat', [
+            'apply' => false,
+            'receipt_date' => '2026-09-14',
+            'lines' => [[
+                'shelf_code' => 'A1',
+                'item_code' => $code,
+                'quantity' => 1,
+            ]],
+        ])->assertOk()
+            ->assertJsonPath('data.0.item_name', 'Newest duplicate')
+            ->assertJsonPath('data.0.catalog_duplicate_count', 2)
+            ->assertJsonPath('summary.duplicate_catalog_count', 1);
+    }
+
     public function test_preview_accepts_up_to_one_thousand_rows(): void
     {
         $code = 'BULK-LIMIT-' . strtoupper(substr(md5((string) microtime(true)), 0, 8));

@@ -95,7 +95,7 @@ class InternalItemCatalogController extends Controller
             ->filter(fn ($rows) => $rows->where('is_active', true)->count() > 1)
             ->keys()
             ->values();
-        if ($duplicateCatalogCodes->isNotEmpty()) {
+        if ($request->boolean('strict_catalog') && $duplicateCatalogCodes->isNotEmpty()) {
             return response()->json([
                 'message' => 'Danh mục đang có mã trùng. Hãy tách mã trước khi nhập hàng loạt.',
                 'errors' => [
@@ -105,9 +105,12 @@ class InternalItemCatalogController extends Controller
                 ],
             ], 422);
         }
+        // Use the newest active catalog row as metadata source; shelf intake is
+        // package-based and must not be blocked by legacy duplicate catalog rows.
         $existing = $catalogGroups->map(fn ($rows) => $rows->first());
+        $activeCatalogCounts = $catalogGroups->map(fn ($rows) => $rows->where('is_active', true)->count());
 
-          $preview = $lines->map(function ($line) use ($existing) {
+          $preview = $lines->map(function ($line) use ($existing, $activeCatalogCounts) {
             $catalog = $existing->get($line['item_code']);
             if ($catalog) {
                 $line['item_name'] = trim((string) $catalog->item_name) ?: $line['item_name'];
@@ -116,6 +119,7 @@ class InternalItemCatalogController extends Controller
                 $line['color'] = trim((string) $catalog->color) ?: $line['color'];
             }
             $line['catalog_id'] = $catalog ? (int) $catalog->id : null;
+            $line['catalog_duplicate_count'] = (int) ($activeCatalogCounts->get($line['item_code']) ?? 0);
             $line['source_row'] = $catalog ? (int) $catalog->source_row : null;
             $line['catalog_status'] = !$catalog || (int) $catalog->source_row < 2 ? 'new' : 'existing';
             $catalogShelves = $catalog
@@ -174,6 +178,8 @@ class InternalItemCatalogController extends Controller
             'existing_count' => $catalogRows->where('catalog_status', 'existing')->count(),
             'shelf_update_count' => $catalogRows->where('shelf_changed', true)->count(),
             'shelf_count' => $preview->pluck('shelf_code')->unique()->count(),
+            'duplicate_catalog_count' => $duplicateCatalogCodes->count(),
+            'duplicate_catalog_codes' => $duplicateCatalogCodes->all(),
             'total_quantity' => (float) $preview->sum('quantity'),
             'units' => $preview->pluck('unit')->filter()->unique()->values()->all(),
             'write_configured' => $writer->isConfigured(),

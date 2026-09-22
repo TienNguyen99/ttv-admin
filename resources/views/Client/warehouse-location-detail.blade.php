@@ -100,7 +100,7 @@
         <section class="search-panel">
             <div class="search-wrap">
                 <i data-lucide="search"></i>
-                <input id="itemSearch" class="form-control" autocomplete="off" placeholder="Tìm mã hoặc tên hàng">
+                <input id="itemSearch" class="form-control" autocomplete="off" value="{{ request('item_code', '') }}" placeholder="Tìm mã hoặc tên hàng">
             </div>
         </section>
 

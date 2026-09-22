@@ -606,21 +606,14 @@ class InternalProductionOrderController extends Controller
             })
             ->min('receipt_date');
 
-        // Keep the browse list date-safe. A targeted search must still expose an
-        // active order whose source sheet has not supplied its received date yet.
-        if ($productionOrder === '' && $request->filled('order_date_to')) {
-            if ($keyword === '') {
-                $query->whereNotNull('received_date')
-                    ->whereDate('received_date', '<=', $request->query('order_date_to'));
-            } else {
-                $query->where(function ($dateQuery) use ($request) {
-                    $dateQuery->whereNull('received_date')
-                        ->orWhereDate('received_date', '<=', $request->query('order_date_to'));
-                });
-            }
+        // Keep the browse list date-safe. A targeted search must still expose
+        // every matching active order so users can inspect exceptional dates.
+        if ($productionOrder === '' && $request->filled('order_date_to') && $keyword === '') {
+            $query->whereNotNull('received_date')
+                ->whereDate('received_date', '<=', $request->query('order_date_to'));
             // Keep the default list within the managed period, while targeted
             // item/order searches may still find older orders that need handling.
-            if ($firstFinishedReceiptDate && $keyword === '') {
+            if ($firstFinishedReceiptDate) {
                 $query->where(function ($eligibleOrderQuery) use ($firstFinishedReceiptDate) {
                     $eligibleOrderQuery->whereDate('received_date', '>=', $firstFinishedReceiptDate)
                         ->orWhereRaw("EXISTS (

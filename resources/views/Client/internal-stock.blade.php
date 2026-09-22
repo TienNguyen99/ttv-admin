@@ -404,12 +404,14 @@
                         colors: new Set(),
                         sides: new Set(),
                         can_delete: false,
+                        stocktake_unverified: false,
                         is_summary: true,
                     });
                 }
 
                 const group = groups.get(key);
                 if (!group.ma_sp && row.ma_sp) group.ma_sp = row.ma_sp;
+                group.stocktake_unverified = group.stocktake_unverified || !!row.stocktake_unverified;
                 group.opening_quantity += Number(row.opening_quantity || 0);
                 group.receipt_quantity += Number(row.receipt_quantity || 0);
                 group.issue_quantity += Number(row.issue_quantity || 0);
@@ -456,12 +458,16 @@
                     rowsEl.innerHTML = displayRows.map(row => {
                         const quantity = Number(row.total_quantity || 0);
                         const unassigned = !row.location_code || row.location_code === 'CHUA-XEP';
-                        const status = unassigned
+                        const status = row.stocktake_unverified
+                            ? '<span class="wms-badge wms-badge--warning" title="Chưa có số đếm kiểm kê; số này chỉ phản ánh phát sinh sau mốc">Chưa kiểm kê</span>'
+                            : unassigned
                             ? '<span class="wms-badge wms-badge--warning">Chưa xếp</span>'
                             : quantity < 0
                                 ? '<span class="wms-badge wms-badge--danger">Âm tn</span>'
                                 : '<span class="wms-badge">Có tồn</span>';
-                        const locationStatus = row.location_count > 1
+                        const locationStatus = row.stocktake_unverified
+                            ? status
+                            : row.location_count > 1
                             ? `<span class="wms-badge wms-badge--secondary">${num(row.location_count)} vị trí</span>`
                             : status;
                         return `<tr>

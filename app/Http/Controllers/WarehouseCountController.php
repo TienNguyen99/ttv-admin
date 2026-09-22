@@ -1101,13 +1101,55 @@ class WarehouseCountController extends Controller
                 return $row;
             });
 
+        $visibleCodes = $data->pluck('internal_item_code')->filter()->unique()->values();
+        $unverifiedCodes = DB::connection('internal')
+            ->table('internal_stocktake_lines as line')
+            ->join('internal_stocktake_sessions as session', 'session.id', '=', 'line.session_id')
+            ->where('session.status', 'posted')
+            ->where('session.cutoff_scope', 'legacy_global')
+            ->whereDate('session.count_date', '<=', $monthEnd)
+            ->where(function ($query) use ($visibleCodes, $keyword) {
+                $query->whereIn('line.internal_item_code', $visibleCodes);
+                if ($keyword !== '') {
+                    $query->orWhere('line.internal_item_code', $keyword);
+                }
+            })
+            ->selectRaw('UPPER(TRIM(line.internal_item_code)) as item_code')
+            ->selectRaw('SUM(CASE WHEN line.counted_quantity IS NOT NULL THEN 1 ELSE 0 END) as counted_lines')
+            ->groupBy(DB::raw('UPPER(TRIM(line.internal_item_code))'))
+            ->havingRaw('SUM(CASE WHEN line.counted_quantity IS NOT NULL THEN 1 ELSE 0 END) = 0')
+            ->pluck('item_code')
+            ->flip();
+
+        $searchedCode = mb_strtoupper(trim($keyword));
+        if ($data->isEmpty() && $searchedCode !== '' && $unverifiedCodes->has($searchedCode)) {
+            $data->push((object) [
+                'warehouse_code' => '',
+                'location_code' => 'CHUA-XEP',
+                'ma_sp' => '',
+                'internal_item_code' => $searchedCode,
+                'size' => '',
+                'color' => '',
+                'side' => '',
+                'opening_quantity' => 0,
+                'receipt_quantity' => 0,
+                'issue_quantity' => 0,
+                'total_quantity' => 0,
+                'package_count' => 0,
+                'latest_checked_at' => $monthEnd,
+                'can_delete' => false,
+                'delete_reason' => 'Chưa có số đếm kiểm kê cho mã này.',
+            ]);
+        }
+
         $catalogs = InternalItemCatalog::query()
             ->where('is_active', true)
             ->whereIn('item_code', $data->pluck('internal_item_code')->filter()->unique()->values())
             ->get()
             ->keyBy(fn ($item) => mb_strtoupper(trim((string) $item->item_code)));
         $matcher = app(PantoneColorMatcher::class);
-        $data = $data->map(function ($row) use ($catalogs, $matcher) {
+        $data = $data->map(function ($row) use ($catalogs, $matcher, $unverifiedCodes) {
+            $row->stocktake_unverified = $unverifiedCodes->has(mb_strtoupper(trim((string) $row->internal_item_code)));
             $catalog = $catalogs->get(mb_strtoupper(trim((string) $row->internal_item_code)));
             $match = $matcher->matchValues([
                 $row->internal_item_code,
@@ -1131,6 +1173,7 @@ class WarehouseCountController extends Controller
                 'item_count' => $data->map(function ($row) {
                     return $row->internal_item_code ?: $row->ma_sp;
                 })->filter()->unique()->count(),
+                'stocktake_unverified_count' => $unverifiedCodes->count(),
                 'line_count' => $data->count(),
                 'opening_quantity' => (float) $data->sum('opening_quantity'),
                 'receipt_quantity' => (float) $data->sum('receipt_quantity'),
@@ -3342,8 +3385,23 @@ class WarehouseCountController extends Controller
 
     public function showReceipt(InternalMaterialReceipt $receipt)
     {
+        $receipt->load('lines');
+        $receipt->lines->each(function (InternalMaterialReceiptLine $line) {
+            $package = $this->resolveReceiptLinePackage($line);
+            $lineQuantity = (float) ($line->base_quantity ?: $line->quantity);
+            $packageQuantity = $package ? (float) $package->quantity : 0.0;
+            $canDelete = $package && $packageQuantity + 0.0001 >= $lineQuantity;
+
+            $line->setAttribute('can_delete', $canDelete);
+            $line->setAttribute('remaining_package_quantity', $packageQuantity);
+            $line->setAttribute(
+                'delete_block_reason',
+                $canDelete ? null : 'Dòng này đã được xuất hoặc số tồn của kiện đã thay đổi.'
+            );
+        });
+
         return response()->json([
-            'data' => $receipt->load('lines'),
+            'data' => $receipt,
         ]);
     }
 
@@ -4035,10 +4093,64 @@ class WarehouseCountController extends Controller
             ->sortBy(fn ($location) => $codes->search($location->location_code))
             ->values();
 
-        return view('client.labels.locations', [
-            'locations' => $locations,
+        return view('client.labels.location-items', [
+            'labels' => $this->locationItemLabels($locations),
             'missingCodes' => $codes->diff($locations->pluck('location_code'))->values(),
         ]);
+    }
+
+    private function locationItemLabels($locations)
+    {
+        $locationIds = $locations->pluck('id')->filter()->values();
+        $locationByCode = $locations->keyBy(fn ($location) => mb_strtoupper(trim((string) $location->location_code)));
+        $codesByLocation = $locations->mapWithKeys(fn ($location) => [(int) $location->id => collect()]);
+
+        InventoryPackage::query()
+            ->whereIn('warehouse_location_id', $locationIds)
+            ->where('quantity', '>', 0)
+            ->select('warehouse_location_id', 'internal_item_code', 'ma_sp')
+            ->distinct()
+            ->get()
+            ->each(function ($row) use ($codesByLocation) {
+                $itemCode = trim((string) ($row->internal_item_code ?: $row->ma_sp));
+                if ($itemCode !== '' && $codesByLocation->has((int) $row->warehouse_location_id)) {
+                    $codesByLocation->get((int) $row->warehouse_location_id)->push($itemCode);
+                }
+            });
+
+        InternalItemCatalog::query()
+            ->where('is_active', true)
+            ->whereNotNull('shelf_code')
+            ->where('shelf_code', '<>', '')
+            ->select('item_code', 'shelf_code')
+            ->get()
+            ->each(function ($catalog) use ($locationByCode, $codesByLocation) {
+                $itemCode = trim((string) $catalog->item_code);
+                if ($itemCode === '') {
+                    return;
+                }
+                foreach (preg_split('/[,;|\n\r]+/', (string) $catalog->shelf_code) ?: [] as $shelfCode) {
+                    $location = $locationByCode->get(mb_strtoupper(trim((string) $shelfCode)));
+                    if ($location) {
+                        $codesByLocation->get((int) $location->id)->push($itemCode);
+                    }
+                }
+            });
+
+        return $locations->flatMap(function ($location) use ($codesByLocation) {
+            $itemCodes = $codesByLocation->get((int) $location->id, collect())
+                ->filter()
+                ->unique(fn ($code) => mb_strtoupper(trim((string) $code)))
+                ->sortBy(fn ($code) => mb_strtoupper((string) $code), SORT_NATURAL)
+                ->values();
+            if ($itemCodes->isEmpty()) {
+                return [['location' => $location, 'item_code' => '']];
+            }
+            return $itemCodes->map(fn ($itemCode) => [
+                'location' => $location,
+                'item_code' => (string) $itemCode,
+            ])->all();
+        })->values();
     }
 
     private function locationLabelColors($locationIds)

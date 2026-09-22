@@ -690,7 +690,7 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <div><h5 class="modal-title">In QR vị trí hàng loạt</h5><div class="text-muted small">Chọn dãy đã tạo, hỗ trợ ký hiệu một hoặc hai chữ cái.</div></div>
+                    <div><h5 class="modal-title">In QR vị trí hàng loạt</h5><div class="text-muted small">Mã hàng tại mỗi vị trí sẽ tự hiển thị dưới QR.</div></div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="óng"></button>
                 </div>
                 <div class="modal-body">
@@ -1503,8 +1503,11 @@
         function appendReceiptRow() {
             const body = document.getElementById('receiptEntryRows');
             const row = body.lastElementChild.cloneNode(true);
+            row.querySelectorAll('.delete-receipt-line-btn').forEach(element => element.remove());
             row.querySelectorAll('input').forEach(input => {
                 input.value = '';
+                input.disabled = false;
+                input.removeAttribute('title');
                 delete input.dataset.appliedOrder;
                 delete input.dataset.loadingOrder;
                 delete input.dataset.productionOrderId;
@@ -1608,8 +1611,11 @@
         }
 
         function clearReceiptLines() {
+            document.querySelectorAll('#receiptEntryRows .delete-receipt-line-btn').forEach(button => button.remove());
             document.querySelectorAll('#receiptEntryRows input').forEach(input => {
                 input.value = '';
+                input.disabled = false;
+                input.removeAttribute('title');
                 delete input.dataset.appliedOrder;
                 delete input.dataset.loadingOrder;
                 delete input.dataset.productionOrderId;
@@ -1653,7 +1659,20 @@
                 orderInput.dataset.productionOrderId = line.production_order_id || '';
                 orderInput.dataset.purchaseOrder = line.purchase_order || '';
                 orderInput.dataset.customer = line.customer || '';
-                row.querySelector('.receipt-line-note').value = line.note || '';
+                const noteInput = row.querySelector('.receipt-line-note');
+                noteInput.value = line.note || '';
+
+                const deleteButton = document.createElement('button');
+                deleteButton.type = 'button';
+                deleteButton.className = `btn btn-sm btn-outline-danger btn-icon delete-receipt-line-btn mt-1${line.can_delete ? '' : ' disabled'}`;
+                deleteButton.dataset.receiptId = receipt.id;
+                deleteButton.dataset.lineId = line.id;
+                deleteButton.dataset.code = line.internal_item_code || line.ma_hh || '';
+                deleteButton.dataset.quantity = line.quantity || 0;
+                deleteButton.disabled = !line.can_delete;
+                deleteButton.title = line.delete_block_reason || 'Xóa riêng dòng nhập này';
+                deleteButton.innerHTML = `<i data-lucide=trash-2></i>${line.can_delete ? 'Xóa dòng' : 'Đã phát sinh xuất'}`;
+                noteInput.insertAdjacentElement('afterend', deleteButton);
             });
 
             setReceiptEditMode(receipt);
@@ -2999,6 +3018,7 @@
             summary.textContent = message;
             document.getElementById('rackBulkPreviewTable').classList.add('d-none');
             document.getElementById('rackBulkQueueBtn').disabled = true;
+            document.getElementById('rackBulkSyncBtn').disabled = rackBatchLines.length === 0;
             rackBulkPreviewLines = [];
         }
 
@@ -3039,8 +3059,12 @@
             rackBulkPreviewLines = Array.from(result.data || []);
             const summaryData = result.summary || {};
             const summary = document.getElementById('rackBulkPreviewSummary');
-            summary.className = 'alert alert-success py-2 px-3 mt-3 mb-0';
-            summary.textContent = `${formatNumber(summaryData.item_count || summaryData.line_count)} mã · ${formatNumber(summaryData.line_count)} dòng vị trí · ${formatNumber(summaryData.shelf_count)} kệ · ${formatNumber(summaryData.total_quantity)} tổng số lượng · ${formatNumber(summaryData.new_count)} mã mới`;
+            const duplicateCatalogCount = Number(summaryData.duplicate_catalog_count || 0);
+            const duplicateNotice = duplicateCatalogCount
+                ? ` \u00b7 ${formatNumber(duplicateCatalogCount)} m\u00e3 tr\u00f9ng danh m\u1ee5c, \u0111\u00e3 d\u00f9ng d\u00f2ng m\u1edbi nh\u1ea5t`
+                : '';
+            summary.className = `alert ${duplicateCatalogCount ? 'alert-warning' : 'alert-success'} py-2 px-3 mt-3 mb-0`;
+            summary.textContent = `${formatNumber(summaryData.item_count || summaryData.line_count)} mã · ${formatNumber(summaryData.line_count)} dòng vị trí · ${formatNumber(summaryData.shelf_count)} kệ · ${formatNumber(summaryData.total_quantity)} tổng số lượng · ${formatNumber(summaryData.new_count)} mã mới${duplicateNotice}`;
             document.getElementById('rackBulkPreviewRows').innerHTML = rackBulkPreviewLines.map(line => `<tr>
                 <td><strong>${escapeHtml(line.shelf_code)}</strong></td>
                 <td>${escapeHtml(line.item_code)}</td>
@@ -3053,6 +3077,7 @@
             </tr>`).join('');
             document.getElementById('rackBulkPreviewTable').classList.remove('d-none');
             document.getElementById('rackBulkQueueBtn').disabled = rackBulkPreviewLines.length === 0;
+            document.getElementById('rackBulkSyncBtn').disabled = rackBulkPreviewLines.length === 0 && rackBatchLines.length === 0;
         }
 
         async function previewRackBulkPaste() {
@@ -3096,7 +3121,7 @@
         }
 
         function addRackBulkPreviewToQueue() {
-            if (!rackBulkPreviewLines.length) return;
+            if (!rackBulkPreviewLines.length) return false;
             try {
                 const staged = rackBatchLines.map(line => ({...line}));
                 rackBulkPreviewLines.forEach(line => {
@@ -3115,25 +3140,25 @@
                 });
                 if (staged.length > rackBatchLimit) throw new Error(`Danh sách vượt quá ${rackBatchLimit} dòng.`);
 
-                rackBulkPreviewLines.forEach(line => queueRackBatchLine({
-                    item_code: line.item_code,
-                    item_name: line.item_name,
-                    quantity: Number(line.quantity),
-                    unit: line.unit,
-                    shelf_code: line.shelf_code,
-                    size: line.size || '',
-                    color: line.color || '',
-                }));
                 const added = rackBulkPreviewLines.length;
+                rackBatchLines = staged;
+                persistRackBatchLines();
                 rackBulkPreviewLines = [];
                 document.getElementById('rackBulkQueueBtn').disabled = true;
                 document.getElementById('rackBulkPreviewTable').classList.add('d-none');
                 document.getElementById('rackBulkPreviewSummary').className = 'alert alert-primary py-2 px-3 mt-3 mb-0';
                 document.getElementById('rackBulkPreviewSummary').textContent = `Đã đưa ${added} dòng vào danh sách chờ. Kiểm tra xong có thể đồng bộ một lần.`;
                 document.getElementById('rackBulkPasteInput').value = '';
+                return true;
             } catch (error) {
                 showRackBulkError(error.message);
+                return false;
             }
+        }
+
+        async function syncRackBulkDirect() {
+            if (rackBulkPreviewLines.length && !addRackBulkPreviewToQueue()) return;
+            await syncRackBatchLines();
         }
 
         function queueRackBatchLine(line) {
@@ -3995,6 +4020,48 @@
                 loadLocationContents();
             }).catch(e => alert(e.message));
         }
+
+        function deleteReceiptLine(button) {
+            const receiptId = button.dataset.receiptId;
+            const lineId = button.dataset.lineId;
+            const code = button.dataset.code || 'dòng hàng';
+            const quantity = formatNumber(button.dataset.quantity || 0);
+            if (!confirm(`Xóa riêng ${code} - ${quantity} khỏi phiếu nhập?\n\nSố tồn do dòng này tạo ra sẽ được trừ lại. Các dòng khác trong phiếu được giữ nguyên.`)) return;
+
+            button.disabled = true;
+            fetch(`/api/kiem-ton-kho/phieu-nhap-tp/${receiptId}/dong/${lineId}`, {
+                method: 'DELETE',
+                headers: {'Accept':'application/json','X-CSRF-TOKEN':csrfToken}
+            }).then(r => jsonOrError(r, 'Không xóa được dòng phiếu nhập'))
+              .then(result => {
+                  showWarehouseToast('Đã xóa dòng phiếu nhập', `${code} - ${quantity}`);
+                  loadReceipts();
+                  loadPackages();
+                  loadLocations();
+                  loadWarehouseStats();
+                  loadWarehouseMap();
+                  loadLocationContents();
+
+                  if (result.receipt_deleted) {
+                      cancelReceiptEdit();
+                      return;
+                  }
+
+                  return fetch(`/api/kiem-ton-kho/phieu-nhap-tp/${receiptId}`)
+                      .then(r => jsonOrError(r, 'Đã xóa dòng nhưng không tải lại được phiếu'))
+                      .then(reloaded => fillReceiptEditForm(reloaded.data));
+              })
+              .catch(error => {
+                  button.disabled = false;
+                  alert(error.message);
+              });
+        }
+
+        document.getElementById('receiptEntryRows').addEventListener('click', event => {
+            const button = event.target.closest('.delete-receipt-line-btn');
+            if (button && !button.disabled) deleteReceiptLine(button);
+        });
+
         document.getElementById('confirmReceiptLocationBtn').addEventListener('click', () => {
             const locationId = document.getElementById('receiptTargetLocationId').value;
             const location = locations.find(item => String(item.id) === String(locationId));
@@ -4108,7 +4175,7 @@
         });
         document.getElementById('rackBulkPreviewBtn')?.addEventListener('click', previewRackBulkPaste);
         document.getElementById('rackBulkQueueBtn')?.addEventListener('click', addRackBulkPreviewToQueue);
-        document.getElementById('rackBulkSyncBtn')?.addEventListener('click', syncRackBatchLines);
+        document.getElementById('rackBulkSyncBtn')?.addEventListener('click', syncRackBulkDirect);
         document.getElementById('rackBatchSelectAll')?.addEventListener('change', event => {
             document.querySelectorAll('.rack-batch-select').forEach(input => {
                 input.checked = event.currentTarget.checked;

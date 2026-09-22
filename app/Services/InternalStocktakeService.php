@@ -131,6 +131,7 @@ class InternalStocktakeService
                 'name' => $name,
                 'count_date' => $date,
                 'status' => 'counting',
+                'cutoff_scope' => 'location',
                 'note' => $note,
                 'started_at' => now(),
             ]);
@@ -330,18 +331,18 @@ class InternalStocktakeService
             );
 
             $packageQuery = InventoryPackage::query()
-                ->whereRaw('UPPER(TRIM(internal_item_code)) = ?', [mb_strtoupper(trim((string) $line->internal_item_code))]);
+                ->whereRaw('UPPER(TRIM(internal_item_code)) = ?', [mb_strtoupper(trim((string) $line->internal_item_code))])
+                ->where('warehouse_location_id', $location->id);
 
             $hasVariant = collect([$line->size, $line->color, $line->side])
                 ->contains(fn ($value) => trim((string) $value) !== '');
             if ($hasVariant) {
                 $packageQuery
-                    ->where('warehouse_location_id', $location->id)
                     ->where('size', (string) $line->size)
                     ->where('color', (string) $line->color)
                     ->where('side', (string) $line->side);
             }
-            // A count without variant fields is the authoritative total for the item.
+            // A count without variant fields is authoritative for this item at this location.
             $packageQuery->update(['quantity' => 0, 'updated_at' => now()]);
 
             $count = InternalInventoryCount::query()->firstOrCreate(

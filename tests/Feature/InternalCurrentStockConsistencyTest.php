@@ -25,15 +25,15 @@ class InternalCurrentStockConsistencyTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_total_stocktake_replaces_old_variant_packages(): void
+    public function test_stocktake_only_replaces_packages_at_the_counted_location(): void
     {
         Carbon::setTestNow('2037-09-07 09:00:00');
         [$code, $oldPackage, $session] = $this->stocktakeFixture();
 
         app(InternalStocktakeService::class)->post($session);
 
-        $this->assertSame(0.0, (float) $oldPackage->fresh()->quantity);
-        $this->assertSame(100.0, (float) InventoryPackage::query()
+        $this->assertSame(50.0, (float) $oldPackage->fresh()->quantity);
+        $this->assertSame(150.0, (float) InventoryPackage::query()
             ->where('internal_item_code', $code)
             ->where('quantity', '>', 0)
             ->sum('quantity'));
@@ -115,6 +115,7 @@ class InternalCurrentStockConsistencyTest extends TestCase
             'name' => 'Kiểm thử tồn tổng',
             'count_date' => '2037-09-06',
             'status' => 'completed',
+            'cutoff_scope' => 'location',
             'started_at' => $now,
             'completed_at' => $now,
         ]);
